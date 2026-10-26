@@ -345,7 +345,7 @@ if cond { ... } else if cond2 { ... } else { ... }
 if let x = expr { ... } else { ... }
 if let mut x = expr { ... }
 ```
-- `cond` follows §6.6. No parentheses required; a struct/class/collection initializer may not appear directly in a condition, `while` head, `for` iterable, or `match` scrutinee unless parenthesized.
+- `cond` follows §6.6. No parentheses required; a struct/class initializer (`Name { ... }` or `{ ... }`) may not appear directly in a condition, `while` head, `for` iterable, or `match` scrutinee unless parenthesized. Collection literals are allowed (`for x in [1, 2].iter() { ... }`).
 - `if let x = e`: evaluates `e` (type `T | null`); if non-null, binds `x: T` (narrowed) in the then-block. Never consults `Truthy`. `e`'s type must include `null` ⇒ else error.
 
 ### 6.4 Loops
@@ -674,7 +674,7 @@ Implicitly imported names:
 1. Generic-argument disambiguation per §7.5 (semantic predicate or ordered alternative with speculative parse; follow token `(` or `::`).
 2. `>>` token splitting inside type-argument lists.
 3. Statement-initial `{` is always a block (§6.1).
-4. No bare initializer/collection literal in `if`/`while`/`for`/`match` heads (§6.3).
+4. No bare initializer in `if`/`while`/`for`/`match` heads (§6.3); collection literals are fine.
 5. In type context `|` is union; in expression context bitwise or. Types appear only after `:`, `->`, `as`, `as?`, `is`, in `<...>`, in `type` aliases, and in pattern `is`.
 6. `as?` is one token; `x as T?` is `(x as T)?`.
 7. Lambda detection: `ident =>`, `mut ident =>`, `( params ) =>` where params are identifiers with optional `mut`/`: Type`. `(a, b)` not followed by `=>` is a tuple.
@@ -685,7 +685,7 @@ Implicitly imported names:
 12. After `=>`, a `{` starts an initializer in a function expression body (`fn new() -> Self => { name };`) and a block in a lambda body or match arm (§7.1).
 13. In a function type the return type extends over a following union: `fn() -> R | null` is `fn() -> (R | null)`; write `(fn() -> R) | null` for the other reading.
 14. A match guard is an expression at `??` precedence or tighter (no lambda, `unsafe =>` or conditional without parentheses), so the arm's `=>` is never taken as a lambda.
-15. The §6.3 head restriction applies to any initializer or collection literal not enclosed in `()`, `[]` or `{}`: `for x in [1, 2].iter() {` is an error; write `for x in ([1, 2]).iter() {`.
+15. The §6.3 head restriction applies to any initializer not enclosed in `()`, `[]` or `{}`: `if p == Point { x: 0 }.norm() {` is an error; write `if p == (Point { x: 0 }).norm() {`.
 16. The assembled operators `>=`, `>>`, `>>=` may not contain whitespace (`a > = b` is an error).
 
 ---
@@ -807,4 +807,5 @@ fn main(args: [str]) -> () | Err {
 
 ### 2026-10-27 — parser (0.1 Phase 2)
 - §1 Any keyword is also accepted as a name after `::` (needed for `Ptr<T>::null()`, §14.4).
+- §6.3 Collection literals are allowed in `if`/`while`/`for`/`match` heads; only `{`-initializers need parentheses.
 - §17 Added notes 12–16, recording parser decisions the spec left open: `{` after `=>`, union return types in `fn` types, match-guard precedence, the extent of the head restriction, and no whitespace inside `>=`/`>>`/`>>=`.

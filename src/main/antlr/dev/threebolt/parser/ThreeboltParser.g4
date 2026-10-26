@@ -8,7 +8,7 @@
 // Two pieces of parser state steer prediction through semantic predicates:
 //  - `typeArgsAhead()` (§7.5): in expressions, `<` after a name starts type arguments iff they
 //    parse as `typeArgs` and are followed by `(` or `::`.
-//  - `structOk()` (§6.3): initializers and collection literals are not allowed directly in an
+//  - `structOk()` (§6.3): initializers (`Name {...}`, `{...}`) are not allowed directly in an
 //    `if`/`while`/`for`/`match` head. `noStructExpr` pushes "forbidden"; every bracketing
 //    construct pushes "allowed" again.
 parser grammar ThreeboltParser;
@@ -22,7 +22,7 @@ options { tokenVocab = ThreeboltLexer; }
 
     private void popStruct() { structAllowed.pop(); }
 
-    /** Whether an initializer or collection literal may start here (§6.3). */
+    /** Whether an initializer may start here (§6.3). */
     protected boolean structOk() { return structAllowed.isEmpty() || structAllowed.peek(); }
 
     /** Inside an `if`/`while`/`for`/`match` head, outside any brackets (for error hints). */
@@ -333,7 +333,7 @@ primary
     | SUPER                                                 # superExpr
     | {structOk()}? path initializer                        # namedInitExpr
     | {structOk()}? initializer                             # targetInitExpr
-    | {structOk()}? collectionLiteral                       # collectionExpr
+    | collectionLiteral                                     # collectionExpr
     | path                                                  # pathExpr
     | LPAREN RPAREN                                         # unitExpr
     | LPAREN nested RPAREN                                  # parenExpr

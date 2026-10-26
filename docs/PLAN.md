@@ -44,12 +44,12 @@ Each phase ends with green tests. Work in **vertical slices** after Phase 3: eac
 ### Phase 2 — Parser ✅
 - `ThreeboltParser.g4` covers spec §2–§11. One rule per precedence level of §7.2 (left-recursive for left-associative levels; comparisons and ranges take an optional operator suffix, so they don't chain).
 - Generic-args disambiguation (§7.5): `typeArgsAhead()` runs a speculative `typeArgs` parse on a throwaway parser over the same token stream and checks the follow token is `(` or `::`. **Pitfall:** ANTLR only evaluates a predicate at the left edge of the decision being made; a decision further out that looks ahead through it treats it as true. So alternatives must not share an expression prefix that contains a path. `comparisonExpr` uses an optional suffix for this reason (as separate alternatives, it parsed `f(a < b, c > (d))` as comparisons).
-- §6.3 head restriction: `noStructExpr` pushes "forbidden" on a stack in the parser; `block`, `callArgs`, `nested` (parens/index/tuples), `initializer`, `collectionLiteral`, `matchBody` and `fstring` push "allowed" (`@init`/`finally`). Initializer and collection alternatives in `primary` are guarded by `structOk()`.
+- §6.3 head restriction: `noStructExpr` pushes "forbidden" on a stack in the parser; `block`, `callArgs`, `nested` (parens/index/tuples), `initializer`, `collectionLiteral`, `matchBody` and `fstring` push "allowed" (`@init`/`finally`). The initializer alternatives in `primary` are guarded by `structOk()`; collection literals are always allowed.
 - Statement-initial `{` is a block (`exprStmt`/`defer` predicate). After `=>`, `{` is an initializer in fn bodies and a block in lambdas and match arms. `match` statements need no `;`.
 - `>=`, `>>`, `>>=` are adjacent `GT`/`ASSIGN` tokens checked by `adjacent()` predicates with `<fail=...>` messages.
 - Entry rules: `compilationUnit`, plus `memberList`, `stmtList`, `exprOnly`, `typeOnly` for snippets and tests.
 - `parse.Parsing` lexes and parses and returns `ParseError`s in source order (lexer errors, plus syntax errors from `SyntaxErrorStrategy`, which drops parser errors at lexer error tokens). `parse.TreeDump` renders compact s-expressions (`threebolt parse <file>`).
-- Spec clarifications from this phase: §1 keywords after `::`; §17 notes 12–16.
+- Spec clarifications from this phase: §1 keywords after `::`; §6.3 collection literals allowed in heads; §17 notes 12–16.
 - Tests: `ParserTest` (precedence, disambiguation, negative cases with line/col); `ParserAcceptanceTest` (every `examples/` file and every spec ```` ```rs ```` snippet parses; snippets may be modules, member lists, statement lists or one expression per line; `{ ... }` placeholder bodies are elided).
 
 ### Phase 3 — AST + front-end plumbing

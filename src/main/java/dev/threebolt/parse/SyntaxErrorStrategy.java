@@ -27,16 +27,16 @@ final class SyntaxErrorStrategy extends DefaultErrorStrategy {
         Token t = e.getOffendingToken();
         String message = "unexpected " + describe(t);
         if (startsInitializer(recognizer, t)) {
-            message += " (an initializer or collection literal in an if/while/for/match head must be parenthesized)";
+            message += " (an initializer in an if/while/for/match head must be parenthesized)";
         }
         report(recognizer, t, message);
     }
 
-    /** {@code t} begins `{...}`, `[...]` or `Name {...}` where §6.3 forbids initializers. */
+    /** {@code t} begins `{...}` or `Name {...}` where §6.3 forbids initializers. */
     private static boolean startsInitializer(Parser recognizer, Token t) {
         if (!(recognizer instanceof ThreeboltParser p) || !p.inNoStructHead()) return false;
         int next = recognizer.getInputStream().get(t.getTokenIndex() + 1).getType();
-        return t.getType() == LBRACKET || t.getType() == LBRACE
+        return t.getType() == LBRACE
                 || (t.getType() == IDENTIFIER && next == LBRACE);
     }
 

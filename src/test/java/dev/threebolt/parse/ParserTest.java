@@ -203,11 +203,17 @@ class ParserTest {
     @Test
     void initializersMustBeParenthesizedInHeads() {
         assertEquals(new ParseError(1, 9,
-                        "unexpected 'Foo' (an initializer or collection literal in an if/while/for/match head must be parenthesized)"),
+                        "unexpected 'Foo' (an initializer in an if/while/for/match head must be parenthesized)"),
                 firstError("if x == Foo { a: 1 } { }"));
-        assertEquals(1, firstError("for i in [1, 2] { }").line());
         assertEquals("(ifStmt if (parenExpr ( (comparisonExpr x == (namedInitExpr Foo (initializer { (namedField a : 1) }))) )) (block { }))",
                 stmts("if (x == Foo { a: 1 }) { }"));
+    }
+
+    @Test
+    void collectionLiteralsAreAllowedInHeads() {
+        assertEquals("(forStmt for x in (postfixExpr (listCollection [ 1 , 2 ]) (memberOp . iter) (callArgs ( ))) (block { }))",
+                stmts("for x in [1, 2].iter() { }"));
+        assertEquals("(forStmt for x in (listCollection [ 1 , 2 ]) (block { }))", stmts("for x in [1, 2] { }"));
     }
 
     @Test
