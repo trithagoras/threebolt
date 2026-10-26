@@ -22,6 +22,7 @@ Hobbyist general-purpose language (`.3b`): statically typed, GC-managed, Rust-fl
 ./gradlew build                                   # generate parser, compile, test
 ./gradlew test
 ./gradlew run --args="tokens examples/arena/main.3b"
+./gradlew run --args="parse examples/arena/main.3b"
 ```
 
 - Requires a JDK ≥ 25 (bytecode targets 25 via `--release 25`). If `java` isn't on PATH, use `JAVA_HOME=/opt/homebrew/opt/openjdk/libexec/openjdk.jdk/Contents/Home`.
