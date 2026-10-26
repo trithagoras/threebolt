@@ -11,7 +11,7 @@ Normative technical reference for implementers (human or agent). Supersedes `doc
 ## 1. Lexical structure
 
 - Source is UTF-8. File extension `.3b`.
-- Comments: `// line`, `/* block */` (nestable), `/// doc` (line, attaches to next item).
+- Comments: `// line`, `/* block */` (nestable), `/// doc` (line, attaches to next item; exactly three slashes — `////` is an ordinary comment).
 - Identifiers: `[A-Za-z_][A-Za-z0-9_]*`. `_` alone is the discard/wildcard token, not an identifier.
 - Semicolons terminate statements. Whitespace is insignificant.
 
@@ -25,17 +25,22 @@ After `.` (member access) any keyword is accepted as a member name (e.g. `x.type
 | Kind | Forms |
 |---|---|
 | Integer | `123`, `1_000`, `0xFF`, `0o17`, `0b1010`, optional suffix `_i8 _i16 _i32 _i64 _isize _u8 _u16 _u32 _u64 _usize` (e.g. `10_u64`) |
-| Float | `1.0`, `1e9`, `2.5e-3`, suffix `_f32 _f64`. A float literal requires digits on both sides of `.` |
+| Float | `1.0`, `1e9`, `2.5e-3`, suffix `_f32 _f64` (`1.5_f32`; also on integer digits: `1_f32`). A float literal requires digits on both sides of `.` |
 | Bool | `true`, `false` |
 | Char | `'a'`, `'\n'`, `'\u{1F600}'` — a Unicode scalar value |
-| Str | `"..."` with escapes `\n \r \t \0 \\ \" \' \u{HEX}` |
-| F-string | `f"text {expr} more"`; `{{` / `}}` are literal braces. `expr` is any expression not containing an unescaped `"`. Each interpolated value must implement `Display` (§16) |
+| Str | `"..."` with escapes `\n \r \t \0 \\ \" \' \u{HEX}` (1–6 hex digits). May not contain a raw line break |
+| Multi-line Str | `"""..."""`: same escapes; may contain raw line breaks (each LF or CRLF is `\n`) and `"`/`""`; ends at the first `"""`. Content is taken verbatim — no indentation stripping, no leading-newline removal |
+| F-string | `f"text {expr} more"` or `f"""..."""` (multi-line rules as above); `{{` / `}}` are literal braces, a lone `}` in the text is an error. `expr` is any expression, including string literals and nested f-strings (`f"{greet("bob")}"`); braces inside it must balance. Each interpolated value must implement `Display` (§16) |
 | Null / unit | `null`, `()` |
 
-F-strings require lexer modes in ANTLR (push on `f"`, push/pop on `{`/`}`).
+- Numeric literal suffixes always start with `_`: `10u64` is an error. A literal followed directly by identifier characters (`1.0abc`, `0x`, `0b12`) is an error.
+- Immediately after `.`, digits never form a float literal, so `t.0.1` is nested tuple access (`(t.0).1`).
+- F-strings require lexer modes in ANTLR (push on `f"`, push/pop on `{`/`}`).
 
 **Operators / punctuation:**
-`+ - * / % & | ^ ~ << >> ! && || == != < > <= >= = += -= *= /= %= &= |= ^= <<= >>= ?? ? as? .. ..= => -> :: : . , ; @ ( ) [ ] { } < >`
+`+ - * / % & | ^ ~ << >> ! && || == != < > <= >= = += -= *= /= %= &= |= ^= <<= >>= ?? ? as? .. ..= ... => -> :: : . , ; @ ( ) [ ] { } < >`
+
+`...` appears only in C variadic declarations (§14.1).
 
 `as?` is a single token (no whitespace).
 
@@ -774,3 +779,13 @@ fn main(args: [Str]) -> () | Err {
     }
 }
 ```
+
+---
+
+## Changelog
+
+### 2026-10-27 — lexer (0.1 Phase 1)
+- §1 F-string interpolations may contain any expression, including string literals and nested f-strings (was: no unescaped `"`).
+- §1 `"..."` literals may not contain raw line breaks. New multi-line strings `"""..."""` and `f"""..."""`.
+- §1 Clarified: `\u{HEX}` takes 1–6 digits; float suffixes are allowed on integer digits (`1_f32`); suffixes always start with `_`; malformed numeric literals are errors; digits after `.` never form a float (`t.0.1`); `////` is not a doc comment; a lone `}` in f-string text is an error.
+- §1 Added `...` (C variadics, §14.1) to the operator/punctuation list.
