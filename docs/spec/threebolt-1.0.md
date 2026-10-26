@@ -16,9 +16,11 @@ Normative technical reference for implementers (human or agent). Supersedes `doc
 - Semicolons terminate statements. Whitespace is insignificant.
 
 **Keywords:**
-`abstract as break class const continue defer else enum extern false fn for get if impl in is let loop match mut nameof null override prot pub return Self self static struct super trait true type typeof unsafe use virtual while`
+`abstract as break class const continue defer else enum extern false fn for if impl in is let loop match mut nameof null override prot pub return Self self static struct super trait true type typeof unsafe use virtual while`
 
 After `.` (member access) any keyword is accepted as a member name (e.g. `x.type()`).
+
+**Contextual keyword:** `get` is special only directly before `fn` in a member declaration (§4.8); elsewhere it is an ordinary identifier (`fn get<T>()`, `map.get(k)`).
 
 **Literals:**
 
@@ -246,7 +248,7 @@ pub class Dog : Animal {
 ```rs
 pub get fn len(self) -> usize => self.count;
 ```
-- `get fn` declares a getter: no parameters besides `self` (never `mut self`), non-`()` return. Accessed without parentheses: `xs.len`.
+- `get` is a contextual keyword (§1): `get fn` declares a getter: no parameters besides `self` (never `mut self`), non-`()` return. Accessed without parentheses: `xs.len`.
 - A getter may not share a name with a field of the same type (convention: private backing field `_name`, getter `name`).
 - Getters may be `virtual`/`override`/`abstract`, and may be declared in traits. No setters in 1.0; a getter is not an assignable place.
 
@@ -794,3 +796,6 @@ fn main(args: [str]) -> () | Err {
 ### 2026-10-27 — lowercase primitives
 - §3.1 Primitive types renamed to lowercase (`I32` → `i32`, `Str` → `str`, `Bool` → `bool`, …); they are predeclared names, not keywords. Applied throughout.
 - §14.2 C aliases renamed to C's spelling: `c::int c::uint c::long c::size_t …` (was `c::Int c::SizeT …`).
+
+### 2026-10-27 — contextual `get`
+- §1, §4.8 `get` is no longer a reserved keyword; it is contextual (only `get fn` in a member declaration). Getters stay; still no setters.

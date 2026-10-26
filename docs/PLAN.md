@@ -42,7 +42,7 @@ Each phase ends with green tests. Work in **vertical slices** after Phase 3: eac
 - Tests: token-stream golden tests for tricky inputs (`src/test/resources/lexer`, regenerate with `./gradlew test -PupdateGolden`).
 
 ### Phase 2 — Parser
-- `ThreeboltParser.g4` covering all of spec §2–§11 syntax. Lexer hand-offs: keyword tokens accepted as member names after `.` (§1); `get` is a keyword but §18 declares `fn get<T>` — decide (contextual keyword vs. rename) with the user. Priority list from spec §17:
+- `ThreeboltParser.g4` covering all of spec §2–§11 syntax. Lexer hand-offs: keyword tokens accepted as member names after `.` (§1); `get` is a contextual keyword — recognise `get fn` in member declarations only (an `IDENTIFIER` whose text is `get`). Priority list from spec §17:
   - generic-args disambiguation (§7.5): an alternative guarded by a semantic predicate that speculatively matches `typeArgs` and checks the follow token is `(` or `::`;
   - statement-initial `{` = block; no bare initializers in `if/while/for/match` heads (a `noStructExpr` variant of `expr`, Rust-style);
   - precedence via ANTLR4 left-recursive `expr` alternatives ordered per §7.2; comparisons non-associative (separate rule level);

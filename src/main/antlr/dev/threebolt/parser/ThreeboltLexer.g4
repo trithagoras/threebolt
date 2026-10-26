@@ -87,7 +87,6 @@ EXTERN    : 'extern' ;
 FALSE     : 'false' ;
 FN        : 'fn' ;
 FOR       : 'for' ;
-GET       : 'get' ;
 IF        : 'if' ;
 IMPL      : 'impl' ;
 IN        : 'in' ;

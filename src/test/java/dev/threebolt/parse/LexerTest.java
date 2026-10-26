@@ -41,7 +41,7 @@ class LexerTest {
 
     @Test
     void everyKeywordIsItsOwnToken() {
-        String keywords = "abstract as break class const continue defer else enum extern false fn for get if impl in"
+        String keywords = "abstract as break class const continue defer else enum extern false fn for if impl in"
                 + " is let loop match mut nameof null override prot pub return Self self static struct super"
                 + " trait true type typeof unsafe use virtual while";
         for (String kw : keywords.split(" ")) {
@@ -55,6 +55,7 @@ class LexerTest {
     @Test
     void underscoreAloneIsNotAnIdentifier() {
         assertEquals("UNDERSCORE", single("_"));
+        assertEquals("IDENTIFIER FN", types("get fn")); // contextual keyword: the parser decides
         assertEquals("IDENTIFIER IDENTIFIER IDENTIFIER", types("__ _x x_1"));
     }
 
