@@ -1,0 +1,7 @@
+1:1 DOC_COMMENT '/// Doc comment attached to `main`.'
+3:42 FN 'fn'
+3:50 IDENTIFIER 'main'
+3:54 LPAREN '('
+3:55 RPAREN ')'
+3:57 LBRACE '{'
+3:58 RBRACE '}'

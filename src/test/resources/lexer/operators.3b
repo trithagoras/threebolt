@@ -1,0 +1,13 @@
+let m: Map<Str, [List<I32>]> = [:];
+let p = Ptr<c::Long>::null();
+fn deep() -> List<List<I32>>=> make();
+x >>= 2; y <<= 1; z = a >> b << c;
+if a >= b && c <= d || !e { w ^= 0xFF; }
+let n = e as? Color ?? Color::Red;
+let k = (x.type() == typeof(T), nameof(T));
+let q = load(path)?.trim() ?? "";
+let f = (a, mut b) => a + b;
+@flags pub enum Perm : U8 { None = 0, Read, Write }
+extern "C" { fn printf(fmt: Ptr<c::Char>, ...) -> c::Int; }
+match v { [first, ..rest] => first, _ => 0 }
+let _ = -x % ~y * z / w - v + u & t | s ^ r;

@@ -1,0 +1,12 @@
+println(f"Welcome, {name}!");
+println(f"{{literal}} and {count} item{"s" if count != 1 else ""}");
+let nested = f"outer {f"inner {x + 1}"} done";
+let lookup = f"{m["key"] ?? "none"}";
+let init = f"{Vec2 { x: 1.0, y: 2.0 }.len()}";
+let ch = f"{'{'}{'}'}";
+let multi = f"""
+  name: "{self.name}"
+  hp: {self.hp}
+""";
+let spread = f"{a +
+    b}";
