@@ -66,7 +66,7 @@ Structs (value semantics, in-place `mut self`, read-modify-write indexers §5.3)
 Union types & assignability (§3.4–3.5), literal types, `null`, `is`/`as`/`as?`, narrowing (§9), `if let`/`while let`, `match` + patterns + exhaustiveness (§7.11, §11), `Error`/`Err`/`?`/`??`, must-use, `defer`, enums & `@flags`.
 
 ### Phase 7 — Slice: OOP & traits
-Inheritance, `virtual`/`override`/`abstract`/`super`, no-hiding rule, traits (default bodies, supertraits, static fns), `impl` blocks + global uniqueness, trait references & boxing (§5.5), generics (reified, bounds, inference §10), operator-overloading traits, `Iterator`/`Iterable` + adapters with the `Done` sentinel, lambdas/closures, `typeof`/`nameof`/`.type()`.
+Inheritance, `virtual`/`override`/`abstract`/`super`, no-hiding rule, traits (default bodies, supertraits, static fns), `impl` blocks + global uniqueness, trait references & boxing (§5.5), generics (reified, bounds, inference §10), a diagnostic hint when §7.5 type arguments resolve to values ("parsed as generic arguments; write `(a < b)` to compare" — kept `f<T>()` over turbofish on that basis), operator-overloading traits, `Iterator`/`Iterable` + adapters with the `Done` sentinel, lambdas/closures, `typeof`/`nameof`/`.type()`.
 - Milestone: spec §18 canonical example and `examples/arena` run.
 
 ### Phase 8 — C interop & threads
