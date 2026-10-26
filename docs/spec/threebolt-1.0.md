@@ -18,7 +18,7 @@ Normative technical reference for implementers (human or agent). Supersedes `doc
 **Keywords:**
 `abstract as break class const continue defer else enum extern false fn for if impl in is let loop match mut nameof null override prot pub return Self self static struct super trait true type typeof unsafe use virtual while`
 
-After `.` (member access) any keyword is accepted as a member name (e.g. `x.type()`).
+After `.` (member access) or `::` (path segment) any keyword is accepted as a name (e.g. `x.type()`, `Ptr<T>::null()`).
 
 **Contextual keyword:** `get` is special only directly before `fn` in a member declaration (§4.8); elsewhere it is an ordinary identifier (`fn get<T>()`, `map.get(k)`).
 
@@ -681,7 +681,12 @@ Implicitly imported names:
 8. Conditional expression `a if c else b` only in expression position; statement-initial `if` is the statement.
 9. Comparison operators are non-associative: `a < b < c` is a syntax error.
 10. F-string lexer modes (§1).
-11. Keywords permitted as member names after `.`.
+11. Keywords permitted as names after `.` and `::`.
+12. After `=>`, a `{` starts an initializer in a function expression body (`fn new() -> Self => { name };`) and a block in a lambda body or match arm (§7.1).
+13. In a function type the return type extends over a following union: `fn() -> R | null` is `fn() -> (R | null)`; write `(fn() -> R) | null` for the other reading.
+14. A match guard is an expression at `??` precedence or tighter (no lambda, `unsafe =>` or conditional without parentheses), so the arm's `=>` is never taken as a lambda.
+15. The §6.3 head restriction applies to any initializer or collection literal not enclosed in `()`, `[]` or `{}`: `for x in [1, 2].iter() {` is an error; write `for x in ([1, 2]).iter() {`.
+16. The assembled operators `>=`, `>>`, `>>=` may not contain whitespace (`a > = b` is an error).
 
 ---
 
@@ -799,3 +804,7 @@ fn main(args: [str]) -> () | Err {
 
 ### 2026-10-27 — contextual `get`
 - §1, §4.8 `get` is no longer a reserved keyword; it is contextual (only `get fn` in a member declaration). Getters stay; still no setters.
+
+### 2026-10-27 — parser (0.1 Phase 2)
+- §1 Any keyword is also accepted as a name after `::` (needed for `Ptr<T>::null()`, §14.4).
+- §17 Added notes 12–16, recording parser decisions the spec left open: `{` after `=>`, union return types in `fn` types, match-guard precedence, the extent of the head restriction, and no whitespace inside `>=`/`>>`/`>>=`.
