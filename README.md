@@ -3,7 +3,7 @@
 A hobbyist programming language: statically typed, garbage-collected, Rust-like syntax, C#-like semantics. Why "three bolts"? Four bolts is the safe way to hold something down. Three gets the job done, and it's more fun.
 
 ```rs
-fn main(args: [Str]) -> () | Err {
+fn main(args: [str]) -> () | Err {
     let name = match args {
         [n, ..] => n,
         [] => "world",

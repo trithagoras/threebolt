@@ -45,4 +45,8 @@ application {
 
 tasks.test {
     useJUnitPlatform()
+    // `./gradlew test -PupdateGolden` rewrites golden files instead of comparing against them.
+    systemProperty("threebolt.updateGolden", providers.gradleProperty("updateGolden").isPresent)
+    inputs.dir("examples")
+    inputs.file("docs/spec/threebolt-1.0.md")
 }

@@ -1,0 +1,5 @@
+/// Doc comment attached to `main`.
+//// Four slashes: ordinary comment.
+/* block /* nested */ still a comment */ fn /**/ main() {} // trailing
+/***/
+/* ends with stars **/

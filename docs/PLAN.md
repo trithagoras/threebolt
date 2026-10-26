@@ -33,14 +33,16 @@ threebolt/
 
 Each phase ends with green tests. Work in **vertical slices** after Phase 3: each feature goes through checker *and* interpreter together, because semantics (overloads, target-typed literals, numeric literal typing, narrowing) depend on static types.
 
-### Phase 1 — Lexer
+### Phase 1 — Lexer ✅
 - `ThreeboltLexer.g4`: keywords, identifiers, all literal forms (§1) incl. suffixes and `_` separators, comments (nested block comments), operators (`as?` single token).
 - F-strings via lexer modes: `f"` pushes `FSTRING` mode; `{` pushes default mode with brace-depth tracking; `}` at depth 0 pops. `{{`/`}}` escapes.
-- Don't emit `>>`/`>>=` as single tokens; emit `>` and let the parser combine adjacent `>` `>` (checking no whitespace via token positions) for shifts — simplest fix for nested generics.
-- Tests: token-stream golden tests for tricky inputs.
+- `>` is always a single `GT` token — no `>=`, `>>` or `>>=` tokens. The parser combines adjacent `>` `=` / `>` `>` / `>` `>` `=` (checking no whitespace via token positions). Simplest fix for nested generics, and also covers `fn f() -> Box<T>=> x`.
+- The lexer never fails: malformed input becomes an `INVALID_*` / `UNTERMINATED_*` / `UNEXPECTED_CHAR` token; `parse.LexErrors` turns those into messages. Doc comments go to the `DOC` channel.
+- Literal *values* (escape decoding, `\u{…}` scalar-range check, integer parsing) are left to the AST builder (Phase 3).
+- Tests: token-stream golden tests for tricky inputs (`src/test/resources/lexer`, regenerate with `./gradlew test -PupdateGolden`).
 
 ### Phase 2 — Parser
-- `ThreeboltParser.g4` covering all of spec §2–§11 syntax. Priority list from spec §17:
+- `ThreeboltParser.g4` covering all of spec §2–§11 syntax. Lexer hand-offs: keyword tokens accepted as member names after `.` (§1); `get` is a contextual keyword — recognise `get fn` in member declarations only (an `IDENTIFIER` whose text is `get`). Priority list from spec §17:
   - generic-args disambiguation (§7.5): an alternative guarded by a semantic predicate that speculatively matches `typeArgs` and checks the follow token is `(` or `::`;
   - statement-initial `{` = block; no bare initializers in `if/while/for/match` heads (a `noStructExpr` variant of `expr`, Rust-style);
   - precedence via ANTLR4 left-recursive `expr` alternatives ordered per §7.2; comparisons non-associative (separate rule level);
@@ -53,7 +55,7 @@ Each phase ends with green tests. Work in **vertical slices** after Phase 3: eac
 - Module loader: source root = entry file's directory (§2.1); `use` resolution; prelude injection. Diagnostics infrastructure (error codes, spans, multiple errors per run).
 
 ### Phase 4 — Slice: "hello, arithmetic"
-`fn main`, `println`, `let`/`let mut`, shadowing, primitives & numeric literal typing/widening (§3.6), operators (§7.3), checked overflow (§13.2), `if`/`while`/`loop`/`for` over ranges, `Str` + f-strings (`Display` for primitives), functions, named-only optional params, overloads (§4.4), `const`, `static`, panics + exit codes.
+`fn main`, `println`, `let`/`let mut`, shadowing, primitives & numeric literal typing/widening (§3.6), operators (§7.3), checked overflow (§13.2), `if`/`while`/`loop`/`for` over ranges, `str` + f-strings (`Display` for primitives), functions, named-only optional params, overloads (§4.4), `const`, `static`, panics + exit codes.
 
 ### Phase 5 — Slice: types & values
 Structs (value semantics, in-place `mut self`, read-modify-write indexers §5.3), tuples, classes, initializers/spread/`init` fields (§4.7), mutability checking (§5), getters, visibility, `[T]` / `Map` / `Set` + literals, `Truthy`/`Len`.
