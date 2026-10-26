@@ -1,0 +1,68 @@
+// fighters.3b — classes, inheritance, virtual dispatch, traits, flags enums.
+
+use dice::Dice;
+
+@flags
+pub enum Status : U8 { None = 0, Poisoned, Stunned, Shielded }   // 0, 1, 2, 4
+
+pub trait Describe {
+    fn describe(self) -> Str;
+    fn shout(self) -> Str => self.describe().upper() + "!";      // default body
+}
+
+pub abstract class Fighter : Describe {
+    pub let name: Str;
+    pub let hp: I32;
+    prot let status: Status = Status::None;
+
+    // Abstract: only ever spread into a subclass initializer.
+    prot fn new(name: Str, hp: I32) -> Self => { name, hp };
+
+    pub get fn alive(self) -> Bool => self.hp > 0;
+
+    pub abstract fn attack(mut self, dice: Dice) -> I32;
+
+    pub virtual fn take_hit(mut self, dmg: I32) {
+        let actual = dmg / 2 if self.status.has(Status::Shielded) else dmg;
+        self.hp = (self.hp - actual).max(0);
+    }
+
+    pub fn describe(self) -> Str => f"{self.name} ({self.hp} hp)";
+}
+
+pub class Knight : Fighter {
+    let stamina: I32 = 3;
+
+    pub fn new(name: Str) -> Self => { ..Fighter::new(name, 30) };
+
+    pub override fn attack(mut self, dice: Dice) -> I32 {
+        if self.stamina == 0 {
+            self.stamina = 3;
+            return 0;                                 // catching breath
+        }
+        self.stamina -= 1;
+        return dice.roll() + 2;
+    }
+}
+
+pub class Wizard : Fighter {
+    let mana: I32;
+
+    // Optional params are named-only: Wizard::new("Mira", mana: 16)
+    pub fn new(name: Str, mana: I32 = 10) -> Self => { ..Fighter::new(name, 20), mana };
+
+    pub override fn attack(mut self, dice: Dice) -> I32 {
+        if self.mana < 4 {
+            return 1;                                 // staff bonk
+        }
+        self.mana -= 4;
+        return dice.roll() * 2;
+    }
+
+    pub override fn take_hit(mut self, dmg: I32) {
+        if self.mana > 0 {
+            self.status |= Status::Shielded;
+        }
+        super.take_hit(dmg);
+    }
+}

@@ -1,0 +1,59 @@
+// main.3b — two fighters slug it out.
+//   threebolt run main.3b [quick | full | <rounds>]
+
+use config::{parse_rounds, BadRounds};
+use dice;
+use dice::Dice;
+use fighters::{Fighter, Knight, Wizard};
+
+const DEFAULT_ROUNDS: I32 = 5;
+
+fn main(args: [Str]) -> () | BadRounds {
+    if !args {                                         // Truthy: empty list is false
+        println(f"no mode given, defaulting to {DEFAULT_ROUNDS} rounds");
+    }
+
+    let rounds = match args {
+        [] => DEFAULT_ROUNDS,
+        [arg, ..] => parse_rounds(arg)?,               // BadRounds propagates out of main
+    };
+
+    dice::seed();
+    let d6 = Dice::new(6);
+
+    // `let` is shallow: the list can't be rebound, but its elements are references.
+    let fighters: [Fighter] = [
+        Knight::new("Sir Bolt"),
+        Wizard::new("Mira", mana: 16),
+    ];
+
+    defer println("-- arena closed --");
+    println(f"{fighters.len} fighters, {rounds} rounds");
+
+    for round in 1..=rounds {
+        for (i, mut attacker) in fighters.enumerate() {
+            if !attacker.alive {
+                continue;
+            }
+            let mut target = fighters[1 - i];
+            let dmg = attacker.attack(d6);               // virtual dispatch
+            target.take_hit(dmg);
+            println(f"[{round}] {attacker.name} hits {target.describe()} for {dmg}");
+        }
+
+        let standing = fighters.iter().filter(f => f.alive).to_list();
+        if standing.len < 2 {
+            report(standing.first);
+            return;                                      // defer still runs
+        }
+    }
+    println("time's up: it's a draw");
+}
+
+fn report(winner: Fighter | null) {
+    match winner {
+        null => println("everyone fell. grim."),
+        w is Knight => println(f"{w.shout()} the knight prevails"),
+        w => println(f"{w.describe()} wins"),
+    }
+}

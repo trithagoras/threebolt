@@ -1,0 +1,24 @@
+// dice.3b — a tiny RNG over libc, to show C interop.
+
+extern "C" {
+    fn time(t: Ptr<c::Long>) -> c::Long;
+    fn srand(seed: c::UInt);
+    fn rand() -> c::Int;
+}
+
+/// Seeds libc's RNG. Pass `value:` for reproducible fights.
+pub fn seed(value: U32 | null = null) {
+    let s = value ?? (unsafe => time(Ptr<c::Long>::null())) as U32;   // no return-type inference (§10)
+    unsafe { srand(s); }
+}
+
+pub struct Dice {
+    let sides: I32;
+
+    pub fn new(sides: I32) -> Self => { sides };
+
+    pub fn roll(self) -> I32 {
+        let r = unsafe => rand();
+        return r % self.sides + 1;
+    }
+}
