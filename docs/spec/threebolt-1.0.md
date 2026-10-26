@@ -26,10 +26,10 @@ After `.` (member access) any keyword is accepted as a member name (e.g. `x.type
 |---|---|
 | Integer | `123`, `1_000`, `0xFF`, `0o17`, `0b1010`, optional suffix `_i8 _i16 _i32 _i64 _isize _u8 _u16 _u32 _u64 _usize` (e.g. `10_u64`) |
 | Float | `1.0`, `1e9`, `2.5e-3`, suffix `_f32 _f64` (`1.5_f32`; also on integer digits: `1_f32`). A float literal requires digits on both sides of `.` |
-| Bool | `true`, `false` |
-| Char | `'a'`, `'\n'`, `'\u{1F600}'` — a Unicode scalar value |
-| Str | `"..."` with escapes `\n \r \t \0 \\ \" \' \u{HEX}` (1–6 hex digits). May not contain a raw line break |
-| Multi-line Str | `"""..."""`: same escapes; may contain raw line breaks (each LF or CRLF is `\n`) and `"`/`""`; ends at the first `"""`. Content is taken verbatim — no indentation stripping, no leading-newline removal |
+| bool | `true`, `false` |
+| char | `'a'`, `'\n'`, `'\u{1F600}'` — a Unicode scalar value |
+| str | `"..."` with escapes `\n \r \t \0 \\ \" \' \u{HEX}` (1–6 hex digits). May not contain a raw line break |
+| Multi-line str | `"""..."""`: same escapes; may contain raw line breaks (each LF or CRLF is `\n`) and `"`/`""`; ends at the first `"""`. Content is taken verbatim — no indentation stripping, no leading-newline removal |
 | F-string | `f"text {expr} more"` or `f"""..."""` (multi-line rules as above); `{{` / `}}` are literal braces, a lone `}` in the text is an error. `expr` is any expression, including string literals and nested f-strings (`f"{greet("bob")}"`); braces inside it must balance. Each interpolated value must implement `Display` (§16) |
 | Null / unit | `null`, `()` |
 
@@ -73,19 +73,20 @@ use std::collections::Map as Dict;
 - Trait method implementations are always public.
 
 ### 2.4 Entry point
-- The entry module MUST declare `fn main()` or `fn main(args: [Str])`, return type `()` or `() | E` where every non-`()` member implements `Error`.
+- The entry module MUST declare `fn main()` or `fn main(args: [str])`, return type `()` or `() | E` where every non-`()` member implements `Error`.
 - `args` excludes the program name.
-- Returning an error: its `message()` is written to stderr, exit code 1. Normal return: exit code 0. `std::process::exit(code: I32)` terminates immediately; pending `defer`s do not run.
+- Returning an error: its `message()` is written to stderr, exit code 1. Normal return: exit code 0. `std::process::exit(code: i32)` terminates immediately; pending `defer`s do not run.
 
 ---
 
 ## 3. Types
 
 ### 3.1 Primitive types
-`I8 I16 I32 I64 ISize U8 U16 U32 U64 USize F32 F64 Bool Char Str`
+`i8 i16 i32 i64 isize u8 u16 u32 u64 usize f32 f64 bool char str`
 
-- `Str`: immutable UTF-8 text, reference semantics but immutable (identity unobservable). No integer indexing; `.chars()`, `.bytes()`, `.len` (bytes).
-- `Char`: Unicode scalar value (32-bit).
+- Primitive names are lowercase and predeclared, not keywords; static members use paths as for any type (`i32::parse(s)`, `u64::MAX`, `str::from_cstr(p)`). Declaring a type with a primitive's name is an error. Nominal and stdlib types are PascalCase (`Type`, `Err`, `List`, `Ptr`, …).
+- `str`: immutable UTF-8 text, reference semantics but immutable (identity unobservable). No integer indexing; `.chars()`, `.bytes()`, `.len` (bytes).
+- `char`: Unicode scalar value (32-bit).
 - `()`: unit, the empty tuple; sole value `()`.
 - `null`: the null type; sole value `null`.
 - `!`: the never type (type position only). Return type of diverging functions (`panic`, `process::exit`); assignable to every type; has no values.
@@ -108,16 +109,16 @@ use std::collections::Map as Dict;
 | `( T )` | grouping |
 
 ### 3.3 Categories
-- **Value types:** primitives except `Str`, `()`, `null`, tuples, structs, enums, `[T; N]`, `Ptr<T>`, `extern fn`. Assignment/passing copies.
-- **Reference types:** classes, `Str`, `[T]`, `Map`, `Set`, closures (`fn` types), trait references, boxed structs. Assignment/passing copies the reference.
+- **Value types:** primitives except `str`, `()`, `null`, tuples, structs, enums, `[T; N]`, `Ptr<T>`, `extern fn`. Assignment/passing copies.
+- **Reference types:** classes, `str`, `[T]`, `Map`, `Set`, closures (`fn` types), trait references, boxed structs. Assignment/passing copies the reference.
 
 ### 3.4 Unions
 - Unions are **flattened, unordered, deduplicated**: `A | (B | A)` ≡ `A | B`. `T | T` ≡ `T`.
 - Type aliases are transparent: `type Result<T> = T | Err;` — `Result<Entity>` *is* `Entity | Err`.
 - A union value carries its runtime type; there is no user-visible wrapper.
-- Literal members are subsumed by their base type: `"a" | Str` ≡ `Str`.
+- Literal members are subsumed by their base type: `"a" | str` ≡ `str`.
 - Methods, fields and getters cannot be accessed on a union-typed value; narrow first (§9). Unions participate in conditions (§6.6), `==` (§7.3), and `Hash` (when every member implements `Hash`) — nothing else.
-- Recursive aliases are permitted when recursion passes through a nominal or collection type: `type Json = null | Bool | F64 | Str | [Json] | Map<Str, Json>;`
+- Recursive aliases are permitted when recursion passes through a nominal or collection type: `type Json = null | bool | f64 | str | [Json] | Map<str, Json>;`
 
 ### 3.5 Assignability (`S` to `T`)
 `S` is assignable to `T` when any of:
@@ -133,10 +134,10 @@ use std::collections::Map as Dict;
 Generic types are **invariant**: `[Dog]` is not assignable to `[Animal]`. `fn` types are invariant in parameters and return.
 
 ### 3.6 Numeric conversions
-- Implicit (lossless) widening: signed→wider signed, unsigned→wider unsigned, unsigned→strictly wider signed, `I8..I32`/`U8..U32`→`F64`, `I8 I16 U8 U16`→`F32`, `F32`→`F64`. `ISize`/`USize` widen only to themselves and `I64`/`U64` respectively (platform independence).
+- Implicit (lossless) widening: signed→wider signed, unsigned→wider unsigned, unsigned→strictly wider signed, `i8..i32`/`u8..u32`→`f64`, `i8 i16 u8 u16`→`f32`, `f32`→`f64`. `isize`/`usize` widen only to themselves and `i64`/`u64` respectively (platform independence).
 - Everything else requires `as` (§7.9).
-- Integer literals adopt the expected type if it is an integer or float type and the value fits (error if not). Float literals adopt an expected float type. With no expected type: integer → `I32`, float → `F64`.
-- Inference widens literal types: `let d = "left";` has type `Str`; `let d: Direction = "left";` has type `Direction`.
+- Integer literals adopt the expected type if it is an integer or float type and the value fits (error if not). Float literals adopt an expected float type. With no expected type: integer → `i32`, float → `f64`.
+- Inference widens literal types: `let d = "left";` has type `str`; `let d: Direction = "left";` has type `Direction`.
 
 ---
 
@@ -145,7 +146,7 @@ Generic types are **invariant**: `[Dog]` is not assignable to `[Animal]`. `fn` t
 ### 4.1 Bindings
 ```rs
 let x = 1;                 // immutable binding
-let mut y: I64 = 2;        // mutable binding
+let mut y: i64 = 2;        // mutable binding
 let (a, mut b) = pair;     // irrefutable pattern
 ```
 - Bindings MUST be initialized at declaration.
@@ -154,9 +155,9 @@ let (a, mut b) = pair;     // irrefutable pattern
 
 ### 4.2 Constants and statics
 ```rs
-const MAX: USize = 1024;               // compile-time evaluated
+const MAX: usize = 1024;               // compile-time evaluated
 static let START: Instant = Instant::now();
-static let mut COUNTER: U64 = 0;
+static let mut COUNTER: u64 = 0;
 ```
 - `const` initializers are constant expressions: literals, other `const`s, arithmetic/bitwise/comparison on them, enum members, `typeof`/`nameof` not permitted. `const` may be used in literal types, enum values, `[T; N]` sizes, array-repeat counts.
 - `static let [mut]` may appear at module level or in a struct/class body. Initializers run **lazily on first access**, exactly once even under threads. Initialization cycles panic.
@@ -165,9 +166,9 @@ static let mut COUNTER: U64 = 0;
 
 ### 4.3 Functions
 ```rs
-pub fn spawn(name: Str, hp: I32 = 100, pos: Vec2 = Vec2::zero()) -> Entity { ... }
-fn sq(x: F64) -> F64 => x * x;
-fn log(msg: Str) { println(msg); }   // return type ()
+pub fn spawn(name: str, hp: i32 = 100, pos: Vec2 = Vec2::zero()) -> Entity { ... }
+fn sq(x: f64) -> f64 => x * x;
+fn log(msg: str) { println(msg); }   // return type ()
 ```
 - Return type omitted ⇒ `()`. Return types are never inferred for named functions.
 - **Expression body** `=> body;` is equivalent to `{ return body; }`. `body` is an expression or an assignment (§7.1); an assignment body is only valid when the return type is `()`.
@@ -189,16 +190,16 @@ fn log(msg: Str) { println(msg); }   // return type ()
 ### 4.5 Structs
 ```rs
 pub struct Vec2 {
-    let x: F32;
-    let y: F32 = 0.0;
+    let x: f32;
+    let y: f32 = 0.0;
     static let ZERO: Vec2 = Vec2 { x: 0.0, y: 0.0 };
 
-    pub fn len(self) -> F32 => (self.x * self.x + self.y * self.y).sqrt();
+    pub fn len(self) -> f32 => (self.x * self.x + self.y * self.y).sqrt();
     pub fn normalize(mut self) { let l = self.len(); self.x /= l; self.y /= l; }
 }
 pub struct Done;            // unit struct
 ```
-- Value type. **Fields** (structs and classes): `let name: T [= default];`, optionally prefixed by visibility (`pub let id: U64;`). Fields carry no `mut`: every field is writable iff the path to it is mutable (§5.1). There are no init-only/readonly fields in 1.0; for "readable outside, not writable", use a private field plus a `pub get fn` (§4.8).
+- Value type. **Fields** (structs and classes): `let name: T [= default];`, optionally prefixed by visibility (`pub let id: u64;`). Fields carry no `mut`: every field is writable iff the path to it is mutable (§5.1). There are no init-only/readonly fields in 1.0; for "readable outside, not writable", use a private field plus a `pub get fn` (§4.8).
 - No inheritance. May implement traits (`struct P : Component, Updatable`). No `virtual`/`abstract`/`override`/`prot`.
 - A method without a `self` parameter is static (`Vec2::zero()`).
 - Struct literals `Vec2 { x: 1.0 }` may appear anywhere; fields without defaults must be supplied.
@@ -207,20 +208,20 @@ pub struct Done;            // unit struct
 ### 4.6 Classes
 ```rs
 pub abstract class Animal : Describe {
-    pub let name: Str;
-    prot let legs: I32 = 4;
+    pub let name: str;
+    prot let legs: i32 = 4;
 
-    prot fn new(name: Str) -> Self => { name };
-    pub abstract fn speak(self) -> Str;
-    pub virtual fn walk(self) -> Str => f"{self.name} walks on {self.legs} legs";
-    pub fn describe(self) -> Str => f"{self.name} says {self.speak()}";
+    prot fn new(name: str) -> Self => { name };
+    pub abstract fn speak(self) -> str;
+    pub virtual fn walk(self) -> str => f"{self.name} walks on {self.legs} legs";
+    pub fn describe(self) -> str => f"{self.name} says {self.speak()}";
 }
 
 pub class Dog : Animal {
-    let breed: Str;
-    pub fn new(name: Str, breed: Str = "mutt") -> Self => { ..Animal::new(name), breed };
-    pub override fn speak(self) -> Str => "woof";
-    pub override fn walk(self) -> Str => super.walk() + " happily";
+    let breed: str;
+    pub fn new(name: str, breed: str = "mutt") -> Self => { ..Animal::new(name), breed };
+    pub override fn speak(self) -> str => "woof";
+    pub override fn walk(self) -> str => super.walk() + " happily";
 }
 ```
 - Reference type, GC-managed. Base list: at most one class, which MUST be first, followed by traits.
@@ -243,7 +244,7 @@ pub class Dog : Animal {
 
 ### 4.8 Properties
 ```rs
-pub get fn len(self) -> USize => self.count;
+pub get fn len(self) -> usize => self.count;
 ```
 - `get fn` declares a getter: no parameters besides `self` (never `mut self`), non-`()` return. Accessed without parentheses: `xs.len`.
 - A getter may not share a name with a field of the same type (convention: private backing field `_name`, getter `name`).
@@ -252,8 +253,8 @@ pub get fn len(self) -> USize => self.count;
 ### 4.9 Traits
 ```rs
 pub trait Describe {
-    fn describe(self) -> Str;                          // required
-    fn shout(self) -> Str => self.describe() + "!";    // default body
+    fn describe(self) -> str;                          // required
+    fn shout(self) -> str => self.describe() + "!";    // default body
 }
 pub trait Component : Default {}                       // supertrait
 pub trait Default { fn default() -> Self; }            // static requirement
@@ -265,7 +266,7 @@ pub trait Default { fn default() -> Self; }            // static requirement
 
 ### 4.10 `impl`
 ```rs
-impl Describe for Vec2 { fn describe(self) -> Str => f"({self.x}, {self.y})"; }
+impl Describe for Vec2 { fn describe(self) -> str => f"({self.x}, {self.y})"; }
 impl<T: Display> Display for [T] { ... }
 ```
 - `struct S : T` / `class C : T` with methods in the body ≡ a separate `impl T for S { ... }`; both may be mixed for different traits but each (trait, type) pair is implemented exactly once program-wide.
@@ -275,15 +276,15 @@ impl<T: Display> Display for [T] { ... }
 
 ### 4.11 Enums
 ```rs
-pub enum Color { Red, Green, Blue }                          // backing I32: 0,1,2
-pub enum Signal : c::Int { Int = 2, Kill = 9, Term = 15 }
-@flags pub enum Perm : U8 { None = 0, Read, Write, Exec }    // 0,1,2,4
+pub enum Color { Red, Green, Blue }                          // backing i32: 0,1,2
+pub enum Signal : c::int { Int = 2, Kill = 9, Term = 15 }
+@flags pub enum Perm : u8 { None = 0, Read, Write, Exec }    // 0,1,2,4
 ```
-- Distinct nominal value type backed by an integer type (default `I32`). No payloads.
+- Distinct nominal value type backed by an integer type (default `i32`). No payloads.
 - Unassigned member values: plain enums — previous + 1 (first = 0). `@flags` — the next power of two greater than the previous value (first unassigned = 1). Values are `const` expressions and must fit the backing type.
 - Members: `Color::Red`. Enums implement `Eq`, `Ord` (by value), `Hash`, `Display` (member name; flags combinations as `Read | Write`; undeclared bits as the integer).
-- `e as I32` (any integer type) yields the value. `n as Color` panics if `n` is not a declared value; `n as? Color` yields `Color | null`.
-- `@flags` enums: `| & ^ ~` and `|= &= ^=` defined; `.has(flag) -> Bool`; every bit pattern is a valid value (so `n as Perm` never panics, and `match` on a flags enum requires `_`).
+- `e as i32` (any integer type) yields the value. `n as Color` panics if `n` is not a declared value; `n as? Color` yields `Color | null`.
+- `@flags` enums: `| & ^ ~` and `|= &= ^=` defined; `.has(flag) -> bool`; every bit pattern is a valid value (so `n as Perm` never panics, and `match` on a flags enum requires `_`).
 - Non-flags enum `match` is exhaustive over declared members.
 
 ### 4.12 Type aliases
@@ -367,9 +368,9 @@ defer { ... }
 - Does not run on panic or `process::exit`. A deferred block may not contain `return`, `break`, `continue`, or `?` propagating out of it.
 
 ### 6.6 Conditions and `Truthy`
-- `if`/`while` conditions and operands of `! && ||` must have a type that is `Bool`, implements `Truthy`, or is a union of `null` and types that are `Bool` or implement `Truthy`.
-- Evaluation: `null` → false; `Bool` → itself; otherwise `x.truthy()`.
-- stdlib implements `Truthy` for `Str` and all collections (empty ⇒ false). **Not** for numeric types, chars, or enums.
+- `if`/`while` conditions and operands of `! && ||` must have a type that is `bool`, implements `Truthy`, or is a union of `null` and types that are `bool` or implement `Truthy`.
+- Evaluation: `null` → false; `bool` → itself; otherwise `x.truthy()`.
+- stdlib implements `Truthy` for `str` and all collections (empty ⇒ false). **Not** for numeric types, chars, or enums.
 - Narrowing on truthy test: in the true branch of `if x`, `null` is removed from `x`'s type.
 
 ---
@@ -403,14 +404,14 @@ Function expression bodies, lambda bodies, `match` arms, and `unsafe =>` accept 
 Bitwise binds tighter than comparison (no C precedence trap).
 
 ### 7.3 Operators
-- Arithmetic `+ - * / %` on same-typed numerics after widening. Integer `/` and `%` by zero panic. Overflow per §13.2. `+` also concatenates `Str + Str`.
+- Arithmetic `+ - * / %` on same-typed numerics after widening. Integer `/` and `%` by zero panic. Overflow per §13.2. `+` also concatenates `str + str`.
 - Bitwise `& | ^ ~ << >>` on integers and `@flags` enums. Shift amount ≥ bit width panics in checked mode.
 - `==`/`!=`: any two types where one is assignable to the other. Requires `Eq` (structs: automatic field-wise; classes: reference identity unless `Eq` implemented; unions: compare runtime type, then value). Comparison with `null` is always permitted on types containing `null`.
-- `< > <= >=`: requires `Ord`. Built-in for numerics, `Char`, `Str` (byte-lexicographic), enums.
-- `&& || !`: short-circuit, operands per §6.6, result `Bool`.
+- `< > <= >=`: requires `Ord`. Built-in for numerics, `char`, `str` (byte-lexicographic), enums.
+- `&& || !`: short-circuit, operands per §6.6, result `bool`.
 - `a ?? b`: if `a` is `null`, evaluates `b`. Type: `(A minus null) | B`. Only null is defaulted (errors are not).
-- `x is T`: runtime test, `Bool`. `T` may be any type including traits, literal types and unions (true if any member matches). Narrows (§9).
-- Ranges `a..b` (half-open), `a..=b` (inclusive): integer or `Char` operands; type `Range<T>` (implements `Iterable<T>`).
+- `x is T`: runtime test, `bool`. `T` may be any type including traits, literal types and unions (true if any member matches). Narrows (§9).
+- Ranges `a..b` (half-open), `a..=b` (inclusive): integer or `char` operands; type `Range<T>` (implements `Iterable<T>`).
 - **Overloadable** via traits (§16): `+ - * / %` unary `-`, `== !=` (`Eq`), `< > <= >=` (`Ord`), `[]` (`Index`, `IndexMut`), `& | ^ ~ << >>`. Compound assignment uses the binary operator. **Not** overloadable: `&& || ! ?? ? is as as? ..`, assignment.
 
 ### 7.4 Conditional expression
@@ -433,7 +434,7 @@ Bitwise binds tighter than comparison (no C precedence trap).
 ```rs
 x => x + 1
 (a, b) => a + b
-(x: I32, y: I32) => x * y
+(x: i32, y: i32) => x * y
 mut c => c.update()
 x => { let y = x * 2; return y; }
 () => work()
@@ -468,7 +469,7 @@ let label = match value {
 ```
 - Expression; arms `pattern [if guard] => body`, comma-separated (trailing comma allowed; a block arm needs no comma). First matching arm wins.
 - Type: union of arm result types (diverging arms contribute nothing).
-- Exhaustiveness (error if not exhaustive): over `Bool`, literal unions, non-flags enums, union members (by type), `null`, list patterns (lengths). Guarded arms do not count toward exhaustiveness. Otherwise a `_` or binding catch-all is required.
+- Exhaustiveness (error if not exhaustive): over `bool`, literal unions, non-flags enums, union members (by type), `null`, list patterns (lengths). Guarded arms do not count toward exhaustiveness. Otherwise a `_` or binding catch-all is required.
 
 ### 7.12 `unsafe` expression
 `unsafe => expr` — evaluates `expr` in an unsafe context (§14.6).
@@ -536,7 +537,7 @@ For `x.m(...)`: inherent methods of `x`'s static type (and base classes), then m
 | `Type { f1, f2: p, .. }` | struct (or class, accessible fields) of `Type`, fields matched; `..` ignores others |
 | `name is T`, `is T` | runtime type test, binds narrowed value |
 | `Enum::Member` | enum value |
-| `pattern if guard` | (arms only) pattern + Bool/Truthy guard |
+| `pattern if guard` | (arms only) pattern + bool/Truthy guard |
 
 - `let` and `for` require irrefutable patterns (tuples, struct destructure, bindings, `_`).
 
@@ -544,9 +545,9 @@ For `x.m(...)`: inherent methods of `x`'s static type (and base classes), then m
 
 ## 12. Errors
 
-- `trait Error { fn message(self) -> Str; }`.
-- stdlib `pub class Err : Error` with `error(msg: Str) -> Err` prelude function. User errors: any struct or class implementing `Error` (or subclassing `Err`).
-- Fallible functions return unions: `fn load(p: Str) -> File | NotFound | Err`.
+- `trait Error { fn message(self) -> str; }`.
+- stdlib `pub class Err : Error` with `error(msg: str) -> Err` prelude function. User errors: any struct or class implementing `Error` (or subclassing `Err`).
+- Fallible functions return unions: `fn load(p: str) -> File | NotFound | Err`.
 - Propagation `?` (§7.10); must-use (§6.1); default `??` handles only null.
 - No exceptions: no `try`/`catch`/`throw`.
 
@@ -555,7 +556,7 @@ For `x.m(...)`: inherent methods of `x`'s static type (and base classes), then m
 ## 13. Runtime semantics
 
 ### 13.1 Panic
-- `panic(msg: Str) -> !` (diverges). Causes: explicit `panic`, failed `as`, index out of range, missing map key via `[]`, integer divide/modulo by zero, checked-mode overflow, abstract method on abstract instance, static init cycle, `unsafe` misuse detected by the runtime.
+- `panic(msg: str) -> !` (diverges). Causes: explicit `panic`, failed `as`, index out of range, missing map key via `[]`, integer divide/modulo by zero, checked-mode overflow, abstract method on abstract instance, static init cycle, `unsafe` misuse detected by the runtime.
 - Effect: message + stack trace to stderr, process exits with code 101. Not catchable. `defer`s do not run. A panic on any thread terminates the process.
 
 ### 13.2 Integer overflow
@@ -569,7 +570,7 @@ For `x.m(...)`: inherent methods of `x`'s static type (and base classes), then m
 ### 13.4 Threads and memory model
 - `std::thread::Thread::spawn<R>(f: fn() -> R) -> Thread<R>`; `t.join() -> R`.
 - `std::sync::Mutex<T>`: `Mutex::new(v)`, `m.lock<R>(f: fn(Guard<T>) -> R) -> R` where `Guard<T>` is a class with `pub let value: T` valid only during `f`.
-- `std::sync::Atomic<T>` for integer and `Bool` `T`: `load`, `store`, `swap`, `compare_exchange`, `fetch_add`, etc. (sequentially consistent).
+- `std::sync::Atomic<T>` for integer and `bool` `T`: `load`, `store`, `swap`, `compare_exchange`, `fetch_add`, etc. (sequentially consistent).
 - Data races do not corrupt memory or produce invalid references; a racy read returns some previously written value, but value types wider than a machine word may tear. Implementations may use a global interpreter lock.
 
 ### 13.5 Initialization order
@@ -583,36 +584,36 @@ For `x.m(...)`: inherent methods of `x`'s static type (and base classes), then m
 ```rs
 @link("m")
 extern "C" {
-    fn sqrt(x: F64) -> F64;
-    fn printf(fmt: Ptr<c::Char>, ...) -> c::Int;
+    fn sqrt(x: f64) -> f64;
+    fn printf(fmt: Ptr<c::char>, ...) -> c::int;
 }
 ```
 - Only the `"C"` ABI. `@link("name")` names a native library (platform naming applied). Functions without `@link` resolve against the process/libc.
-- `...` declares a C variadic; variadic arguments must be ABI types (F32 promoted to F64, small integers to `c::Int`).
+- `...` declares a C variadic; variadic arguments must be ABI types (f32 promoted to f64, small integers to `c::int`).
 - Extern functions are implicitly `unsafe fn`.
 
 ### 14.2 ABI types
-Integers, floats, `Bool` (C `_Bool`), `Ptr<T>`, `extern fn` types, `@c struct`s, enums (as their backing type), `[T; N]` inside `@c struct`s only. Passing any other type to an extern ⇒ error.
+Integers, floats, `bool` (C `_Bool`), `Ptr<T>`, `extern fn` types, `@c struct`s, enums (as their backing type), `[T; N]` inside `@c struct`s only. Passing any other type to an extern ⇒ error.
 
-`std::c` (prelude alias `c`) provides `c::Char c::UChar c::Short c::UShort c::Int c::UInt c::Long c::ULong c::LongLong c::ULongLong c::SizeT c::SSizeT` as platform-correct aliases, plus `c::alloc<T>(count: USize) -> Ptr<T>`, `c::free<T>(p: Ptr<T>)`.
+`std::c` (prelude alias `c`) provides `c::char c::uchar c::short c::ushort c::int c::uint c::long c::ulong c::longlong c::ulonglong c::size_t c::ssize_t` as platform-correct aliases, plus `c::alloc<T>(count: usize) -> Ptr<T>`, `c::free<T>(p: Ptr<T>)`.
 
 ### 14.3 `@c struct`
 ```rs
-@c struct Timespec { let tv_sec: I64; let tv_nsec: c::Long; }
+@c struct Timespec { let tv_sec: i64; let tv_nsec: c::long; }
 ```
 C layout (declaration order, C alignment). Fields must be ABI types. Otherwise an ordinary struct.
 
 ### 14.4 Pointers
-- `Ptr<T>`: raw address, value type, may be null. `Ptr<T>::null()` (type argument required, §10), `p.is_null()`, `p.read() -> T`, `p.write(v)`, `p.offset(n: ISize) -> Ptr<T>`, `p.cast<U>() -> Ptr<U>`, `p.addr() -> USize`, `Ptr::from_addr(a: USize)`.
+- `Ptr<T>`: raw address, value type, may be null. `Ptr<T>::null()` (type argument required, §10), `p.is_null()`, `p.read() -> T`, `p.write(v)`, `p.offset(n: isize) -> Ptr<T>`, `p.cast<U>() -> Ptr<U>`, `p.addr() -> usize`, `Ptr::from_addr(a: usize)`.
 - `T` should be an ABI type; reading/writing a non-ABI `T` is undefined behaviour.
-- Strings: `s.to_cstr() -> Ptr<c::Char>` allocates a NUL-terminated copy with `c::alloc` (caller frees with `c::free`). `Str::from_cstr(p: Ptr<c::Char>) -> Str` copies (unsafe).
+- Strings: `s.to_cstr() -> Ptr<c::char>` allocates a NUL-terminated copy with `c::alloc` (caller frees with `c::free`). `str::from_cstr(p: Ptr<c::char>) -> str` copies (unsafe).
 
 ### 14.5 Passing GC memory
 - `x.with_ptr<R>(f: fn(Ptr<E>) -> R) -> R` is available on: `[T]` and `[T; N]` (E = element type, must be ABI) and mutable places of `@c struct` type (E = the struct). For the duration of `f` the memory is pinned (not moved or collected) and writes through the pointer are visible in `x`. The pointer MUST NOT be retained after `f` returns (undefined behaviour).
 - `with_ptr` itself is safe; using the pointer requires `unsafe`.
 
 ### 14.6 `unsafe`
-- Requires an unsafe context: calling an `unsafe fn` (including externs); `Ptr` `read`/`write`/`offset`/`from_addr`/`cast`; `Str::from_cstr`; `c::free`.
+- Requires an unsafe context: calling an `unsafe fn` (including externs); `Ptr` `read`/`write`/`offset`/`from_addr`/`cast`; `str::from_cstr`; `c::free`.
 - Unsafe contexts: `unsafe { ... }` block statement, `unsafe => expr` expression, the body of an `unsafe fn`.
 - `unsafe fn` declares a function whose callers need an unsafe context. A safe function may contain unsafe blocks.
 - Inside an unsafe context, behaviour of invalid pointer use, C-side errors, or misuse of pinned pointers is undefined. That is the third bolt.
@@ -627,8 +628,8 @@ C layout (declaration order, C alignment). Fields must be ABI types. Otherwise a
 
 - `typeof(T)` — a `Type` for type expression `T` (compile-time operand, evaluated at runtime for type parameters).
 - `x.type()` — the runtime type of a value (for unions: the actual member; for trait references and boxes: the concrete type).
-- `nameof(T) -> Str` — the type's declared name (`"Position"`, generic args included: `"List<I32>"`).
-- `Type`: implements `Eq`, `Hash`, `Display`; `.name -> Str`; `.is_subtype_of(other: Type) -> Bool`. No member enumeration in 1.0.
+- `nameof(T) -> str` — the type's declared name (`"Position"`, generic args included: `"List<i32>"`).
+- `Type`: implements `Eq`, `Hash`, `Display`; `.name -> str`; `.is_subtype_of(other: Type) -> bool`. No member enumeration in 1.0.
 
 ---
 
@@ -636,7 +637,7 @@ C layout (declaration order, C alignment). Fields must be ABI types. Otherwise a
 
 Implicitly imported names:
 
-**Functions:** `print(s: Str)`, `println(s: Str)`, `eprintln(s: Str)`, `panic(msg: Str) -> !`, `error(msg: Str) -> Err`, `len<T: Len>(x: T) -> USize`.
+**Functions:** `print(s: str)`, `println(s: str)`, `eprintln(s: str)`, `panic(msg: str) -> !`, `error(msg: str) -> Err`, `len<T: Len>(x: T) -> usize`.
 
 **Types:** `Err`, `Done`, `Type`, `List<T>` (`[T]`), `Map<K: Hash + Eq, V>`, `Set<T: Hash + Eq>`, `Range<T>`, `Ptr<T>`, module alias `c`.
 
@@ -644,14 +645,14 @@ Implicitly imported names:
 
 | Trait | Members | Notes |
 |---|---|---|
-| `Truthy` | `fn truthy(self) -> Bool` | §6.6 |
-| `Len` | `get fn len(self) -> USize` | `Str`, collections |
-| `Display` | `fn to_str(self) -> Str` | f-strings; primitives, `Str`, enums, `Type` |
-| `Error` | `fn message(self) -> Str` | §12; `Err` also implements `Display` |
+| `Truthy` | `fn truthy(self) -> bool` | §6.6 |
+| `Len` | `get fn len(self) -> usize` | `str`, collections |
+| `Display` | `fn to_str(self) -> str` | f-strings; primitives, `str`, enums, `Type` |
+| `Error` | `fn message(self) -> str` | §12; `Err` also implements `Display` |
 | `Default` | `fn default() -> Self` | static |
-| `Eq` | `fn eq(self, o: Self) -> Bool` | `==`/`!=` |
-| `Ord : Eq` | `fn cmp(self, o: Self) -> I32` | `<0`, `0`, `>0` |
-| `Hash` | `fn hash(self) -> U64` | Map/Set keys |
+| `Eq` | `fn eq(self, o: Self) -> bool` | `==`/`!=` |
+| `Ord : Eq` | `fn cmp(self, o: Self) -> i32` | `<0`, `0`, `>0` |
+| `Hash` | `fn hash(self) -> u64` | Map/Set keys |
 | `Add Sub Mul Div Rem` | `fn add(self, o: Self) -> Self` etc. | binary operators (RHS and result `Self`) |
 | `Neg` | `fn neg(self) -> Self` | unary `-` |
 | `BitAnd BitOr BitXor Not Shl Shr` | analogous | bitwise operators |
@@ -660,9 +661,9 @@ Implicitly imported names:
 | `Iterator<T>` | `fn next(mut self) -> T \| Done` + defaults: `map filter for_each fold any all count enumerate of_type<U> to_list first` | `Done` sentinel avoids null-collapse |
 | `Iterable<T>` | `fn iter(self) -> Iterator<T>` | `for` loops |
 
-**Collections** (`[T]`, `Map`, `Set`): implement `Len`, `Truthy`, `Iterable`, `Index`/`IndexMut` (`[T]`, `Map`). `[T]`: `push(mut self, v)`, `pop(mut self) -> T | null`, `insert`, `remove`, getter `first -> T | null`, `enumerate() -> Iterator<(USize, T)>`. `Map`: `get(k) -> V | null`, `contains_key(k)`, getters `keys`, `values` (iterators), `remove`. **Convention:** ergonomic accessors (`get`, `pop`, `first`) use `T | null` and accept null-collapse for nullable element types (disambiguate with `len`/`contains_key`); only `Iterator::next` uses `Done`. Full API is a separate stdlib document.
+**Collections** (`[T]`, `Map`, `Set`): implement `Len`, `Truthy`, `Iterable`, `Index`/`IndexMut` (`[T]`, `Map`). `[T]`: `push(mut self, v)`, `pop(mut self) -> T | null`, `insert`, `remove`, getter `first -> T | null`, `enumerate() -> Iterator<(usize, T)>`. `Map`: `get(k) -> V | null`, `contains_key(k)`, getters `keys`, `values` (iterators), `remove`. **Convention:** ergonomic accessors (`get`, `pop`, `first`) use `T | null` and accept null-collapse for nullable element types (disambiguate with `len`/`contains_key`); only `Iterator::next` uses `Done`. Full API is a separate stdlib document.
 
-**Numeric methods:** `min max abs pow sqrt` (floats), `wrapping_* checked_* saturating_*`, `T::parse(s: Str) -> T | null`, `T::MIN`, `T::MAX`.
+**Numeric methods:** `min max abs pow sqrt` (floats), `wrapping_* checked_* saturating_*`, `T::parse(s: str) -> T | null`, `T::MIN`, `T::MAX`.
 
 ---
 
@@ -691,21 +692,21 @@ pub trait Component : Default {}
 pub trait Updatable { fn update(mut self); }
 
 pub struct Position : Component, Updatable {
-    let x: F32 = 0.0;
-    let y: F32 = 0.0;
+    let x: f32 = 0.0;
+    let y: f32 = 0.0;
     pub fn default() -> Self => {};
     pub fn update(mut self) { self.x += 1.0; }
 }
 
 pub struct Details : Component {
-    let name: Str = "UNNAMED";
+    let name: str = "UNNAMED";
     pub fn default() -> Self => {};
 }
 
 pub class Entity {
-    static let mut NEXT_ID: U64 = 0;
+    static let mut NEXT_ID: u64 = 0;
 
-    pub let id: U64;
+    pub let id: u64;
     let components: Map<Type, Component> = [];
 
     pub fn new() -> Self {
@@ -738,7 +739,7 @@ pub class Entity {
 
 pub class EntityBuilder {
     let entity: Entity = Entity::new();
-    let built: Bool = false;
+    let built: bool = false;
 
     pub fn new() -> Self => {};
 
@@ -761,7 +762,7 @@ pub class EntityBuilder {
     }
 }
 
-fn main(args: [Str]) -> () | Err {
+fn main(args: [str]) -> () | Err {
     let name = match args {
         [n, ..] => n,
         [] => "player1",
@@ -789,3 +790,7 @@ fn main(args: [Str]) -> () | Err {
 - §1 `"..."` literals may not contain raw line breaks. New multi-line strings `"""..."""` and `f"""..."""`.
 - §1 Clarified: `\u{HEX}` takes 1–6 digits; float suffixes are allowed on integer digits (`1_f32`); suffixes always start with `_`; malformed numeric literals are errors; digits after `.` never form a float (`t.0.1`); `////` is not a doc comment; a lone `}` in f-string text is an error.
 - §1 Added `...` (C variadics, §14.1) to the operator/punctuation list.
+
+### 2026-10-27 — lowercase primitives
+- §3.1 Primitive types renamed to lowercase (`I32` → `i32`, `Str` → `str`, `Bool` → `bool`, …); they are predeclared names, not keywords. Applied throughout.
+- §14.2 C aliases renamed to C's spelling: `c::int c::uint c::long c::size_t …` (was `c::Int c::SizeT …`).

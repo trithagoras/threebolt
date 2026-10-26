@@ -102,7 +102,7 @@ class LexerTest {
         assertEquals("GT GT", types(">>"));
         assertEquals("GT ASSIGN", types(">="));
         assertEquals("GT GT ASSIGN", types(">>="));
-        assertEquals("IDENTIFIER LT IDENTIFIER LT IDENTIFIER GT GT FAT_ARROW", types("List<List<I32>>=>"));
+        assertEquals("IDENTIFIER LT IDENTIFIER LT IDENTIFIER GT GT FAT_ARROW", types("List<List<i32>>=>"));
         assertEquals("SHL SHL_EQ LE LT", types("<< <<= <= <"));
     }
 

@@ -6,9 +6,9 @@ use dice;
 use dice::Dice;
 use fighters::{Fighter, Knight, Wizard};
 
-const DEFAULT_ROUNDS: I32 = 5;
+const DEFAULT_ROUNDS: i32 = 5;
 
-fn main(args: [Str]) -> () | BadRounds {
+fn main(args: [str]) -> () | BadRounds {
     if !args {                                         // Truthy: empty list is false
         println(f"no mode given, defaulting to {DEFAULT_ROUNDS} rounds");
     }

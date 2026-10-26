@@ -5,7 +5,7 @@
 // (dev.threebolt.parse.LexErrors).
 //
 // `>` is always its own token: `>=`, `>>` and `>>=` are assembled by the parser from
-// adjacent tokens, so `List<List<I32>>` and `fn f() -> Box<T>=> x` need no splitting.
+// adjacent tokens, so `List<List<i32>>` and `fn f() -> Box<T>=> x` need no splitting.
 lexer grammar ThreeboltLexer;
 
 channels { DOC }

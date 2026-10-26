@@ -55,7 +55,7 @@ Each phase ends with green tests. Work in **vertical slices** after Phase 3: eac
 - Module loader: source root = entry file's directory (§2.1); `use` resolution; prelude injection. Diagnostics infrastructure (error codes, spans, multiple errors per run).
 
 ### Phase 4 — Slice: "hello, arithmetic"
-`fn main`, `println`, `let`/`let mut`, shadowing, primitives & numeric literal typing/widening (§3.6), operators (§7.3), checked overflow (§13.2), `if`/`while`/`loop`/`for` over ranges, `Str` + f-strings (`Display` for primitives), functions, named-only optional params, overloads (§4.4), `const`, `static`, panics + exit codes.
+`fn main`, `println`, `let`/`let mut`, shadowing, primitives & numeric literal typing/widening (§3.6), operators (§7.3), checked overflow (§13.2), `if`/`while`/`loop`/`for` over ranges, `str` + f-strings (`Display` for primitives), functions, named-only optional params, overloads (§4.4), `const`, `static`, panics + exit codes.
 
 ### Phase 5 — Slice: types & values
 Structs (value semantics, in-place `mut self`, read-modify-write indexers §5.3), tuples, classes, initializers/spread/`init` fields (§4.7), mutability checking (§5), getters, visibility, `[T]` / `Map` / `Set` + literals, `Truthy`/`Len`.
