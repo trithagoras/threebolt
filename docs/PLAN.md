@@ -41,14 +41,16 @@ Each phase ends with green tests. Work in **vertical slices** after Phase 3: eac
 - Literal *values* (escape decoding, `\u{…}` scalar-range check, integer parsing) are left to the AST builder (Phase 3).
 - Tests: token-stream golden tests for tricky inputs (`src/test/resources/lexer`, regenerate with `./gradlew test -PupdateGolden`).
 
-### Phase 2 — Parser
-- `ThreeboltParser.g4` covering all of spec §2–§11 syntax. Lexer hand-offs: keyword tokens accepted as member names after `.` (§1); `get` is a contextual keyword — recognise `get fn` in member declarations only (an `IDENTIFIER` whose text is `get`). Priority list from spec §17:
-  - generic-args disambiguation (§7.5): an alternative guarded by a semantic predicate that speculatively matches `typeArgs` and checks the follow token is `(` or `::`;
-  - statement-initial `{` = block; no bare initializers in `if/while/for/match` heads (a `noStructExpr` variant of `expr`, Rust-style);
-  - precedence via ANTLR4 left-recursive `expr` alternatives ordered per §7.2; comparisons non-associative (separate rule level);
-  - lambda vs tuple/paren lookahead; `a if c else b`; `unsafe => e`.
-- Acceptance: every snippet in the spec and every file in `examples/` parses; negative-syntax tests produce sane errors with line/col.
-- Reference grammars (optional): `antlr/grammars-v4` — `csharp/` (generic-arg disambiguation) and `rust/` (no-struct-literal contexts). Fetch on demand; not required.
+### Phase 2 — Parser ✅
+- `ThreeboltParser.g4` covers spec §2–§11. One rule per precedence level of §7.2 (left-recursive for left-associative levels; comparisons and ranges take an optional operator suffix, so they don't chain).
+- Generic-args disambiguation (§7.5): `typeArgsAhead()` runs a speculative `typeArgs` parse on a throwaway parser over the same token stream and checks the follow token is `(` or `::`. **Pitfall:** ANTLR only evaluates a predicate at the left edge of the decision being made; a decision further out that looks ahead through it treats it as true. So alternatives must not share an expression prefix that contains a path. `comparisonExpr` uses an optional suffix for this reason (as separate alternatives, it parsed `f(a < b, c > (d))` as comparisons).
+- §6.3 head restriction: `noStructExpr` pushes "forbidden" on a stack in the parser; `block`, `callArgs`, `nested` (parens/index/tuples), `initializer`, `collectionLiteral`, `matchBody` and `fstring` push "allowed" (`@init`/`finally`). Initializer and collection alternatives in `primary` are guarded by `structOk()`.
+- Statement-initial `{` is a block (`exprStmt`/`defer` predicate). After `=>`, `{` is an initializer in fn bodies and a block in lambdas and match arms. `match` statements need no `;`.
+- `>=`, `>>`, `>>=` are adjacent `GT`/`ASSIGN` tokens checked by `adjacent()` predicates with `<fail=...>` messages.
+- Entry rules: `compilationUnit`, plus `memberList`, `stmtList`, `exprOnly`, `typeOnly` for snippets and tests.
+- `parse.Parsing` lexes and parses and returns `ParseError`s in source order (lexer errors, plus syntax errors from `SyntaxErrorStrategy`, which drops parser errors at lexer error tokens). `parse.TreeDump` renders compact s-expressions (`threebolt parse <file>`).
+- Spec clarifications from this phase: §1 keywords after `::`; §17 notes 12–16.
+- Tests: `ParserTest` (precedence, disambiguation, negative cases with line/col); `ParserAcceptanceTest` (every `examples/` file and every spec ```` ```rs ```` snippet parses; snippets may be modules, member lists, statement lists or one expression per line; `{ ... }` placeholder bodies are elided).
 
 ### Phase 3 — AST + front-end plumbing
 - Records for every node with `Span`. Builder visitor ParseTree → AST (no semantics). AST pretty-printer; round-trip tests (parse → print → parse = same AST).
