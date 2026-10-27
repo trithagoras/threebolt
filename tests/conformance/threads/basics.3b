@@ -1,0 +1,86 @@
+// §13.4 threads, Mutex and Atomic; §4.2 statics initialize once under threads.
+use std::thread;
+use std::thread::Thread;
+use std::sync::Mutex;
+use std::sync::Atomic;
+
+static let SLOW: i32 = slow_init();
+static let mut HITS: i32 = 0;
+
+fn slow_init() -> i32 {
+    println("initializing SLOW");
+    thread::sleep(20);
+    return 42;
+}
+
+fn sum_to(n: i64) -> i64 {
+    let mut total: i64 = 0;
+    for i in 0..=n { total += i; }
+    return total;
+}
+
+struct Point {
+    let x: i32;
+    let y: i32;
+}
+
+fn main() {
+    // Results come back through join, in spawn order.
+    let mut sums: [Thread<i64>] = [];
+    for i in 0..4 {
+        sums.push(Thread::spawn(() => sum_to(i * 1000)));
+    }
+    for t in sums { println(t.join()); }
+
+    // Many threads racing on one Atomic.
+    let counter = Atomic::new(0);
+    let mut workers: [Thread<()>] = [];
+    for _ in 0..8 {
+        workers.push(Thread::spawn(() => {
+            for _ in 0..1000 { counter.fetch_add(1); }
+        }));
+    }
+    for w in workers { w.join(); }
+    println(counter.load());
+
+    // A Mutex over a list (a reference) and over a struct (a value: stored back after the lock).
+    let log = Mutex::new([] as [i32]);
+    let corner = Mutex::new(Point { x: 0, y: 0 });
+    let mut adders: [Thread<()>] = [];
+    for k in 1..=5 {
+        adders.push(Thread::spawn(() => {
+            log.lock((mut g) => { g.value.push(k); });
+            corner.lock((mut g) => {
+                g.value.x += k;
+                g.value.y -= 1;
+            });
+        }));
+    }
+    for a in adders { a.join(); }
+    let total = log.lock(g => g.value.iter().fold(0, (acc, v) => acc + v));
+    let p = corner.lock(g => g.value);
+    println(f"{total} {log.lock(g => g.value.len)} ({p.x}, {p.y})");
+
+    // Statics: one initializer run, however many threads ask at once.
+    let mut readers: [Thread<i32>] = [];
+    for _ in 0..4 { readers.push(Thread::spawn(() => SLOW)); }
+    let mut sum = 0;
+    for r in readers { sum += r.join(); }
+    println(sum);
+
+    // Atomic operations return the previous value.
+    let flag = Atomic::new(false);
+    println(flag.compare_exchange(false, true));
+    println(flag.compare_exchange(false, true));
+    println(flag.swap(false));
+    let small = Atomic<u8>::new(250);
+    println(small.fetch_add(10));
+    println(small.load());
+    println(small.fetch_or(0x80));
+    println(small.load());
+
+    // A thread's result is its function's value; `()` threads still join.
+    let quiet = Thread::spawn(() => { HITS += 1; });
+    quiet.join();
+    println(HITS);
+}

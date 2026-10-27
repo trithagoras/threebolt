@@ -1,0 +1,50 @@
+// §14.7 callbacks and `extern fn` values; §14.5 `with_ptr` on lists and arrays.
+
+extern "C" {
+    fn qsort(base: Ptr<i32>, n: c::size_t, size: c::size_t, cmp: extern fn(Ptr<i32>, Ptr<i32>) -> c::int);
+    fn abs(x: c::int) -> c::int;
+}
+
+fn ascending(a: Ptr<i32>, b: Ptr<i32>) -> c::int => unsafe => a.read() - b.read();
+
+unsafe fn descending(a: Ptr<i32>, b: Ptr<i32>) -> c::int => b.read() - a.read();
+
+fn triple(x: c::int) -> c::int => x * 3;
+
+/// A C struct holding a function pointer.
+@c struct Handler {
+    let f: extern fn(c::int) -> c::int;
+}
+
+fn main() {
+    let xs = [5, 3, 9, 1, 7];
+    xs.with_ptr(p => { unsafe { qsort(p, 5, 4, ascending); } });
+    println(xs);
+
+    let mut arr: [i32; 4] = [10, 40, 20, 30];
+    arr.with_ptr(p => { unsafe { qsort(p, 4, 4, descending); } });
+    println(f"{arr[0]} {arr[1]} {arr[2]} {arr[3]}");
+
+    // with_ptr returns f's result; writes through the pointer land in the list.
+    let ys = [1, 2, 3];
+    let sum = ys.with_ptr(p => {
+        unsafe {
+            p.offset(1).write(20);
+            return p.read() + p.offset(1).read() + p.offset(2).read();
+        }
+    });
+    println(f"{sum} {ys}");
+
+    // An extern as a value, and a Threebolt function converted to `extern fn`.
+    let f: extern fn(c::int) -> c::int = abs;
+    let g: extern fn(c::int) -> c::int = triple;
+    println(unsafe => f(-42));
+    println(unsafe => g(5));
+
+    // Through C memory and back: the pointer read from C calls the Threebolt function.
+    let slot = c::alloc<Handler>(1);
+    unsafe { slot.write(Handler { f: triple }); }
+    let h = unsafe => slot.read().f;
+    println(unsafe => h(7));
+    unsafe { c::free(slot); }
+}

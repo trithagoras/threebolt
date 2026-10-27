@@ -1,0 +1,4 @@
+panic: comparator exploded
+    at compare (callback_panic.3b:9:5)
+    at <lambda> (callback_panic.3b:14:33)
+    at main (callback_panic.3b:14:5)

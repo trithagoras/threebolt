@@ -56,6 +56,8 @@ public final class Values {
         public final TypeInfo decl;
         public final List<Type> args;
         public final Object[] fields;
+        /** The Java state of a std class implemented by the interpreter (`Thread`, `Mutex`, `Atomic`). */
+        public Object nat;
 
         public Obj(TypeInfo decl, List<Type> args, Object[] fields) {
             this.decl = decl;
@@ -168,7 +170,10 @@ public final class Values {
 
     public record PtrVal(Type target, long addr) {}
 
-    /** A closure or a named function used as a value. */
+    /**
+     * A closure, a named function used as a value, or a C function pointer (an `extern fn` value
+     * from C, §14.7: neither {@code lambda} nor {@code fn}, just {@code addr}).
+     */
     public static final class FnVal {
         public final Type.Fn type;
         /** Set for lambdas. */
@@ -178,15 +183,26 @@ public final class Values {
         /** Set for named functions. */
         public final FnInfo fn;
         public final List<Type> typeArgs;
+        public final long addr;
 
         public FnVal(Type.Fn type, Ir.Lambda lambda, Env env, Map<TypeParamInfo, Type> typeEnv, FnInfo fn,
                      List<Type> typeArgs) {
+            this(type, lambda, env, typeEnv, fn, typeArgs, 0);
+        }
+
+        private FnVal(Type.Fn type, Ir.Lambda lambda, Env env, Map<TypeParamInfo, Type> typeEnv, FnInfo fn,
+                      List<Type> typeArgs, long addr) {
             this.type = type;
             this.lambda = lambda;
             this.env = env;
             this.typeEnv = typeEnv;
             this.fn = fn;
             this.typeArgs = typeArgs;
+            this.addr = addr;
+        }
+
+        public static FnVal pointer(Type.Fn type, long addr) {
+            return new FnVal(type, null, null, Map.of(), null, List.of(), addr);
         }
     }
 

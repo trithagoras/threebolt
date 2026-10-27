@@ -1,0 +1,14 @@
+// §13.1: a panic on any thread ends the process with 101; main, blocked in join, stops too.
+//! exit: 101
+use std::thread::Thread;
+
+fn work(n: i32) -> i32 {
+    if n > 2 { panic(f"worker {n} failed"); }
+    return n;
+}
+
+fn main() {
+    let t = Thread::spawn(() => work(3));
+    println(t.join());
+    println("unreachable");
+}

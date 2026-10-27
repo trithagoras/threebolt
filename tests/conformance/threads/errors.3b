@@ -1,0 +1,16 @@
+// std::thread and std::sync misuse (§13.4).
+use std::thread::Thread;
+use std::sync::{Mutex, Atomic};
+
+fn main() {
+    let ratio = Atomic::new(0.5);
+    let names = Atomic::new("x");
+    let flag = Atomic::new(true);
+    flag.fetch_add(true);
+    flag.fetch_or(false);
+
+    let m = Mutex::new(0);
+    m.lock(g => { g.value = 1; });
+    let t = Thread::spawn(x => x);
+    let u: Thread<str> = Thread::spawn(() => 1);
+}

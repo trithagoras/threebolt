@@ -45,6 +45,8 @@ application {
 
 tasks.test {
     useJUnitPlatform()
+    jvmArgs("--enable-native-access=ALL-UNNAMED")
+    inputs.dir("tests/conformance")
     // `./gradlew test -PupdateGolden` rewrites golden files instead of comparing against them.
     systemProperty("threebolt.updateGolden", providers.gradleProperty("updateGolden").isPresent)
     inputs.dir("examples")

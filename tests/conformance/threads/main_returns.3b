@@ -1,0 +1,13 @@
+// §13.4: when `main` returns, the process ends; threads still running are stopped.
+use std::thread::Thread;
+use std::sync::Atomic;
+
+fn main() {
+    let started = Atomic::new(false);
+    let spinner = Thread::spawn(() => {
+        started.store(true);
+        loop {}
+    });
+    while !started.load() {}
+    println("main done");
+}

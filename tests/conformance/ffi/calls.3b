@@ -1,0 +1,39 @@
+// §14.1 extern calls: C strings, variadics (with C promotions), `@link`.
+
+@link("m")
+extern "C" {
+    fn cbrt(x: f64) -> f64;
+}
+
+extern "C" {
+    fn strlen(s: Ptr<c::char>) -> c::size_t;
+    fn snprintf(buf: Ptr<c::char>, n: c::size_t, fmt: Ptr<c::char>, ...) -> c::int;
+    fn atoi(s: Ptr<c::char>) -> c::int;
+    fn labs(x: c::long) -> c::long;
+}
+
+enum Legs : i16 { Spider = 8 }
+
+fn main() {
+    let name = "spider".to_cstr();
+    println(unsafe => strlen(name));
+
+    let fmt = "%s: %d legs, %.2f kg, %c, %lld, %u".to_cstr();
+    let buf = c::alloc<c::char>(64);
+    // f32 is promoted to double, small integers and enums to int.
+    let n = unsafe => snprintf(buf, 64, fmt, name, Legs::Spider, 0.5_f32, 'A' as u8, -9_000_000_000_i64, 3_000_000_000_u32);
+    let text = unsafe => str::from_cstr(buf);
+    println(f"{text} ({n} chars)");
+
+    let digits = "  -1234xyz".to_cstr();
+    println(unsafe => atoi(digits));
+    println(unsafe => labs(-5));
+    println(unsafe => cbrt(27.0));
+
+    unsafe {
+        c::free(name);
+        c::free(fmt);
+        c::free(buf);
+        c::free(digits);
+    }
+}
