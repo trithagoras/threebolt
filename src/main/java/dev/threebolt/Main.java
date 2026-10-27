@@ -4,6 +4,7 @@ import dev.threebolt.ast.AstDump;
 import dev.threebolt.diag.Diagnostic;
 import dev.threebolt.diag.Diagnostics;
 import dev.threebolt.diag.Source;
+import dev.threebolt.lsp.LspMain;
 import dev.threebolt.parse.AstParser;
 import dev.threebolt.parse.AstPrinter;
 import dev.threebolt.parse.LexErrors;
@@ -27,9 +28,15 @@ public final class Main {
               tokens  dump the token stream
               parse   dump the parse tree
               ast     dump the AST
-              print   pretty-print the AST as source""";
+              print   pretty-print the AST as source
+            usage: threebolt lsp
+              serve the Language Server Protocol on stdin/stdout (for editors)""";
 
-    public static void main(String[] args) throws IOException {
+    public static void main(String[] args) throws Exception {
+        if (args.length == 1 && args[0].equals("lsp")) {
+            LspMain.run();
+            return;
+        }
         if (args.length < 2 || (args.length > 2 && !args[0].equals("run"))) usage();
         Path file = Path.of(args[1]);
         int status = switch (args[0]) {

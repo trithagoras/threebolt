@@ -14,10 +14,16 @@ repositories {
 dependencies {
     antlr("org.antlr:antlr4:4.13.2")
     implementation("org.antlr:antlr4-runtime:4.13.2")
+    implementation("org.eclipse.lsp4j:org.eclipse.lsp4j:1.0.0")
 
     testImplementation(platform("org.junit:junit-bom:5.13.4"))
     testImplementation("org.junit.jupiter:junit-jupiter")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
+}
+
+// The antlr plugin puts the whole ANTLR tool on the runtime classpath; only the runtime is needed.
+configurations.api {
+    setExtendsFrom(extendsFrom.filter { it.name != "antlr" })
 }
 
 tasks.withType<JavaCompile>().configureEach {
@@ -51,4 +57,23 @@ tasks.test {
     systemProperty("threebolt.updateGolden", providers.gradleProperty("updateGolden").isPresent)
     inputs.dir("examples")
     inputs.file("docs/spec/threebolt-1.0.md")
+}
+
+// One jar with every dependency, for `threebolt lsp` launched by the VS Code extension.
+val serverJar by tasks.registering(Jar::class) {
+    archiveFileName = "threebolt.jar"
+    destinationDirectory = layout.buildDirectory.dir("server")
+    manifest { attributes("Main-Class" to "dev.threebolt.Main", "Enable-Native-Access" to "ALL-UNNAMED") }
+    from(sourceSets.main.get().output)
+    dependsOn(configurations.runtimeClasspath)
+    from({ configurations.runtimeClasspath.get().filter { it.name.endsWith(".jar") }.map { zipTree(it) } }) {
+        exclude("META-INF/*.SF", "META-INF/*.DSA", "META-INF/*.RSA", "META-INF/MANIFEST.MF", "module-info.class")
+    }
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+}
+
+// Puts the server jar into the extension (editors/vscode/server/), ready to package.
+tasks.register<Copy>("vscodeServer") {
+    from(serverJar)
+    into("editors/vscode/server")
 }
