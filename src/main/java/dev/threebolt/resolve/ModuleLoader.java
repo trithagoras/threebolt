@@ -1,6 +1,10 @@
 package dev.threebolt.resolve;
 
+import dev.threebolt.ast.AstWalk;
 import dev.threebolt.ast.Attribute;
+import dev.threebolt.ast.Expr;
+import dev.threebolt.ast.TypeExpr;
+import dev.threebolt.ast.TypeParam;
 import dev.threebolt.ast.Item;
 import dev.threebolt.ast.Member;
 import dev.threebolt.ast.Name;
@@ -34,7 +38,7 @@ import java.util.Set;
  */
 public final class ModuleLoader {
     /** The std modules that exist; `std::a::b` is the resource `std/a/b.3b`. */
-    private static final Set<String> STD_MODULES = Set.of("prelude", "collections", "c");
+    private static final Set<String> STD_MODULES = Set.of("prelude", "collections", "c", "process");
 
     private static final ModulePath PRELUDE = ModulePath.of("std", "prelude");
     private static final ModulePath COLLECTIONS = ModulePath.of("std", "collections");
@@ -106,16 +110,62 @@ public final class ModuleLoader {
         return m;
     }
 
-    /** Loads every module a `use` in {@code m} might name, so resolution can see them all. */
+    /**
+     * Loads every module a `use` in {@code m} might name, and the modules named by fully-qualified
+     * paths in its types and bodies (§2.2), so resolution can see them all.
+     */
     private void discoverImports(Module m) {
         if (m.ast() == null) return;
+        var inScope = new java.util.HashSet<>(PRIMITIVES);
+        inScope.addAll(List.of("Self", "Map", "Set", "c"));
+        var prelude = found.get(PRELUDE);
+        if (prelude != null && prelude.isPresent() && prelude.get().ast() != null) {
+            for (Item item : prelude.get().ast().items()) inScope.add(itemName(item));
+        }
         for (Item item : m.ast().items()) {
+            inScope.add(itemName(item));
+            if (item instanceof Item.Extern x) x.fns().forEach(f -> inScope.add(f.name().text()));
             if (!(item instanceof Item.Use u)) continue;
             var path = pathOf(u.path());
             find(path);
             if (path.parent() != null) find(path.parent());
-            if (u.isGroup()) for (var n : u.group()) find(path.child(n.name().text()));
+            if (u.isGroup()) {
+                for (var n : u.group()) {
+                    find(path.child(n.name().text()));
+                    inScope.add((n.alias() != null ? n.alias() : n.name()).text());
+                }
+            } else {
+                inScope.add((u.alias() != null ? u.alias() : u.path().getLast()).text());
+            }
         }
+        AstWalk.walk(m.ast(), n -> {
+            if (n instanceof TypeParam tp) inScope.add(tp.name().text());
+        });
+        AstWalk.walk(m.ast(), n -> {
+            List<Name> names = switch (n) {
+                case Expr.Path p -> p.segments().stream().map(Expr.PathSegment::name).toList();
+                case TypeExpr.Named t -> t.path();
+                default -> List.of();
+            };
+            if (names.size() < 2 || inScope.contains(names.getFirst().text())) return;
+            for (int k = 1; k < names.size(); k++) find(pathOf(names.subList(0, k)));
+        });
+    }
+
+    private static String itemName(Item item) {
+        return switch (item) {
+            case Item.Fn f -> f.name().text();
+            case Item.Struct s -> s.name().text();
+            case Item.Class c -> c.name().text();
+            case Item.Trait t -> t.name().text();
+            case Item.Enum e -> e.name().text();
+            case Item.TypeAlias a -> a.name().text();
+            case Item.Const c -> c.name().text();
+            case Item.Static s -> s.name().text();
+            case Item.Use u -> "";
+            case Item.Impl i -> "";
+            case Item.Extern x -> "";
+        };
     }
 
     /**

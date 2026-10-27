@@ -1,0 +1,4 @@
+// std::process (spec §2.4).
+
+/// Terminates the process immediately; pending `defer`s do not run.
+pub fn exit(code: i32) -> !;
