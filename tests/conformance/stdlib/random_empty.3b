@@ -1,0 +1,8 @@
+// std::random: an empty range panics.
+//! exit: 101
+use std::random;
+
+fn main() {
+    println(random::randint(1, 1));
+    println(random::randint(3, 1));
+}

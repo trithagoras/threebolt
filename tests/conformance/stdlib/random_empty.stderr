@@ -1,0 +1,4 @@
+panic: randint: empty range 3..=1
+    at Random::randint (std/random.3b:70:20)
+    at randint (std/random.3b:205:42)
+    at main (random_empty.3b:7:13)

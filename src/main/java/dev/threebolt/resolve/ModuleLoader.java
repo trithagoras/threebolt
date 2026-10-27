@@ -40,7 +40,8 @@ import java.util.Set;
  */
 public final class ModuleLoader {
     /** The std modules that exist; `std::a::b` is the resource `std/a/b.3b`. */
-    private static final Set<String> STD_MODULES = Set.of("prelude", "collections", "c", "process", "thread", "sync");
+    private static final Set<String> STD_MODULES = Set.of(
+            "prelude", "collections", "c", "process", "thread", "sync", "math", "random");
 
     private static final ModulePath PRELUDE = ModulePath.of("std", "prelude");
     private static final ModulePath COLLECTIONS = ModulePath.of("std", "collections");

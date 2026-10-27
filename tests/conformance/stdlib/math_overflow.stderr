@@ -1,0 +1,2 @@
+panic: math::factorial: the result does not fit in a u64
+    at main (math_overflow.3b:7:13)

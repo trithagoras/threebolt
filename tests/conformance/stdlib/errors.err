@@ -1,0 +1,9 @@
+errors.3b:7:18: error[E0200]: expected 'i32', found 'f64'
+errors.3b:8:23: error[E0200]: expected 'i64', found 'f64'
+errors.3b:9:13: error[E0203]: 'log' takes 1 positional argument, found 2 (optional parameters are named-only)
+errors.3b:10:21: error[E0102]: 'entropy' is private to module 'std::random'
+std/random.3b:196:1: note: declared here without `pub`
+errors.3b:12:15: error[E0109]: method 'below' is private in 'Random'
+errors.3b:13:36: error[E0201]: literal -1 does not fit in 'usize' (range 0..18446744073709551615)
+errors.3b:14:18: error[E0200]: expected 'i32', found 'i64'
+errors.3b:16:5: error[E0301]: 'random' takes `mut self`, but cannot assign to immutable binding 'fixed'; declare it `let mut`

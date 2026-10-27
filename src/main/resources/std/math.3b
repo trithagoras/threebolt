@@ -1,0 +1,130 @@
+// std::math: Python-style mathematical functions on `f64` (spec §16). Narrower numeric types widen
+// to `f64` implicitly (§3.6). Floats also have methods for the common ones (`x.sqrt()`); these are
+// the free-function forms, plus the functions floats lack.
+
+pub const PI: f64 = 3.141592653589793;
+pub const E: f64 = 2.718281828459045;
+pub const TAU: f64 = 6.283185307179586;
+pub const INF: f64 = f64::INFINITY;
+pub const NAN: f64 = f64::NAN;
+
+// ---- Rounding and parts ----
+
+pub fn floor(x: f64) -> f64 => x.floor();
+pub fn ceil(x: f64) -> f64 => x.ceil();
+pub fn trunc(x: f64) -> f64 => x.trunc();
+/// Rounds half away from zero.
+pub fn round(x: f64) -> f64 => x.round();
+/// `x` with the sign of `y`.
+pub fn copysign(x: f64, y: f64) -> f64;
+/// The remainder of `x / y` with the sign of `x` (C `fmod`, like `%`).
+pub fn fmod(x: f64, y: f64) -> f64 => x % y;
+/// The fractional and integral parts of `x`, both with the sign of `x`.
+pub fn modf(x: f64) -> (f64, f64) {
+    let whole = x.trunc();
+    return (x - whole, whole);
+}
+pub fn clamp(x: f64, lo: f64, hi: f64) -> f64 => lo.max(hi.min(x));
+
+pub fn isnan(x: f64) -> bool => x.is_nan();
+pub fn isinf(x: f64) -> bool => x.is_infinite();
+pub fn isfinite(x: f64) -> bool => !x.is_nan() && !x.is_infinite();
+
+/// Whether `a` and `b` are within `rel_tol` of each other relative to the larger magnitude, or
+/// within `abs_tol` absolutely.
+pub fn isclose(a: f64, b: f64, rel_tol: f64 = 1e-9, abs_tol: f64 = 0.0) -> bool {
+    if a == b { return true; }
+    if isinf(a) || isinf(b) { return false; }
+    let diff = (a - b).abs();
+    return diff <= (rel_tol * b).abs() || diff <= (rel_tol * a).abs() || diff <= abs_tol;
+}
+
+// ---- Powers and logarithms ----
+
+pub fn pow(x: f64, y: f64) -> f64 => x.pow(y);
+pub fn sqrt(x: f64) -> f64 => x.sqrt();
+pub fn cbrt(x: f64) -> f64;
+pub fn exp(x: f64) -> f64 => x.exp();
+pub fn exp2(x: f64) -> f64 => pow(2.0, x);
+/// `exp(x) - 1`, accurate for small `x`.
+pub fn expm1(x: f64) -> f64;
+/// The logarithm of `x` to `base` (natural by default): `math::log(8, base: 2)`.
+pub fn log(x: f64, base: f64 = E) -> f64 {
+    if base == E { return x.ln(); }
+    return x.ln() / base.ln();
+}
+pub fn log2(x: f64) -> f64;
+pub fn log10(x: f64) -> f64 => x.log10();
+/// `ln(1 + x)`, accurate for small `x`.
+pub fn log1p(x: f64) -> f64;
+
+// ---- Trigonometry (radians) ----
+
+pub fn sin(x: f64) -> f64 => x.sin();
+pub fn cos(x: f64) -> f64 => x.cos();
+pub fn tan(x: f64) -> f64 => x.tan();
+pub fn asin(x: f64) -> f64;
+pub fn acos(x: f64) -> f64;
+pub fn atan(x: f64) -> f64;
+/// The angle of the point `(x, y)` from the positive x axis, in `-PI..=PI`.
+pub fn atan2(y: f64, x: f64) -> f64;
+/// `sqrt(x*x + y*y)` without intermediate overflow.
+pub fn hypot(x: f64, y: f64) -> f64;
+pub fn degrees(rad: f64) -> f64 => rad * (180.0 / PI);
+pub fn radians(deg: f64) -> f64 => deg * (PI / 180.0);
+
+pub fn sinh(x: f64) -> f64;
+pub fn cosh(x: f64) -> f64;
+pub fn tanh(x: f64) -> f64;
+pub fn asinh(x: f64) -> f64;
+pub fn acosh(x: f64) -> f64;
+pub fn atanh(x: f64) -> f64;
+
+// ---- Sums ----
+
+/// The sum of `xs`, compensated (Neumaier) so rounding errors do not accumulate.
+pub fn fsum(xs: [f64]) -> f64 {
+    let mut sum = 0.0;
+    let mut c = 0.0;
+    for x in xs {
+        let t = sum + x;
+        if sum.abs() >= x.abs() {
+            c += (sum - t) + x;
+        } else {
+            c += (x - t) + sum;
+        }
+        sum = t;
+    }
+    return sum + c;
+}
+
+// ---- Integers ----
+
+/// The greatest common divisor, always non-negative; `gcd(0, 0)` is `0`.
+pub fn gcd(a: i64, b: i64) -> i64 {
+    let mut x = a.abs();
+    let mut y = b.abs();
+    while y != 0 {
+        let r = x % y;
+        x = y;
+        y = r;
+    }
+    return x;
+}
+
+/// The least common multiple, always non-negative; `0` if either argument is.
+pub fn lcm(a: i64, b: i64) -> i64 {
+    if a == 0 || b == 0 { return 0; }
+    return (a / gcd(a, b) * b).abs();
+}
+
+/// The integer square root: the largest `r` with `r * r <= n`.
+pub fn isqrt(n: u64) -> u64;
+/// `n!`; panics if the result does not fit in a `u64` (`n > 20`).
+pub fn factorial(n: u64) -> u64;
+/// The number of ways to choose `k` of `n` items without order; `0` if `k > n`. Panics if the
+/// result does not fit in a `u64`.
+pub fn comb(n: u64, k: u64) -> u64;
+/// The number of ways to choose `k` of `n` items in order; `0` if `k > n`. Panics if the result
+/// does not fit in a `u64`.
+pub fn perm(n: u64, k: u64) -> u64;

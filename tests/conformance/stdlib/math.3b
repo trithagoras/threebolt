@@ -1,0 +1,46 @@
+// std::math (§16): constants, float functions, integer functions.
+use std::math;
+use std::math::{PI, E};
+
+fn main() {
+    println(f"{PI} {E} {math::TAU} {math::INF} {math::NAN}");
+
+    // Narrower numerics widen to f64; literals adopt it.
+    let n: i32 = 2;
+    println(math::sqrt(n));
+    println(math::sqrt(16));
+    println(f"{math::cbrt(27)} {math::cbrt(-8)}");
+    println(f"{math::pow(2, 10)} {math::exp2(0.5)} {math::exp(1)}");
+
+    // Rounding and parts.
+    println(f"{math::floor(-2.5)} {math::ceil(-2.5)} {math::trunc(-2.5)} {math::round(-2.5)} {math::round(2.5)}");
+    let (frac, whole) = math::modf(-3.25);
+    println(f"{frac} {whole}");
+    println(f"{math::copysign(3, -0.0)} {math::fmod(-7, 3)} {math::clamp(12, 0, 10)} {math::clamp(-1, 0, 10)}");
+    println(f"{math::isnan(math::NAN)} {math::isinf(-math::INF)} {math::isfinite(1e308)} {math::isfinite(math::NAN)}");
+
+    // Logarithms; the base is a named argument.
+    println(f"{math::log(math::E)} {math::log(8, base: 2)} {math::log(1000, base: 10)}");
+    println(f"{math::log2(1024)} {math::log2(3)} {math::log10(0.001)}");
+    println(f"{math::log1p(1e-20)} {math::expm1(1e-20)}");
+
+    // Trigonometry.
+    println(f"{math::sin(PI / 2)} {math::cos(0)} {math::tan(PI / 4)}");
+    println(f"{math::degrees(math::asin(1))} {math::degrees(math::acos(-1))} {math::degrees(math::atan(1))}");
+    println(f"{math::degrees(math::atan2(1, -1))} {math::radians(180)}");
+    println(f"{math::hypot(3, 4)} {math::isfinite(math::hypot(1e300, 1e300))}");
+    println(f"{math::sinh(0)} {math::cosh(0)} {math::tanh(1e3)} {math::asinh(-1e300)} {math::acosh(1)} {math::atanh(0)}");
+
+    // Closeness and compensated sums.
+    println(f"{0.1 + 0.2 == 0.3} {math::isclose(0.1 + 0.2, 0.3)} {math::isclose(1, 1.01)} {math::isclose(1, 1.01, rel_tol: 0.05)}");
+    println(f"{math::isclose(0, 1e-12)} {math::isclose(0, 1e-12, abs_tol: 1e-9)}");
+    let tenths: [f64] = [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1];
+    let plain = tenths.iter().fold(0.0, (a, x) => a + x);
+    println(f"{plain} {math::fsum(tenths)} {math::fsum([1e100, 1.0, -1e100])}");
+
+    // Integers.
+    println(f"{math::gcd(12, 18)} {math::gcd(-12, 18)} {math::gcd(0, 0)} {math::lcm(4, 6)} {math::lcm(-4, 6)} {math::lcm(0, 5)}");
+    println(f"{math::isqrt(0)} {math::isqrt(15)} {math::isqrt(16)} {math::isqrt(u64::MAX)}");
+    println(f"{math::factorial(0)} {math::factorial(5)} {math::factorial(20)}");
+    println(f"{math::comb(5, 2)} {math::comb(5, 7)} {math::comb(62, 31)} {math::perm(5, 2)} {math::perm(5, 0)} {math::perm(3, 4)}");
+}
