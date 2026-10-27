@@ -1,0 +1,2 @@
+panic: index out of range: 5 >= 3
+    at main (index_panic.3b:7:16)

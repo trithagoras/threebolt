@@ -1,0 +1,8 @@
+// §7.6: out-of-range indexing panics.
+//! exit: 101
+
+fn main() {
+    let xs = [1, 2, 3];
+    let i: usize = 5;
+    println(f"{xs[i]}");
+}

@@ -1,0 +1,36 @@
+// §4.6–§4.7, §5.2, §5.4: classes are references; initializers only in the class's own body;
+// visibility; getters; `mut self` on temporaries (builder chains).
+
+pub class Counter {
+    let count: i32 = 0;
+    let label: str;
+    pub let step: i32 = 1;
+
+    pub fn new(label: str) -> Self => { label };
+    pub fn with_step(mut self, step: i32) -> Self {
+        self.step = step;
+        return self;
+    }
+    pub fn tick(mut self) { self.count += self.step; }
+    pub get fn value(self) -> i32 => self.count;
+    pub get fn name(self) -> str => self.label;
+}
+
+fn bump(mut c: Counter) {
+    c.tick();                   // mutates the shared object
+}
+
+fn main() {
+    let mut a = Counter::new("a");
+    let b = a;                  // copies the reference
+    a.tick();
+    bump(b);
+    println(f"{a.value} {b.value} {a.name}");
+    println(f"{a == b} {a == Counter::new("a")}");
+
+    let c = Counter::new("c").with_step(5);   // `mut self` on a temporary
+    let mut c2 = c;
+    c2.tick();
+    c2.tick();
+    println(f"{c.value} {c.step}");
+}

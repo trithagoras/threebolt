@@ -1,0 +1,64 @@
+// §4.5, §5.3: structs are values — copied on assignment, passing and storage; `mut self`
+// methods work in place; static methods, defaults, struct update, auto Eq.
+
+struct Vec2 {
+    let x: f64;
+    let y: f64 = 0.0;
+    pub static let ORIGIN: Vec2 = Vec2 { x: 0.0 };
+
+    pub fn new(x: f64, y: f64) -> Self => { x, y };
+    pub fn len(self) -> f64 => (self.x * self.x + self.y * self.y).sqrt();
+    pub fn scale(mut self, k: f64) { self.x *= k; self.y *= k; }
+    pub fn scaled(self, k: f64) -> Vec2 {
+        let mut c = self;
+        c.scale(k);
+        return c;
+    }
+}
+
+struct Particle {
+    let pos: Vec2;
+    let name: str = "p";
+}
+
+fn nudge(mut v: Vec2) -> Vec2 {
+    v.x += 1.0;
+    return v;
+}
+
+fn main() {
+    let a = Vec2::new(3.0, 4.0);
+    let mut b = a;              // copy
+    b.x = 30.0;
+    println(f"{a.x} {b.x} {a.len()}");
+
+    let c = nudge(a);           // the callee's `mut` param is its own copy
+    println(f"{a.x} {c.x}");
+
+    let mut d = Vec2 { x: 1.0, y: 1.0 };
+    d.scale(2.0);               // in place on a mutable place
+    println(f"{d.x} {d.y} {a.scaled(10.0).x} {a.x}");
+
+    let mut p = Particle { pos: a };
+    p.pos.x = 99.0;             // nested field of a mutable place
+    p.pos.scale(0.5);
+    println(f"{p.pos.x} {p.name} {a.x}");
+
+    let q = Particle { name: "q", ..p };   // struct update
+    println(f"{q.name} {q.pos.x}");
+
+    println(f"{Vec2::ORIGIN.x} {Vec2::ORIGIN.y}");
+    println(f"{a == Vec2::new(3.0, 4.0)} {a == b} {a != b}");
+
+    let mut list: [Vec2] = [a, b];
+    list[0].x = 7.0;            // read-modify-write through the indexer
+    list[1].scale(0.1);
+    println(f"{list[0].x} {list[1].x} {a.x} {b.x}");
+    let mut copy = list[0];
+    copy.x = -1.0;
+    println(f"{list[0].x}");
+    for mut v in list {
+        v.x = 0.0;              // a copy: the list is unchanged
+    }
+    println(f"{list[0].x}");
+}
