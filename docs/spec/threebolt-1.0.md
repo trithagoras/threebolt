@@ -312,12 +312,12 @@ A **place** is a local binding, parameter, `self`, a field access on a place or 
 - binding/parameter/static: declared `mut`;
 - `self`: receiver declared `mut self`;
 - field `p.f`: `p` is a mutable place (whether `p` has value or reference type). E.g. inside a `mut self` method, `self.hp = 0` and `self.entity.add(c)` (a `mut self` method on a field) are both permitted.
-- index `c[i]`: `c` is a place (or reference) whose type implements `IndexMut`; if `c` has value type, `c` must be a mutable place.
+- index `c[i]`: `c`'s type implements `IndexMut` and `c` is a mutable place, whether `c` has value or reference type, as for calling `IndexMut::set` (a `mut self` method, §5.2). A temporary of reference type also counts (`make_list()[0] = 1`).
 
 ### 5.2 What `mut` permits
 - **Assignment** (`=`, compound) requires a mutable place.
 - **Calling a `mut self` method** requires the receiver expression to be a mutable place **or a temporary** (non-place, e.g. a call result — enables builder chaining). Receivers reached through a reference-typed immutable binding are not mutable: `let e = Entity::new(); e.add(c);` ⇒ error.
-- Index assignment follows §5.1: `let xs = [1]; xs[0] = 2;` is permitted (`xs` refers to a list, a reference type), while `xs.push(3)` is not (`push` takes `mut self`).
+- Index assignment follows §5.1, like any other mutation: `let xs = [1]; xs[0] = 2;` ⇒ error, as is `xs.push(3)` (`push` takes `mut self`); with `let mut xs` both are permitted. Inside a `self` method, `self.items[i] = v` ⇒ error; declare the method `mut self`.
 - Mutability is **shallow** and expresses intent, not a guarantee: `let a = Entity::new(); let mut b = a; b.add(c);` is legal and mutates the object `a` refers to.
 - Inside a `mut self` method, `self` is a mutable place; inside a `self` method it is not (so neither fields of `self` nor `mut self` methods on `self` are usable mutably; fields holding references may still have non-`mut` methods called).
 
@@ -935,3 +935,6 @@ Semantics the spec left open, decided while implementing:
 - §7.2, §7.3, §16 `x in c` is a membership test at comparison precedence, through the new prelude trait `Contains<T: Eq>`. Implemented by `[T]`, `Set`, `Range`, `Map` (keys; `Map` gains `contains(k)`), `Iterator<T>` (consuming search) and `str` (`Contains<char>`). `str` also implements `Iterable<char>`, so `for ch in s` works.
 - §4.10 An impl may target a trait reference (`impl<T: Eq> Contains<T> for Iterator<T>`); it applies to values of that static type, and runtime dispatch prefers the value's own implementation.
 - §5.4 Classes and trait references implement `Eq` (identity) automatically, so they meet `T: Eq` bounds; before, `==` worked on them but the bound did not.
+
+### 2026-10-27 — index assignment needs a mutable place
+- §5.1, §5.2 `c[i] = v` requires `c` to be a mutable place even when `c` has reference type, matching `c.set(i, v)` (`IndexMut::set` takes `mut self`). Before, `let xs = [1]; xs[0] = 2;` and `self.map[k] = v` in a `self` method were permitted while the equivalent `set` call was not.

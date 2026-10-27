@@ -1,0 +1,17 @@
+struct P { pub let x: i32; }
+
+class Registry {
+    let names: Map<str, i32> = [:];
+    pub fn add(self, name: str, n: i32) { self.names[name] = n; }
+}
+
+fn main() {
+    let xs = [1, 2, 3];
+    xs[0] = 10;
+    xs[1] += 5;
+    xs.set(0, 1);
+    let ps = [P { x: 1 }];
+    ps[0].x = 7;
+    let m: Map<str, i32> = [:];
+    m["a"] = 1;
+}

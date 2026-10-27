@@ -720,8 +720,9 @@ final class Exprs {
             }
             keyType = inst.args().get(0);
             valueType = inst.args().get(1);
+            // As for calling `IndexMut::set` (`mut self`): a mutable place, or a temporary reference (§5.1).
             writable = ts.implementsAs(t, ts.indexMut) != null
-                    && (TypeSystem.isReference(t) || (r.place() != null && r.place().isMutable()));
+                    && (r.place() != null ? r.place().isMutable() : TypeSystem.isReference(t));
         }
         var index = c.check(i.index(), keyType);
         var basePlace = r.place() == null ? null : r.place().place();

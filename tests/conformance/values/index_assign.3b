@@ -1,0 +1,34 @@
+// Index assignment needs a mutable place, like calling `IndexMut::set` (§5.1).
+struct P { pub let x: i32; }
+
+class Registry {
+    let names: Map<str, i32> = [:];
+    pub fn new() -> Self => {};
+    pub fn add(mut self, name: str, n: i32) { self.names[name] = n; }
+    pub fn get(self, name: str) -> i32 | null => self.names.get(name);
+}
+
+fn make() -> [i32] => [0, 0];
+
+fn fill(mut xs: [i32]) { xs[0] = 9; }
+
+fn main() {
+    let mut xs = [1, 2, 3];
+    xs[0] = 10;
+    xs[1] += 5;
+    println(xs);
+
+    let mut ps = [P { x: 1 }];
+    ps[0].x = 7;
+    println(ps[0].x);
+
+    let mut r = Registry::new();
+    r.add("a", 1);
+    println(r.get("a"));
+
+    make()[0] = 1;
+
+    let ys = [1, 2];
+    fill(ys);
+    println(ys);
+}
