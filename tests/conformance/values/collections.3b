@@ -40,4 +40,10 @@ fn main() {
     println(f"{nums.len} {nums[0]} {nums[2]}");
     let total = [1, 2, 3].iter().fold(0, (acc, n) => acc + n);
     println(f"{total} {[1, 2, 3].iter().any(n => n > 2)} {[1, 2, 3].iter().all(n => n > 2)} {[1, 2].iter().count()}");
+
+    let dict = ["test": true, "values": false];
+    println(dict);
+
+    let set: Set<str> = ["hi", "world"];
+    println(set);
 }

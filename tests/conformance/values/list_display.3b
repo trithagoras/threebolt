@@ -1,0 +1,8 @@
+// The prelude's `impl<T: Display> Display for [T]` (§4.10).
+fn main() {
+    println([] as [i32]);
+    println([1, 2, 3] as [i32]);
+    println(["a", "b"]);
+    println([[1], [2, 3]] as [[i32]]);
+    println(f"xs = {[true, false]}");
+}

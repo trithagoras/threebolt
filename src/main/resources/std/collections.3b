@@ -24,3 +24,60 @@ pub class Set<T: Hash + Eq> : Len, Truthy, Iterable<T> {
     pub fn remove(mut self, v: T) -> bool;
     pub fn clear(mut self);
 }
+
+// impls
+impl<K: Display + Hash + Eq, V: Display> Display for Map<K, V> {
+    pub fn to_str(self) -> str {
+        let mut result = "{ ";
+        let mut first = true;
+
+        for (k, v) in self {
+            if !first {
+                result = result + ", ";
+            }
+
+            let keyWrap = match k {
+                is str => "\"",
+                is char => "'",
+                _ => ""
+            };
+
+            let valWrap = match v {
+                is str => "\"",
+                is char => "'",
+                _ => ""
+            };
+
+            result = result
+                + keyWrap + k.to_str() + keyWrap
+                + ": "
+                + valWrap + v.to_str() + valWrap;
+
+            first = false;
+        }
+
+        if first {
+            return "{}";
+        }
+
+        return result + " }";
+    }
+}
+
+impl<T: Display + Hash + Eq> Display for Set<T> {
+    pub fn to_str(self) -> str {
+        let mut result = "{";
+        let mut first = true;
+        for x in self {
+            if !first { result = result + ", "; }
+            let wrapChar = match x {
+                is str => "\"",
+                is char => "'",
+                _ => ""
+            };
+            result = result + wrapChar + x.to_str() + wrapChar;
+            first = false;
+        }
+        return result + "}";
+    }
+}

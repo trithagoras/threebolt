@@ -1,21 +1,10 @@
-// sample shiet
-
-fn tail<T>(xs: [T]) -> [T] | Err {
-    if xs is [] {
-        return error("oh no");
-    }
-    if xs is [x] {
-        return [];
-    }
-    return xs[1..];
-}
-
-fn find<T: Eq>(xs: [T], val: T) -> T | null | Err => match xs {
-    [] => null,
-    [x, ..] => x if x == val else find(tail(xs)?, val)
-};
 
 fn main() -> () | Err {
-    let xs: [i32] = [1,2,3,4];
-    println(find(xs, 5));
+    let dict = [
+        "hi": 5,
+        "yo": 2
+    ];
+
+    let set: Set<str> = ["hi", "world"];
+    println(set);
 }

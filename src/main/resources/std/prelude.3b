@@ -203,3 +203,22 @@ class OfTypeIter<T, U> : Iterator<U> {
         }
     }
 }
+
+// impls
+impl<T: Display> Display for [T] {
+    pub fn to_str(self) -> str {
+        let mut result = "[";
+        let mut first = true;
+        for x in self {
+            if !first { result = result + ", "; }
+            let wrapChar = match x {
+                is str => "\"",
+                is char => "'",
+                _ => ""
+            };
+            result = result + wrapChar + x.to_str() + wrapChar;
+            first = false;
+        }
+        return result + "]";
+    }
+}

@@ -475,6 +475,7 @@ x => { let y = x * 2; return y; }
   - upcast: always succeeds (redundant but permitted).
 - `x as? T`: same checks for non-numeric conversions, yielding `T | null` instead of panicking (integer → `char` yields `null` for a non-scalar value). It is also accepted on numeric casts, which never yield `null`. If `T` already contains `null`, a null `x` is indistinguishable from failure.
 - A cast that can never succeed statically ⇒ error.
+- A collection literal operand (`[...]`, `[v; n]`, `[k: v]`, `[]`, `[:]`) takes `T` as its expected type (§7.7): `[] as [i32]`, `[:] as Map<str, i32>`.
 
 ### 7.10 `?` propagation
 - Postfix `e?` where `e: U`. Let `F` = members of `U` that are `null` or implement `Error`. If `F` is empty ⇒ error.
@@ -878,3 +879,6 @@ Semantics the spec left open, decided while implementing:
 ### 2026-10-27 — patterns after `is`
 - §7.3 `x is pattern` tests a refutable pattern and binds its names where the test holds (`if xs is [first, ..rest]`). What follows `is` is chosen syntactically (§17 note 18): `[`, `(`, `Name {` and literal ranges start patterns, anything else is a type. List and tuple *types* after `is` are written `List<T>` or `(is A, is B)`.
 - §6.3 Struct patterns after `is` are subject to the head restriction. §9 pattern tests narrow. §11 lists where patterns appear.
+
+### 2026-10-27 — casts target-type collection literals
+- §7.9 A collection literal operand of `as`/`as?` takes the cast type as its expected type, so `[] as [i32]` works without a typed `let`.

@@ -11,3 +11,5 @@ ann cat
 2 x
 3 20 60
 6 true false 2
+{ "test": true, "values": false }
+{"hi", "world"}

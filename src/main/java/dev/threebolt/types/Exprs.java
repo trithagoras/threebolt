@@ -1140,8 +1140,11 @@ final class Exprs {
     // ---- Casts (§7.9) ----
 
     private Typed cast(Expr.Cast e) {
-        var t = expr(e.operand(), null);
         var target = types.resolve(e.type(), c.ctx.typeScope);
+        // Collection literals take the cast's type as their expected type (§7.9): `[] as [i32]`.
+        boolean literal = e.operand() instanceof Expr.ListLit || e.operand() instanceof Expr.MapLit
+                || e.operand() instanceof Expr.RepeatLit;
+        var t = expr(e.operand(), literal && target != Type.ERROR ? target : null);
         var resultType = e.isChecked() ? TypeSystem.union(target, Type.NULL) : target;
         if (t.type() == Type.ERROR || target == Type.ERROR) return new Typed(t.ir(), target == Type.ERROR ? Type.ERROR : resultType);
         var from = TypeSystem.prim(t.type());

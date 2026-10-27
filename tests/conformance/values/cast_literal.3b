@@ -1,0 +1,6 @@
+fn main() {
+    let xs = [] as [i32];
+    let m = [:] as Map<str, i32>;
+    let ys = [1, 2] as [i64];
+    println(f"{xs.len} {m.len} {ys.len}");
+}
