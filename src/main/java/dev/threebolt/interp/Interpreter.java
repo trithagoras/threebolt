@@ -810,19 +810,16 @@ public final class Interpreter {
             long[] r = sliceBounds(lowV, highV, sl.isInclusive(), s.codePointCount(0, s.length()));
             return Ops.substring(s, r[0], r[1]);
         }
-        Type element;
-        List<Object> items;
-        if (target instanceof ArrayVal a) {
-            element = a.element;
-            items = Arrays.asList(a.items);
-        } else {
-            var l = (ListVal) target;
-            element = l.element;
-            synchronized (l) {
-                items = new ArrayList<>(l.items);
-            }
+        if (target instanceof ArrayVal a) return sliceItems(a.element, Arrays.asList(a.items), lowV, highV, sl.isInclusive());
+        var l = (ListVal) target;
+        synchronized (l) {
+            return sliceItems(l.element, l.items, lowV, highV, sl.isInclusive());
         }
-        long[] r = sliceBounds(lowV, highV, sl.isInclusive(), items.size());
+    }
+
+    /** A new list of copies of {@code items[low..high]}. */
+    private static ListVal sliceItems(Type element, List<Object> items, Object lowV, Object highV, boolean inclusive) {
+        long[] r = sliceBounds(lowV, highV, inclusive, items.size());
         var out = new ArrayList<Object>((int) (r[1] - r[0]));
         for (long i = r[0]; i < r[1]; i++) out.add(Values.copy(items.get((int) i)));
         return new ListVal(element, out);
