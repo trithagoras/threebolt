@@ -1,0 +1,96 @@
+// Spec §18, verbatim, run with an argument.
+//! args: bolt
+
+use std::collections::Map;
+
+pub trait Component : Default {}
+pub trait Updatable { fn update(mut self); }
+
+pub struct Position : Component, Updatable {
+    let x: f32 = 0.0;
+    let y: f32 = 0.0;
+    pub fn default() -> Self => {};
+    pub fn update(mut self) { self.x += 1.0; }
+}
+
+pub struct Details : Component {
+    let name: str = "UNNAMED";
+    pub fn default() -> Self => {};
+}
+
+pub class Entity {
+    static let mut NEXT_ID: u64 = 0;
+
+    pub let id: u64;
+    let components: Map<Type, Component> = [];
+
+    pub fn new() -> Self {
+        Entity::NEXT_ID += 1;
+        return { id: Entity::NEXT_ID };
+    }
+
+    pub fn get<T: Component>(self) -> T | null {
+        if let c = self.components.get(typeof(T)) {
+            return c as T;
+        }
+        return null;
+    }
+
+    pub fn add<T: Component>(mut self) -> () | Err => self.add(T::default());
+
+    pub fn add<T: Component>(mut self, comp: T) -> () | Err {
+        if self.components.contains_key(typeof(T)) {
+            return error(f"Entity {self.id} already has a {nameof(T)}");
+        }
+        self.components[typeof(T)] = comp;
+    }
+
+    pub fn update(mut self) {
+        self.components.values
+            .of_type<Updatable>()
+            .for_each(mut c => c.update());
+    }
+}
+
+pub class EntityBuilder {
+    let entity: Entity = Entity::new();
+    let built: bool = false;
+
+    pub fn new() -> Self => {};
+
+    pub fn with<T: Component>(mut self) -> Self | Err {
+        self.entity.add<T>()?;
+        return self;
+    }
+
+    pub fn with<T: Component>(mut self, comp: T) -> Self | Err {
+        self.entity.add(comp)?;
+        return self;
+    }
+
+    pub fn build(mut self) -> Entity | Err {
+        if self.built {
+            return error(f"Entity {self.entity.id} already built");
+        }
+        self.built = true;
+        return self.entity;
+    }
+}
+
+fn main(args: [str]) -> () | Err {
+    let name = match args {
+        [n, ..] => n,
+        [] => "player1",
+    };
+    println(f"Welcome, {name}!");
+
+    let player = EntityBuilder::new()
+        .with<Details>({ name })?
+        .with<Position>()?
+        .build()?;
+
+    let entities: [Entity] = [player];
+    for mut e in entities {
+        e.update();
+    }
+}
