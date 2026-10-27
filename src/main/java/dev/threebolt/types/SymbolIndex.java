@@ -36,6 +36,8 @@ public final class SymbolIndex {
     public record EnumMember(TypeInfo owner, String name) {}
 
     private final boolean enabled;
+    /** A completion or signature-help request to answer while checking, or null. */
+    final Completion completion;
     private Diagnostics diag;
     private final Map<Source, TreeMap<Integer, Ref>> refs = new IdentityHashMap<>();
     private final Map<Ref, Boolean> speculative = new IdentityHashMap<>();
@@ -43,16 +45,27 @@ public final class SymbolIndex {
     private final Map<Source, java.util.Set<Integer>> shared = new IdentityHashMap<>();
 
     public SymbolIndex() {
-        this(true);
+        this(true, null);
     }
 
-    private SymbolIndex(boolean enabled) {
+    /** An index that also answers {@code completion} while the program is checked. */
+    public SymbolIndex(Completion completion) {
+        this(true, completion);
+    }
+
+    private SymbolIndex(boolean enabled, Completion completion) {
         this.enabled = enabled;
+        this.completion = completion;
     }
 
     /** An index that records nothing. */
     public static SymbolIndex disabled() {
-        return new SymbolIndex(false);
+        return new SymbolIndex(false, null);
+    }
+
+    /** Whether the checker is typing speculatively (see the class comment). */
+    boolean isMuted() {
+        return diag != null && diag.isMuted();
     }
 
     void attach(Diagnostics diag) {
@@ -71,7 +84,7 @@ public final class SymbolIndex {
     private void put(Ref r) {
         if (!enabled || r.span() == null || r.target() == null) return;
         var bySpan = refs.computeIfAbsent(r.span().source(), k -> new TreeMap<>());
-        boolean muted = diag != null && diag.isMuted();
+        boolean muted = isMuted();
         var old = bySpan.get(r.span().start());
         boolean oldSpeculative = old != null && speculative.containsKey(old);
         if (old != null && !muted && !oldSpeculative && old.target().getClass() != r.target().getClass()) {
@@ -256,6 +269,15 @@ public final class SymbolIndex {
 
     /** {@code fn Owner::name<T>(self, a: A, b: B = ...) -> R}. */
     public static String signature(FnInfo f) {
+        return signature(f, Map.of(), null, false);
+    }
+
+    /**
+     * {@link #signature(FnInfo)} with the owner's type parameters substituted from {@code env}.
+     * When {@code params} is non-null, adds each parameter's [start, end) in the result to it; the
+     * receiver counts as one only when {@code selfIsParam} (a UFCS call, `Trait::m(x)`).
+     */
+    static String signature(FnInfo f, Map<TypeParamInfo, Type> env, List<int[]> params, boolean selfIsParam) {
         var sb = new StringBuilder();
         if (f.isExtern) sb.append("extern ");
         if (f.isUnsafe() && !f.isExtern) sb.append("unsafe ");
@@ -264,12 +286,22 @@ public final class SymbolIndex {
         var parts = new ArrayList<String>();
         if (f.receiver == FnInfo.Receiver.SELF) parts.add("self");
         if (f.receiver == FnInfo.Receiver.MUT_SELF) parts.add("mut self");
+        boolean receiver = !parts.isEmpty();
         for (var p : f.params) {
-            parts.add((p.isMutable() ? "mut " : "") + p.name() + ": " + p.type() + (p.isOptional() ? " = ..." : ""));
+            parts.add((p.isMutable() ? "mut " : "") + p.name() + ": " + TypeSystem.subst(p.type(), env)
+                    + (p.isOptional() ? " = ..." : ""));
         }
         if (f.isVariadic) parts.add("...");
-        sb.append('(').append(String.join(", ", parts)).append(')');
-        if (f.ret != Type.UNIT) sb.append(" -> ").append(f.ret);
+        sb.append('(');
+        for (int i = 0; i < parts.size(); i++) {
+            if (i > 0) sb.append(", ");
+            boolean isParam = (i > 0 || !receiver || selfIsParam) && !(f.isVariadic && i == parts.size() - 1);
+            if (params != null && isParam) params.add(new int[] {sb.length(), sb.length() + parts.get(i).length()});
+            sb.append(parts.get(i));
+        }
+        sb.append(')');
+        var ret = TypeSystem.subst(f.ret, env);
+        if (ret != Type.UNIT) sb.append(" -> ").append(ret);
         return sb.toString();
     }
 

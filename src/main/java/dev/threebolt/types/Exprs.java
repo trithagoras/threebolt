@@ -292,6 +292,10 @@ final class Exprs {
         var first = segs.getFirst();
         String firstName = first.name().text();
         var scope = c.ctx.typeScope;
+        if (segs.size() == 1 && c.completer != null && c.completer.at(first.name())) {
+            c.completer.names(first.name());
+            return new ErrorTarget();
+        }
         if (segs.size() == 1) {
             var local = c.lookupLocal(firstName);
             if (local != null) {
@@ -354,6 +358,10 @@ final class Exprs {
             }
         }
         if (qualifier == Type.ERROR) return new ErrorTarget();
+        if (c.completer != null && c.completer.at(segs.getLast().name())) {
+            c.completer.statics(qualifier, qualifierDecl, argsGiven, segs.getLast());
+            return new ErrorTarget();
+        }
         return member(qualifier, qualifierDecl, argsGiven, segs.getLast(), forCall);
     }
 
@@ -408,7 +416,7 @@ final class Exprs {
         return target;
     }
 
-    private Target memberTarget(Type owner, TypeInfo decl, boolean argsGiven, Expr.PathSegment seg, boolean forCall) {
+    Target memberTarget(Type owner, TypeInfo decl, boolean argsGiven, Expr.PathSegment seg, boolean forCall) {
         String name = seg.name().text();
         if (owner instanceof Type.Param param) {
             var cands = new ArrayList<Calls.Candidate>();
@@ -574,6 +582,10 @@ final class Exprs {
             return error();
         }
         var r = recv(m.receiver());
+        if (c.completer != null && c.completer.at(m.name())) {
+            c.completer.members(r.value().type(), m.name());
+            return error();
+        }
         var field = field(r, m.name());
         if (field != null) return new Typed(readIr(field), field.type());
         if (TypeSystem.expand(r.value().type()) instanceof Type.Tuple && m.name().text().chars().allMatch(Character::isDigit)) {

@@ -92,6 +92,8 @@ public final class Checker {
     final Calls calls;
     final Patterns patterns;
     final ConstEval consts;
+    /** Answers the index's completion request, if any; else null. */
+    Completer completer;
     /** Lambda depth at which each local was declared (captured-mutable locals are not narrowed). */
     final Map<Local, Integer> localDepth = new HashMap<>();
     Ctx ctx;
@@ -115,6 +117,11 @@ public final class Checker {
         this.patterns = new Patterns(this);
         this.consts = new ConstEval(this);
         types.constSize = consts::arraySize;
+        if (index.completion != null) {
+            completer = new Completer(this, index.completion);
+            names.completer = completer;
+            types.completer = completer;
+        }
     }
 
     /** Checks the whole program; the result is runnable when there were no errors. */

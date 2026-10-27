@@ -42,6 +42,11 @@ public final class ModuleScope {
         return Collections.unmodifiableMap(imports);
     }
 
+    /** The prelude's names (§16), which this module's items and imports shadow. */
+    public Map<String, List<Symbol>> prelude() {
+        return Collections.unmodifiableMap(prelude);
+    }
+
     void addItem(String name, Symbol.Decl decl) {
         items.computeIfAbsent(name, k -> new ArrayList<>()).add(decl);
     }

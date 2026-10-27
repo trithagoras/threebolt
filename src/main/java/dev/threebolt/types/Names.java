@@ -42,6 +42,8 @@ public final class Names {
     private final Program program;
     private final Diagnostics diagnostics;
     final SymbolIndex symbolIndex;
+    /** Set by the checker when answering a completion request. */
+    Completer completer;
     /** Semantic info for each declaration item. */
     final Map<Item, Object> infos = new HashMap<>();
 
@@ -92,6 +94,12 @@ public final class Names {
                 return continueFrom(from, new ModuleEntity(m), path, k);
             }
         }
+        if (completer != null && path.size() > 1 && completer.at(path.getLast())) {
+            // `std::|`: a path prefix that is not a module itself.
+            completer.modulePrefix(new ModulePath(path.subList(0, path.size() - 1).stream().map(Name::text).toList()),
+                    path.getLast());
+            return null;
+        }
         Name first = path.getFirst();
         diagnostics.error(Code.UNRESOLVED_NAME, first.span(), "cannot find '" + first.text() + "' in this scope");
         return null;
@@ -100,6 +108,10 @@ public final class Names {
     private Resolved continueFrom(Module from, Entity entity, List<Name> path, int index) {
         while (entity instanceof ModuleEntity(Module m) && index < path.size()) {
             Name seg = path.get(index);
+            if (completer != null && completer.at(seg)) {
+                completer.moduleItems(m, from, seg);
+                return null;
+            }
             var items = m.scope().items(seg.text());
             if (items.isEmpty()) {
                 // A submodule: a::b where a/b.3b exists.
@@ -145,7 +157,7 @@ public final class Names {
         symbolIndex.ref(name.span(), target, null);
     }
 
-    private Entity entity(List<? extends Symbol> symbols) {
+    Entity entity(List<? extends Symbol> symbols) {
         var first = symbols.getFirst();
         if (first instanceof Symbol.ModuleRef r) return new ModuleEntity(r.module());
         var fns = new ArrayList<FnInfo>();

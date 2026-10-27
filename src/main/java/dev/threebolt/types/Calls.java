@@ -73,6 +73,7 @@ final class Calls {
             for (var a : e.args()) c.exprs.expr(a.value(), null);
             return Exprs.error();
         }
+        if (c.completer != null) c.completer.callValue(e, f);
         if (f.isExtern() && !c.inUnsafe()) {
             diag.error(Code.UNSAFE_REQUIRED, e.span(), "calling an `extern fn` pointer requires an unsafe context");
         }
@@ -98,6 +99,7 @@ final class Calls {
             case Exprs.ValueTarget v -> valueCall(e, v.value());
             case Exprs.StaticTarget s -> valueCall(e, new Typed(new Ir.Read(new Ir.StaticPlace(s.info())), s.info().type));
             case Exprs.FnTarget f -> {
+                if (c.completer != null) c.completer.call(e, f.candidates());
                 var bound = resolve(f.candidates(), null, e.args(), f.typeArgs(), e.span(), f.name());
                 if (bound != null) c.index.ref(p.segments().getLast().name().span(), bound.cand().fn(), null);
                 yield bound == null ? Exprs.error() : build(bound, null, null, e.span());
@@ -124,6 +126,11 @@ final class Calls {
         var r = c.exprs.recv(m.receiver());
         var t = r.value().type();
         if (t == Type.ERROR) {
+            for (var a : e.args()) c.exprs.expr(a.value(), null);
+            return Exprs.error();
+        }
+        if (c.completer != null && c.completer.at(m.name())) {
+            c.completer.members(t, m.name());
             for (var a : e.args()) c.exprs.expr(a.value(), null);
             return Exprs.error();
         }
@@ -158,6 +165,7 @@ final class Calls {
             for (var a : e.args()) c.exprs.expr(a.value(), null);
             return Exprs.error();
         }
+        if (c.completer != null) c.completer.call(e, instance);
         var bound = resolve(instance, r.value().type(), e.args(), m.typeArgs(), e.span(), name);
         if (bound == null) return Exprs.error();
         c.index.ref(m.name().span(), bound.cand().fn(), null);
@@ -193,6 +201,7 @@ final class Calls {
             for (var a : e.args()) c.exprs.expr(a.value(), null);
             return Exprs.error();
         }
+        if (c.completer != null) c.completer.call(e, cands);
         var bound = resolve(cands, owner.base, e.args(), m.typeArgs(), e.span(), m.name().text());
         if (bound == null) return Exprs.error();
         c.index.ref(m.name().span(), bound.cand().fn(), null);
@@ -286,7 +295,7 @@ final class Calls {
     }
 
     /** Fixed-size arrays share the list intrinsics that do not change the length. */
-    private static final Set<String> ARRAY_METHODS = Set.of("len", "truthy", "iter", "index", "set", "contains",
+    static final Set<String> ARRAY_METHODS = Set.of("len", "truthy", "iter", "index", "set", "contains",
             "first", "last", "enumerate", "with_ptr");
 
     private static Type.Nominal baseOf(Type.Nominal n) {
