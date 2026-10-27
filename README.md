@@ -22,6 +22,7 @@ Structs are values, classes are references with single inheritance, traits give 
 - [`docs/PLAN.md`](docs/PLAN.md): implementation phases, architecture and status.
 - [`examples/arena`](examples/arena): a sample program across four modules (classes, traits, unions, enums, C interop).
 - [`src/main/resources/std`](src/main/resources/std): the standard library, written in Threebolt (bodyless functions are interpreter intrinsics).
+- [`editors/vscode`](editors/vscode): syntax highlighting for VS Code (local install, see its README).
 
 ## Getting started
 

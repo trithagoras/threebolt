@@ -1,0 +1,299 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "Threebolt",
+  "scopeName": "source.threebolt",
+  "fileTypes": ["3b"],
+  "comment": "Follows src/main/antlr/dev/threebolt/parser/ThreeboltLexer.g4 (spec §1).",
+  "patterns": [
+    { "include": "#comments" },
+    { "include": "#attributes" },
+    { "include": "#strings" },
+    { "include": "#numbers" },
+    { "include": "#declarations" },
+    { "include": "#keywords" },
+    { "include": "#types" },
+    { "include": "#paths" },
+    { "include": "#calls" },
+    { "include": "#operators" },
+    { "include": "#punctuation" }
+  ],
+  "repository": {
+    "comments": {
+      "patterns": [
+        {
+          "comment": "`///` doc comment; `////` is an ordinary line comment.",
+          "name": "comment.line.documentation.threebolt",
+          "match": "///(?!/).*$"
+        },
+        {
+          "name": "comment.line.double-slash.threebolt",
+          "match": "//.*$"
+        },
+        { "include": "#block-comment" }
+      ]
+    },
+    "block-comment": {
+      "comment": "Block comments nest.",
+      "name": "comment.block.threebolt",
+      "begin": "/\\*",
+      "end": "\\*/",
+      "patterns": [{ "include": "#block-comment" }]
+    },
+    "attributes": {
+      "comment": "@flags, @c, @link(\"m\")",
+      "match": "(@)\\s*([A-Za-z_][A-Za-z0-9_]*)",
+      "captures": {
+        "1": { "name": "punctuation.definition.decorator.threebolt" },
+        "2": { "name": "entity.name.function.decorator.threebolt" }
+      }
+    },
+    "escapes": {
+      "patterns": [
+        {
+          "name": "constant.character.escape.threebolt",
+          "match": "\\\\(?:[nrt0\\\\\"']|u\\{[0-9A-Fa-f]{1,6}\\})"
+        },
+        {
+          "name": "invalid.illegal.escape.threebolt",
+          "match": "\\\\."
+        }
+      ]
+    },
+    "strings": {
+      "patterns": [
+        {
+          "name": "string.quoted.triple.interpolated.threebolt",
+          "begin": "\\bf\"\"\"",
+          "end": "\"\"\"(?!\")",
+          "beginCaptures": { "0": { "name": "punctuation.definition.string.begin.threebolt" } },
+          "endCaptures": { "0": { "name": "punctuation.definition.string.end.threebolt" } },
+          "patterns": [{ "include": "#fstring-content" }]
+        },
+        {
+          "name": "string.quoted.double.interpolated.threebolt",
+          "begin": "\\bf\"",
+          "end": "\"|$",
+          "beginCaptures": { "0": { "name": "punctuation.definition.string.begin.threebolt" } },
+          "endCaptures": { "0": { "name": "punctuation.definition.string.end.threebolt" } },
+          "patterns": [{ "include": "#fstring-content" }]
+        },
+        {
+          "name": "string.quoted.triple.threebolt",
+          "begin": "\"\"\"",
+          "end": "\"\"\"(?!\")",
+          "beginCaptures": { "0": { "name": "punctuation.definition.string.begin.threebolt" } },
+          "endCaptures": { "0": { "name": "punctuation.definition.string.end.threebolt" } },
+          "patterns": [{ "include": "#escapes" }]
+        },
+        {
+          "name": "string.quoted.double.threebolt",
+          "begin": "\"",
+          "end": "\"|$",
+          "beginCaptures": { "0": { "name": "punctuation.definition.string.begin.threebolt" } },
+          "endCaptures": { "0": { "name": "punctuation.definition.string.end.threebolt" } },
+          "patterns": [{ "include": "#escapes" }]
+        },
+        {
+          "name": "string.quoted.single.threebolt",
+          "match": "(')(?:[^'\\\\\\r\\n]|(\\\\(?:[nrt0\\\\\"']|u\\{[0-9A-Fa-f]{1,6}\\})))(')",
+          "captures": {
+            "1": { "name": "punctuation.definition.string.begin.threebolt" },
+            "2": { "name": "constant.character.escape.threebolt" },
+            "3": { "name": "punctuation.definition.string.end.threebolt" }
+          }
+        }
+      ]
+    },
+    "fstring-content": {
+      "patterns": [
+        {
+          "name": "constant.character.escape.brace.threebolt",
+          "match": "\\{\\{|\\}\\}"
+        },
+        { "include": "#escapes" },
+        {
+          "name": "meta.interpolation.threebolt",
+          "contentName": "meta.embedded.line.threebolt",
+          "begin": "\\{",
+          "end": "\\}",
+          "beginCaptures": { "0": { "name": "punctuation.section.interpolation.begin.threebolt" } },
+          "endCaptures": { "0": { "name": "punctuation.section.interpolation.end.threebolt" } },
+          "patterns": [{ "include": "#braced" }, { "include": "$self" }]
+        },
+        {
+          "name": "invalid.illegal.brace.threebolt",
+          "match": "\\}"
+        }
+      ]
+    },
+    "braced": {
+      "comment": "Balanced braces inside an interpolation, so `{ {x: 1} }` ends at the right `}`.",
+      "begin": "\\{",
+      "end": "\\}",
+      "beginCaptures": { "0": { "name": "punctuation.section.braces.begin.threebolt" } },
+      "endCaptures": { "0": { "name": "punctuation.section.braces.end.threebolt" } },
+      "patterns": [{ "include": "#braced" }, { "include": "$self" }]
+    },
+    "numbers": {
+      "comment": "No float after `.`: `t.0.1` is tuple access.",
+      "patterns": [
+        {
+          "name": "constant.numeric.float.threebolt",
+          "match": "(?<!\\.)\\b[0-9][0-9_]*\\.[0-9][0-9_]*(?:[eE][+-]?_*[0-9][0-9_]*)?(?:_(?:f32|f64))?\\b"
+        },
+        {
+          "name": "constant.numeric.float.threebolt",
+          "match": "(?<!\\.)\\b[0-9][0-9_]*(?:[eE][+-]?_*[0-9][0-9_]*(?:_(?:f32|f64))?|_(?:f32|f64))\\b"
+        },
+        {
+          "name": "constant.numeric.integer.hexadecimal.threebolt",
+          "match": "\\b0x_*[0-9A-Fa-f][0-9A-Fa-f_]*(?:_(?:[iu](?:8|16|32|64|size)))?\\b"
+        },
+        {
+          "name": "constant.numeric.integer.octal.threebolt",
+          "match": "\\b0o_*[0-7][0-7_]*(?:_(?:[iu](?:8|16|32|64|size)))?\\b"
+        },
+        {
+          "name": "constant.numeric.integer.binary.threebolt",
+          "match": "\\b0b_*[01][01_]*(?:_(?:[iu](?:8|16|32|64|size)))?\\b"
+        },
+        {
+          "name": "constant.numeric.integer.decimal.threebolt",
+          "match": "\\b[0-9][0-9_]*(?:_(?:[iu](?:8|16|32|64|size)))?\\b"
+        },
+        {
+          "comment": "A literal run into identifier characters (lexer INVALID_NUMBER): `10u64`, `0b12`.",
+          "name": "invalid.illegal.number.threebolt",
+          "match": "\\b[0-9][A-Za-z0-9_]*\\b"
+        }
+      ]
+    },
+    "declarations": {
+      "patterns": [
+        {
+          "comment": "`get` is a keyword only directly before `fn` (spec §1).",
+          "match": "\\b(get)\\s+(fn)\\s+([A-Za-z_][A-Za-z0-9_]*)",
+          "captures": {
+            "1": { "name": "storage.modifier.get.threebolt" },
+            "2": { "name": "storage.type.function.threebolt" },
+            "3": { "name": "entity.name.function.threebolt" }
+          }
+        },
+        {
+          "match": "\\b(fn)\\s+([A-Za-z_][A-Za-z0-9_]*)",
+          "captures": {
+            "1": { "name": "storage.type.function.threebolt" },
+            "2": { "name": "entity.name.function.threebolt" }
+          }
+        },
+        {
+          "match": "\\b(struct|class|enum|trait|type)\\s+([A-Za-z_][A-Za-z0-9_]*)",
+          "captures": {
+            "1": { "name": "storage.type.$1.threebolt" },
+            "2": { "name": "entity.name.type.threebolt" }
+          }
+        }
+      ]
+    },
+    "keywords": {
+      "patterns": [
+        {
+          "name": "keyword.control.threebolt",
+          "match": "\\b(?:break|continue|defer|else|for|if|in|loop|match|return|while)\\b"
+        },
+        {
+          "comment": "Not keyword.operator: many themes colour that like `+`, so `as`/`is` would look like plain text.",
+          "match": "\\b(?:(as\\?)|(as)\\b|(is)\\b)",
+          "captures": {
+            "1": { "name": "keyword.control.as.threebolt" },
+            "2": { "name": "keyword.control.as.threebolt" },
+            "3": { "name": "keyword.control.is.threebolt" }
+          }
+        },
+        {
+          "name": "keyword.other.threebolt",
+          "match": "\\b(?:use|nameof|typeof|impl)\\b"
+        },
+        {
+          "name": "storage.type.threebolt",
+          "match": "\\b(?:fn|let|const|static|struct|class|enum|trait|type|extern)\\b"
+        },
+        {
+          "name": "storage.modifier.threebolt",
+          "match": "\\b(?:mut|pub|prot|abstract|override|virtual|unsafe)\\b"
+        },
+        {
+          "name": "constant.language.boolean.threebolt",
+          "match": "\\b(?:true|false)\\b"
+        },
+        {
+          "name": "constant.language.null.threebolt",
+          "match": "\\bnull\\b"
+        },
+        {
+          "name": "variable.language.self.threebolt",
+          "match": "\\bself\\b"
+        },
+        {
+          "name": "variable.language.super.threebolt",
+          "match": "\\bsuper\\b"
+        },
+        {
+          "name": "entity.name.type.self.threebolt",
+          "match": "\\bSelf\\b"
+        }
+      ]
+    },
+    "types": {
+      "patterns": [
+        {
+          "comment": "Predeclared names, not keywords (spec §3.1).",
+          "name": "support.type.primitive.threebolt",
+          "match": "\\b(?:i8|i16|i32|i64|isize|u8|u16|u32|u64|usize|f32|f64|bool|char|str)\\b"
+        },
+        {
+          "comment": "By convention, capitalised names are types, enum variants and type parameters.",
+          "name": "entity.name.type.threebolt",
+          "match": "\\b[A-Z][A-Za-z0-9_]*\\b"
+        }
+      ]
+    },
+    "paths": {
+      "match": "\\b([a-z_][A-Za-z0-9_]*)\\s*(?=::)",
+      "captures": {
+        "1": { "name": "entity.name.namespace.threebolt" }
+      }
+    },
+    "calls": {
+      "match": "\\b([a-z_][A-Za-z0-9_]*)\\s*(?=\\()",
+      "captures": {
+        "1": { "name": "entity.name.function.call.threebolt" }
+      }
+    },
+    "operators": {
+      "patterns": [
+        { "name": "keyword.operator.arrow.threebolt", "match": "=>|->" },
+        { "name": "keyword.operator.range.threebolt", "match": "\\.\\.=|\\.\\.\\.|\\.\\." },
+        { "name": "keyword.operator.coalesce.threebolt", "match": "\\?\\?" },
+        { "name": "keyword.operator.propagate.threebolt", "match": "\\?" },
+        { "name": "keyword.operator.comparison.threebolt", "match": "==|!=|<=|>=" },
+        { "name": "keyword.operator.logical.threebolt", "match": "&&|\\|\\||!" },
+        { "name": "keyword.operator.assignment.compound.threebolt", "match": "<<=|>>=|[+\\-*/%&|^]=" },
+        { "name": "keyword.operator.assignment.threebolt", "match": "=" },
+        { "name": "keyword.operator.bitwise.shift.threebolt", "match": "<<|>>" },
+        { "name": "keyword.operator.comparison.threebolt", "match": "[<>]" },
+        { "name": "keyword.operator.arithmetic.threebolt", "match": "[+\\-*/%]" },
+        { "name": "keyword.operator.bitwise.threebolt", "match": "[&|^~]" }
+      ]
+    },
+    "punctuation": {
+      "patterns": [
+        { "name": "punctuation.separator.namespace.threebolt", "match": "::" },
+        { "name": "punctuation.separator.colon.threebolt", "match": ":" },
+        { "name": "punctuation.separator.comma.threebolt", "match": "," },
+        { "name": "punctuation.terminator.threebolt", "match": ";" },
+        { "name": "punctuation.accessor.threebolt", "match": "\\." }
+      ]
+    }
+  }
+}

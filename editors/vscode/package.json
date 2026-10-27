@@ -1,0 +1,37 @@
+{
+  "name": "threebolt",
+  "displayName": "Threebolt",
+  "description": "Syntax highlighting for the Threebolt language (.3b)",
+  "version": "0.1.0",
+  "publisher": "threebolt",
+  "private": true,
+  "license": "UNLICENSED",
+  "engines": {
+    "vscode": "^1.80.0"
+  },
+  "categories": [
+    "Programming Languages"
+  ],
+  "contributes": {
+    "languages": [
+      {
+        "id": "threebolt",
+        "aliases": [
+          "Threebolt",
+          "3b"
+        ],
+        "extensions": [
+          ".3b"
+        ],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "threebolt",
+        "scopeName": "source.threebolt",
+        "path": "./syntaxes/threebolt.tmLanguage.json"
+      }
+    ]
+  }
+}

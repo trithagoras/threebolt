@@ -43,6 +43,7 @@ src/main/resources/std/    std modules in Threebolt (bodyless fns are interprete
 src/test/java/…            JUnit 5 unit tests
 tests/conformance/         .3b programs + expected output / expected diagnostics (see its README)
 examples/                  sample Threebolt programs (must keep parsing as the grammar evolves)
+editors/vscode/            VS Code syntax highlighting (TextMate grammar; keep in step with ThreeboltLexer.g4)
 ```
 
 ## Conventions
