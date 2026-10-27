@@ -1,0 +1,15 @@
+use engine::Vec2;
+
+pub trait Component : Default {}
+
+pub struct Position : Component {
+    let pos: Vec2;
+
+    pub fn default() -> Self => { pos: Vec2::default() };
+}
+
+pub struct Details : Component {
+    let name: str;
+
+    pub fn default() -> Self => { name: "MISSING_NAME" };
+}

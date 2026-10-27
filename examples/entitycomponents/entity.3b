@@ -1,0 +1,69 @@
+use components::*;
+
+pub class ComponentAlreadyExistsError : Err {
+    let t: Type;
+    let eid: u64;
+
+    pub fn new(eid: u64, t: Type) -> ComponentAlreadyExistsError
+        => { eid, t };
+
+    pub fn message(self) -> str
+        => f"Entity (id={self.eid}) already contains component of type {self.t}.";
+}
+
+pub type AddComponentResult = () | ComponentAlreadyExistsError;
+
+pub class Entity {
+    static let global_id: u64 = 0;
+
+    let id: u64;
+    let comps: Map<Type, Component> = [];
+
+    pub fn new() -> Entity {
+        // temporary mutable access to Self::global_id
+        let mut global_id = Self::global_id;
+        global_id += 1;
+        let id = Self::global_id;
+        return { id };
+    }
+
+    pub fn get_component<T: Component>(self) -> T | null
+        => self.comps.get(typeof(T)) as (T | null);
+
+    pub fn add_component<T : Component>(mut self, comp: T) -> AddComponentResult {
+        if typeof(T) in self.comps.keys {
+            return ComponentAlreadyExistsError::new(self.id, typeof(T));
+        }
+        // self.comps.set(typeof(T), comp);
+        self.comps[typeof(T)] = comp;
+    }
+
+    pub fn add_component<T : Component>(mut self) -> AddComponentResult {
+        self.add_component(T::default())?;
+    }
+}
+
+impl Display for Entity {
+    pub fn to_str(self) -> str => f"ID: {self.id}";
+}
+
+pub class EntityBuilder {
+    let entity: Entity;
+    let built: bool = false;
+
+    pub fn new() -> Self
+        => { entity: Entity::new() };
+
+    pub fn with<T: Component>(mut self, comp: T) -> Self | ComponentAlreadyExistsError {
+        self.entity.add_component(comp)?;
+        return self;
+    }
+
+    pub fn with<T: Component>(mut self) -> Self | ComponentAlreadyExistsError
+        => self.with(T::default());
+
+    pub fn build(mut self) -> Entity {
+        self.built = true;
+        return self.entity;
+    }
+}

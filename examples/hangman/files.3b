@@ -4,13 +4,13 @@ extern "C" {
     fn fclose(f: Ptr<u8>) -> c::int;
 }
 
-pub fn read_lines(path: str) -> [str] {
+pub fn read_lines(path: str) -> [str] | Err {
     let mut lines: [str] = [];
     let cpath = path.to_cstr();
     let mode = "r".to_cstr();
     let f = unsafe => fopen(cpath, mode);
     unsafe { c::free(cpath); c::free(mode); }
-    if f.is_null() { return lines; }
+    if f.is_null() { return error("Failed to open file."); }
     let buf = c::alloc<c::char>(4096);
     while !(unsafe => fgets(buf, 4096, f)).is_null() {
         lines.push((unsafe => str::from_cstr(buf)).trim());

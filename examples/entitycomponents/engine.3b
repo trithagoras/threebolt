@@ -1,0 +1,6 @@
+pub struct Vec2 : Default {
+    let x: f32;
+    let y: f32;
+
+    pub fn default() -> Self => { x: 0.0, y: 0.0 };
+}

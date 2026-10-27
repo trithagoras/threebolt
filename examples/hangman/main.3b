@@ -1,0 +1,34 @@
+// wordle!
+use files::*;
+use std::random;
+
+fn main() -> () | Err {
+    let mut lines: [str] = [];
+    for line in files::read_lines("words.txt")? {
+        lines.push(line);
+    }
+    println(f"Loaded {len(lines)} words.");
+
+    let word = random::choice(lines);
+    let mut running_word = "_____";
+    let mut guesses = 0;
+
+    loop {
+        println(running_word);
+        let maybe_guess = readln("> ");
+        if let guess = maybe_guess {
+            guesses += 1;
+            if guess.len != 1 {
+                println("Guesses must be a single letter");
+                continue;
+            }
+            let ch = guess.chars().first() as char; // forced unwrap is safe due to above checks
+            let s = "d";
+            running_word = str::from_chars(word.iter().enumerate().map(((i, c)) => c if c == ch else running_word[i]));
+            if !('_' in running_word) {
+                break;
+            }
+        }
+    }
+    println(f"You win! The word was '{word}' !");
+}
