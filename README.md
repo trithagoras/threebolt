@@ -14,7 +14,7 @@ fn main(args: [str]) -> () | Err {
 
 Structs are values, classes are references with single inheritance, traits give runtime polymorphism, errors are union values (`T | Err`, propagated with `?`), and C functions are a declaration away (`extern "C"`).
 
-**Status:** 0.1, a tree-walking interpreter in Java. It runs everything in the spec except the rest of C interop (`@c struct`, callbacks, pinning) and threads, which come next (Phase 8 in the [plan](docs/PLAN.md)).
+**Status:** 0.1, a tree-walking interpreter in Java. It runs everything in the spec, including C interop (through Java's FFM API) and threads; see the [plan](docs/PLAN.md) for the known gaps.
 
 ## Documentation
 
