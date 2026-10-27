@@ -1,77 +1,513 @@
-// all io stuff! TODO: move print/println/eprintln + readln here!
+// std::io: printing, the standard streams, files and paths (spec §16). `print`, `println`,
+// `eprint`, `eprintln` and `readln` are also in the prelude.
+//
+// This is Threebolt over a few `sys_*` intrinsics shaped like POSIX calls: a file is a numbered
+// handle (0, 1 and 2 are stdin, stdout and stderr), and a call returns a non-negative result or a
+// negated error code (`E_*`), with a description from `sys_error()`.
 
-extern "C" {
-    fn fopen(path: Ptr<c::char>, mode: Ptr<c::char>) -> Ptr<u8>;   // FILE* as an opaque pointer
-    fn fgets(buf: Ptr<c::char>, n: c::int, f: Ptr<u8>) -> Ptr<c::char>;
-    fn fclose(f: Ptr<u8>) -> c::int;
+// ---- Printing ----
+
+/// Writes `x.to_str()` to stdout.
+pub fn print<T: Display>(x: T) { sys_write_str(1, x.to_str()); }
+/// Writes `x.to_str()` and a newline to stdout.
+pub fn println<T: Display>(x: T) { sys_write_str(1, x.to_str() + "\n"); }
+/// Writes `x.to_str()` to stderr.
+pub fn eprint<T: Display>(x: T) { sys_write_str(2, x.to_str()); }
+/// Writes `x.to_str()` and a newline to stderr.
+pub fn eprintln<T: Display>(x: T) { sys_write_str(2, x.to_str() + "\n"); }
+
+/// Prints `prompt`, flushes stdout and reads a line from stdin without its `\n` or `\r\n`;
+/// null at end of input. An I/O error panics.
+pub fn readln(prompt: str) -> str | null {
+    print(prompt);
+    sys_flush(1);
+    let line = File::stdin().read_line();
+    if line is IoErr { panic(f"readln: {line.message()}"); }
+    return line;
+}
+pub fn readln() -> str | null => readln("");
+
+/// The standard streams, as text files that also take bytes. `readln` reads through `stdin()`,
+/// so they share one buffer (and closing `stdin()` makes `readln` panic). Reading stdin or
+/// writing stderr first flushes stdout.
+pub fn stdin() -> File => File::stdin();
+pub fn stdout() -> File => File::stdout();
+pub fn stderr() -> File => File::stderr();
+
+// ---- Errors ----
+
+/// An I/O failure. The subclasses are the failures worth telling apart; any other is an `IoErr`
+/// itself, with the system's description.
+pub class IoErr : MsgErr {
+    /// The path the operation was on, if any.
+    pub let path: str | null;
+
+    pub fn new(msg: str, path: str | null = null) -> Self
+        => { ..MsgErr::new(msg if path == null else f"{msg}: {path}"), path };
 }
 
-// TODO: abstract with more specific file errors (e.g. insufficient permissions, etc. based on errno)
-pub abstract class FileErr : Err {
-    pub virtual fn message(self) -> str => "File error";
+/// Nothing exists at the path.
+pub class NotFoundErr : IoErr {
+    pub fn new(path: str | null) -> Self => { ..IoErr::new("no such file or directory", path: path) };
 }
 
-pub class FileOpenErr : FileErr {
-    let path: str;
-
-    pub fn new(path: str) -> FileOpenErr => { path };
-    pub override fn message(self) -> str => f"File at path {self.path} could not be opened.";
+/// The system refused access to the path.
+pub class PermissionErr : IoErr {
+    pub fn new(path: str | null) -> Self => { ..IoErr::new("permission denied", path: path) };
 }
 
-pub class FileClosedErr : FileErr {
-    pub fn new() -> FileClosedErr => { };
-    pub override fn message(self) -> str => f"File is not open.";
+/// Something already exists at the path (mode `x`, `create_dir`).
+pub class ExistsErr : IoErr {
+    pub fn new(path: str | null) -> Self => { ..IoErr::new("already exists", path: path) };
 }
 
-// TODO: extend this obviously! Just for demo purposes.
-type FileOpenMode = 'r' | 'w';
+/// The path is a directory where a file was needed.
+pub class IsDirErr : IoErr {
+    pub fn new(path: str | null) -> Self => { ..IoErr::new("is a directory", path: path) };
+}
 
-/// always ensure to run `close()` to cleanup resources!
+/// The path, or one of its parents, is not a directory where one was needed.
+pub class NotDirErr : IoErr {
+    pub fn new(path: str | null) -> Self => { ..IoErr::new("not a directory", path: path) };
+}
+
+/// The directory to remove is not empty.
+pub class NotEmptyErr : IoErr {
+    pub fn new(path: str | null) -> Self => { ..IoErr::new("directory not empty", path: path) };
+}
+
+/// The file has been closed.
+pub class ClosedErr : IoErr {
+    pub fn new(path: str | null) -> Self => { ..IoErr::new("file is closed", path: path) };
+}
+
+/// The file's mode does not allow the operation: reading a file opened only for writing (or the
+/// reverse), or text methods on a binary file (or the reverse).
+pub class ModeErr : IoErr {
+    pub fn new(msg: str, path: str | null) -> Self => { ..IoErr::new(msg, path: path) };
+}
+
+// Error codes of the `sys_*` calls (negated in their results).
+const E_NOT_FOUND: i64 = 2;
+const E_PERMISSION: i64 = 3;
+const E_EXISTS: i64 = 4;
+const E_IS_DIR: i64 = 5;
+const E_NOT_DIR: i64 = 6;
+const E_NOT_EMPTY: i64 = 7;
+const E_BAD_HANDLE: i64 = 8;
+
+/// The error for `r`, the negative result of a `sys_*` call on `path`.
+fn failure(r: i64, path: str | null) -> IoErr {
+    let code = -r;
+    if code == E_NOT_FOUND { return NotFoundErr::new(path); }
+    if code == E_PERMISSION { return PermissionErr::new(path); }
+    if code == E_EXISTS { return ExistsErr::new(path); }
+    if code == E_IS_DIR { return IsDirErr::new(path); }
+    if code == E_NOT_DIR { return NotDirErr::new(path); }
+    if code == E_NOT_EMPTY { return NotEmptyErr::new(path); }
+    if code == E_BAD_HANDLE { return ClosedErr::new(path); }
+    return IoErr::new(sys_error());
+}
+
+/// `()`, or the error if `r` is a `sys_*` failure.
+fn check(r: i64, path: str | null) -> () | IoErr {
+    if r < 0 { return failure(r, path); }
+}
+
+// ---- Files ----
+
+/// How `open` opens a file, as in Python: `r` reads; `w` writes, creating the file or emptying
+/// it; `a` appends, creating the file; `x` writes a new file, failing if one exists. `+` adds
+/// the other direction (`r+` reads and writes, without emptying the file). `t` (the default)
+/// opens it as text and `b` as binary.
+pub type Mode =
+      "r" | "r+" | "rt" | "r+t" | "rt+" | "rb" | "r+b" | "rb+"
+    | "w" | "w+" | "wt" | "w+t" | "wt+" | "wb" | "w+b" | "wb+"
+    | "a" | "a+" | "at" | "a+t" | "at+" | "ab" | "a+b" | "ab+"
+    | "x" | "x+" | "xt" | "x+t" | "xt+" | "xb" | "x+b" | "xb+";
+
+/// Where `File::seek` counts from.
+pub enum SeekFrom { Start, Current, End }
+
+// `sys_open` flags.
+const O_READ: u32 = 1;
+const O_WRITE: u32 = 2;
+const O_APPEND: u32 = 4;
+const O_CREATE: u32 = 8;
+const O_TRUNCATE: u32 = 16;
+const O_CREATE_NEW: u32 = 32;
+
+/// How many bytes a read asks the system for.
+const CHUNK: usize = 65536;
+
+/// An open file. A text file has `read`, `read_line`, `lines`, `read_lines`, `write` and
+/// `write_line`; a binary one (mode `b`) has `read_bytes` and `write_bytes`. Text is UTF-8:
+/// invalid bytes read as U+FFFD, and line endings are kept as they are, except that line reads
+/// drop the `\n` or `\r\n`.
+///
+/// Writes go straight to the system, but the file stays open until `close` (or the end of the
+/// program), so close it when done: `defer f.close();`.
 pub class File {
-    let handle: Ptr<u8>;
+    let handle: i64;          // -1 once closed
+    let _path: str;
+    let readable: bool;
+    let writable: bool;
+    let text: bool;
+    let binary: bool;
+    // Bytes read ahead of the position: `buf[pos..]`.
+    let buf: [u8] = [];
+    let pos: usize = 0;
 
-    pub get fn opened(self) -> bool => !self.handle.is_null();
+    static let mut STDIN: File = File::stream(0, "<stdin>", readable: true);
+    static let mut STDOUT: File = File::stream(1, "<stdout>");
+    static let mut STDERR: File = File::stream(2, "<stderr>");
 
-    fn new(handle: Ptr<u8>) -> File => { handle };
+    fn stream(handle: i64, path: str, readable: bool = false) -> File
+        => File { handle, _path: path, readable, writable: !readable, text: true, binary: true };
 
-    pub fn open(path: str, mode: FileOpenMode | null = null) -> File | FileErr {
-        let mode = (mode ?? 'r').to_str().to_cstr();
-        let cpath = path.to_cstr();
-        let f = unsafe => fopen(cpath, mode);
-        
-        defer unsafe => c::free(cpath);     // defer freeing memory for path and mode -- NOT handle!
-        defer unsafe => c::free(mode);
+    pub fn stdin() -> File => File::STDIN;
+    pub fn stdout() -> File => File::STDOUT;
+    pub fn stderr() -> File => File::STDERR;
 
-        if (f.is_null()) {
-            // TODO: check C's global errno!
+    /// Opens `path` for reading text.
+    pub fn open(path: str) -> File | IoErr => File::open(path, "r");
 
-            // no need to free handle because it was not successfully set.
-            return FileOpenErr::new(path);
+    pub fn open(path: str, mode: Mode) -> File | IoErr {
+        let base = mode[0];
+        let mut flags = O_READ;
+        if base == 'w' { flags = O_WRITE | O_CREATE | O_TRUNCATE; }
+        if base == 'a' { flags = O_WRITE | O_APPEND | O_CREATE; }
+        if base == 'x' { flags = O_WRITE | O_CREATE_NEW; }
+        if mode.contains("+") { flags |= O_READ | O_WRITE; }
+        let handle = sys_open(path, flags);
+        if handle < 0 { return failure(handle, path); }
+        let binary = mode.contains("b");
+        return File {
+            handle,
+            _path: path,
+            readable: (flags & O_READ) != 0,
+            writable: (flags & O_WRITE) != 0,
+            text: !binary,
+            binary,
+        };
+    }
+
+    /// The path the file was opened with.
+    pub get fn path(self) -> str => self._path;
+    pub get fn closed(self) -> bool => self.handle < 0;
+
+    /// Closes the file; closing it again does nothing. Closing a standard stream only closes
+    /// this `File`, not the stream.
+    pub fn close(mut self) {
+        if self.handle < 0 { return; }
+        sys_close(self.handle);
+        self.handle = -1;
+        self.buf = [];
+        self.pos = 0;
+    }
+
+    // ---- Reading ----
+
+    /// The rest of the file.
+    pub fn read(mut self) -> str | IoErr {
+        self.demand(reading: true, text: true)?;
+        while self.fill()? {}
+        let s = str::from_utf8(self.buf[self.pos..]);
+        self.buf = [];
+        self.pos = 0;
+        return s;
+    }
+
+    /// The next line without its `\n` or `\r\n`, or null at the end of the file. A last line
+    /// without a line ending still counts.
+    pub fn read_line(mut self) -> str | null | IoErr {
+        self.demand(reading: true, text: true)?;
+        return self.next_line();
+    }
+
+    /// `read_line` without checking the mode.
+    fn next_line(mut self) -> str | null | IoErr {
+        let mut i = self.pos;
+        loop {
+            let buf = self.buf;
+            let n = buf.len;
+            while i < n && buf[i] != 10 { i += 1; }
+            if i < n {
+                let mut end = i;
+                if end > self.pos && buf[end - 1] == 13 { end -= 1; }
+                let line = str::from_utf8(buf[self.pos..end]);
+                self.pos = i + 1;
+                return line;
+            }
+            let scanned = i - self.pos;
+            if !self.fill()? {
+                if self.pos == self.buf.len { return null; }
+                let line = str::from_utf8(self.buf[self.pos..]);
+                self.pos = self.buf.len;
+                return line;
+            }
+            i = self.pos + scanned;
         }
-
-        return File::new(f);
     }
 
-    pub fn close(mut self) -> () | FileErr {
-        self.demand_file_opened()?;
-        unsafe => fclose(self.handle);
-        self.handle = Ptr<u8>::null();
-    }
+    /// The rest of the lines, as `read_line` reads them. An error ends the iteration, after
+    /// being returned as an element: `for line in f.lines() { let line = line?; ... }`.
+    pub fn lines(mut self) -> Iterator<str | IoErr> => LinesIter::new(self, close: false);
 
-    // TODO: iter?
-    pub fn read_lines(mut self) -> [str] | FileErr {
-        self.demand_file_opened()?;
+    /// The rest of the lines, as `read_line` reads them.
+    pub fn read_lines(mut self) -> [str] | IoErr {
+        self.demand(reading: true, text: true)?;
         let mut lines: [str] = [];
-        let buf = c::alloc<c::char>(4096);
-        defer unsafe => c::free(buf);
-        while !(unsafe => fgets(buf, 4096, self.handle)).is_null() {
-            lines.push((unsafe => str::from_cstr(buf)).trim());
+        loop {
+            let line = self.next_line();
+            if line is IoErr { return line; }
+            if line == null { return lines; }
+            lines.push(line);
         }
-        return lines;
     }
 
-    fn demand_file_opened(self) -> () | FileClosedErr => () if self.opened else FileClosedErr::new();
+    /// The rest of the file.
+    pub fn read_bytes(mut self) -> [u8] | IoErr {
+        self.demand(reading: true, text: false)?;
+        while self.fill()? {}
+        let bytes = self.buf[self.pos..];
+        self.buf = [];
+        self.pos = 0;
+        return bytes;
+    }
+
+    /// Up to `n` bytes; fewer only at the end of the file.
+    pub fn read_bytes(mut self, n: usize) -> [u8] | IoErr {
+        self.demand(reading: true, text: false)?;
+        while self.buf.len - self.pos < n && self.fill()? {}
+        let end = self.buf.len.min(self.pos + n);
+        let bytes = self.buf[self.pos..end];
+        self.pos = end;
+        return bytes;
+    }
+
+    // ---- Writing ----
+
+    pub fn write(mut self, s: str) -> () | IoErr {
+        self.demand(reading: false, text: true)?;
+        self.unread()?;
+        check(sys_write_str(self.handle, s), self._path)?;
+    }
+
+    /// Writes `s` and a `\n`.
+    pub fn write_line(mut self, s: str) -> () | IoErr => self.write(s + "\n");
+
+    pub fn write_bytes(mut self, bytes: [u8]) -> () | IoErr {
+        self.demand(reading: false, text: false)?;
+        self.unread()?;
+        check(sys_write(self.handle, bytes), self._path)?;
+    }
+
+    /// Writes are not buffered, so this only matters for stdout, which `print` buffers.
+    pub fn flush(mut self) -> () | IoErr {
+        if self.handle < 0 { return ClosedErr::new(self._path); }
+        check(sys_flush(self.handle), self._path)?;
+    }
+
+    // ---- Position ----
+
+    /// Moves to `offset` bytes from the start, the current position or the end; returns the new
+    /// position. Not for the standard streams.
+    pub fn seek(mut self, offset: i64, from: SeekFrom = SeekFrom::Start) -> u64 | IoErr {
+        if self.handle < 0 { return ClosedErr::new(self._path); }
+        let mut by = offset;
+        if from == SeekFrom::Current { by -= (self.buf.len - self.pos) as i64; }
+        let r = sys_seek(self.handle, by, from as i32);
+        check(r, self._path)?;
+        self.buf = [];
+        self.pos = 0;
+        return r as u64;
+    }
+
+    /// The position in bytes from the start.
+    pub fn tell(self) -> u64 | IoErr {
+        if self.handle < 0 { return ClosedErr::new(self._path); }
+        let r = sys_seek(self.handle, 0, SeekFrom::Current as i32);
+        check(r, self._path)?;
+        return (r - (self.buf.len - self.pos) as i64) as u64;
+    }
+
+    // ---- Internals ----
+
+    /// `()` if the file is open and its mode allows the operation.
+    fn demand(self, reading: bool = false, text: bool = false) -> () | IoErr {
+        if self.handle < 0 { return ClosedErr::new(self._path); }
+        if reading && !self.readable { return ModeErr::new("not open for reading", self._path); }
+        if !reading && !self.writable { return ModeErr::new("not open for writing", self._path); }
+        if text && !self.text { return ModeErr::new("binary file has no text methods", self._path); }
+        if !text && !self.binary { return ModeErr::new("text file has no byte methods", self._path); }
+    }
+
+    /// Reads more into `buf`; false at the end of the file.
+    fn fill(mut self) -> bool | IoErr {
+        if self.pos > 0 {
+            self.buf = self.buf[self.pos..];
+            self.pos = 0;
+        }
+        let n = sys_read(self.handle, self.buf, CHUNK);
+        check(n, self._path)?;
+        return n > 0;
+    }
+
+    /// Drops what was read ahead, moving the system's position back to the file's own, so that
+    /// a write lands there.
+    fn unread(mut self) -> () | IoErr {
+        let ahead = self.buf.len - self.pos;
+        if ahead > 0 { check(sys_seek(self.handle, -(ahead as i64), SeekFrom::Current as i32), self._path)?; }
+        self.buf = [];
+        self.pos = 0;
+    }
 }
 
-// convenient wrapper
-pub fn fopen(path: str, mode: FileOpenMode | null = null) -> File | FileErr => File::open(path, mode: mode);
+class LinesIter : Iterator<str | IoErr> {
+    let file: File;
+    let close: bool;
+    let done: bool = false;
+
+    pub fn new(file: File, close: bool = false) -> Self => { file, close };
+
+    pub fn next(mut self) -> str | IoErr | Done {
+        if self.done { return Done; }
+        let line = self.file.read_line();
+        if line is str { return line; }
+        self.done = true;
+        if self.close { self.file.close(); }
+        if line is IoErr { return line; }
+        return Done;
+    }
+}
+
+/// `File::open(path)`.
+pub fn open(path: str) -> File | IoErr => File::open(path);
+/// `File::open(path, mode)`.
+pub fn open(path: str, mode: Mode) -> File | IoErr => File::open(path, mode);
+
+// ---- Whole files ----
+
+/// The text of the file at `path`.
+pub fn read_text(path: str) -> str | IoErr {
+    let mut f = open(path)?;
+    defer f.close();
+    return f.read();
+}
+
+/// The lines of the file at `path`, without their `\n` or `\r\n`.
+pub fn read_lines(path: str) -> [str] | IoErr {
+    let mut f = open(path)?;
+    defer f.close();
+    return f.read_lines();
+}
+
+/// The lines of the file at `path`, read as the loop goes; the file closes at the end or on an
+/// error (but stays open until the program ends if the loop stops early). See `File::lines`.
+pub fn lines(path: str) -> Iterator<str | IoErr> | IoErr => LinesIter::new(open(path)?, close: true);
+
+/// The bytes of the file at `path`.
+pub fn read_bytes(path: str) -> [u8] | IoErr {
+    let mut f = open(path, "rb")?;
+    defer f.close();
+    return f.read_bytes();
+}
+
+/// Writes `s` to the file at `path`, replacing its contents or creating it.
+pub fn write_text(path: str, s: str) -> () | IoErr {
+    let mut f = open(path, "w")?;
+    defer f.close();
+    return f.write(s);
+}
+
+/// Writes `s` at the end of the file at `path`, creating it if need be.
+pub fn append_text(path: str, s: str) -> () | IoErr {
+    let mut f = open(path, "a")?;
+    defer f.close();
+    return f.write(s);
+}
+
+/// Writes `bytes` to the file at `path`, replacing its contents or creating it.
+pub fn write_bytes(path: str, bytes: [u8]) -> () | IoErr {
+    let mut f = open(path, "wb")?;
+    defer f.close();
+    return f.write_bytes(bytes);
+}
+
+/// Copies the file at `from` to `to`, replacing `to` if it exists.
+pub fn copy(from: str, to: str) -> () | IoErr => write_bytes(to, read_bytes(from)?);
+
+// ---- Paths ----
+
+/// Whether anything (a file, a directory, ...) exists at `path`. Symbolic links are followed.
+pub fn exists(path: str) -> bool => sys_kind(path) != 0;
+/// Whether `path` is a file.
+pub fn is_file(path: str) -> bool => sys_kind(path) == 1;
+/// Whether `path` is a directory.
+pub fn is_dir(path: str) -> bool => sys_kind(path) == 2;
+
+/// The size in bytes of the file at `path`.
+pub fn file_size(path: str) -> u64 | IoErr {
+    let r = sys_size(path);
+    check(r, path)?;
+    return r as u64;
+}
+
+/// Removes the file or empty directory at `path`.
+pub fn remove(path: str) -> () | IoErr => check(sys_remove(path), path);
+
+/// Moves `from` to `to`, replacing a file at `to`.
+pub fn rename(from: str, to: str) -> () | IoErr => check(sys_rename(from, to), from);
+
+/// Creates the directory `path`; its parent must exist.
+pub fn create_dir(path: str) -> () | IoErr => check(sys_mkdir(path), path);
+
+/// Creates the directory `path` and any missing parents; fine if it already exists.
+pub fn create_dirs(path: str) -> () | IoErr {
+    let mut dir = "/" if path.starts_with("/") else "";
+    for part in path.split("/") {
+        if part == "" { continue; }
+        dir = dir + part if dir == "" || dir.ends_with("/") else f"{dir}/{part}";
+        if !is_dir(dir) {
+            let r = sys_mkdir(dir);
+            if r < 0 && !is_dir(dir) { return failure(r, dir); }
+        }
+    }
+}
+
+/// The names in the directory `path` (not `.` or `..`), sorted.
+pub fn list_dir(path: str) -> [str] | IoErr {
+    let mut names: [str] = [];
+    check(sys_list_dir(path, names), path)?;
+    return names;
+}
+
+/// The directory for temporary files.
+pub fn temp_dir() -> str => sys_temp_dir();
+
+// ---- System calls (interpreter intrinsics) ----
+
+/// Opens `path` with `O_*` flags; a new handle.
+fn sys_open(path: str, flags: u32) -> i64;
+fn sys_close(handle: i64) -> i64;
+/// Appends up to `max` bytes to `buf`; how many, 0 at the end of the file.
+fn sys_read(handle: i64, buf: [u8], max: usize) -> i64;
+fn sys_write(handle: i64, bytes: [u8]) -> i64;
+/// Writes `s` in UTF-8.
+fn sys_write_str(handle: i64, s: str) -> i64;
+fn sys_flush(handle: i64) -> i64;
+/// Moves to `offset` from the start (0), the current position (1) or the end (2); the new position.
+fn sys_seek(handle: i64, offset: i64, whence: i32) -> i64;
+/// The description of this thread's last failed call.
+fn sys_error() -> str;
+/// What is at `path`: 0 nothing, 1 a file, 2 a directory, 3 something else.
+fn sys_kind(path: str) -> i32;
+fn sys_size(path: str) -> i64;
+/// Removes a file or an empty directory.
+fn sys_remove(path: str) -> i64;
+fn sys_rename(from: str, to: str) -> i64;
+fn sys_mkdir(path: str) -> i64;
+/// Appends the names in directory `path`, sorted, to `out`; how many.
+fn sys_list_dir(path: str, out: [str]) -> i64;
+fn sys_temp_dir() -> str;

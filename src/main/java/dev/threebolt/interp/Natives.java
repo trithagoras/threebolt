@@ -20,7 +20,6 @@ import dev.threebolt.types.Type;
 import dev.threebolt.types.TypeInfo;
 import dev.threebolt.types.TypeParamInfo;
 import dev.threebolt.types.TypeSystem;
-import java.io.IOException;
 import java.math.BigInteger;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
@@ -56,6 +55,10 @@ final class Natives {
             case "thread", "Thread", "Mutex", "Atomic" -> in.threads.call(owner, name, recv, a, typeEnv, fn);
             case "Type" -> type(name, (TypeVal) recv, a);
             case "math" -> math(name, a);
+            case "io" -> {
+                in.checkAbort();
+                yield in.io.call(name, a);
+            }
             case "random" -> new Int(Prim.U64, ENTROPY.nextLong());
             // Collections lock themselves per operation (§13.4), but not around a callback.
             case "List" -> name.equals("with_ptr") ? in.ffi.withPtr(recv, (Values.FnVal) a[0])
@@ -68,7 +71,8 @@ final class Natives {
             case "int" -> integer(name, recv, a, fn);
             case "float" -> floating(name, recv, a, fn);
             case "str" -> name.equals("from_cstr") || name.equals("to_cstr") ? in.ffi.intrinsic("str", name, recv, a, typeEnv, fn)
-                    : name.equals("from_chars") ? fromChars(a[0], fn) : str(name, (String) recv, a);
+                    : name.equals("from_chars") ? fromChars(a[0], fn)
+                    : name.equals("from_utf8") ? fromUtf8((ListVal) a[0]) : str(name, (String) recv, a);
             case "char" -> character(name, (Char) recv, a);
             case "bool" -> switch (name) {
                 case "to_str" -> recv.toString();
@@ -88,6 +92,16 @@ final class Natives {
         var out = new StringBuilder();
         for (Object c; !in.isDone(c = in.next(it)); ) out.appendCodePoint(((Char) c).cp());
         return out.toString();
+    }
+
+    /** {@code str::from_utf8(bytes)}: invalid sequences become U+FFFD. */
+    private static String fromUtf8(ListVal bytes) {
+        byte[] b;
+        synchronized (bytes) {
+            b = new byte[bytes.items.size()];
+            for (int i = 0; i < b.length; i++) b[i] = (byte) ((Int) bytes.items.get(i)).v();
+        }
+        return new String(b, StandardCharsets.UTF_8);
     }
 
     /** {@code xs.join(sep)}: `to_str` runs user code, so it is called outside the list's lock. */
@@ -120,41 +134,8 @@ final class Natives {
 
     private Object prelude(String name, Object[] a) {
         in.checkAbort();
-        switch (name) {
-            case "print" -> in.out.print(in.display(a[0]));
-            case "println" -> in.out.println(in.display(a[0]));
-            case "eprintln" -> {
-                in.out.flush();
-                in.err.println(in.display(a[0]));
-            }
-            case "readln" -> {
-                return readln((String) a[0]);
-            }
-            case "panic" -> throw new Panic((String) a[0]);
-            default -> unknown("prelude." + name);
-        }
-        return Unit.UNIT;
-    }
-
-    /** A line of stdin without its `\n` or `\r\n`, or null at end of input (§16). */
-    private Object readln(String prompt) {
-        in.out.print(prompt);
-        in.out.flush();
-        var line = new StringBuilder();
-        synchronized (in.stdin) {
-            try {
-                for (int c; (c = in.stdin.read()) != -1; ) {
-                    if (c == '\n') {
-                        if (!line.isEmpty() && line.charAt(line.length() - 1) == '\r') line.setLength(line.length() - 1);
-                        return line.toString();
-                    }
-                    line.append((char) c);
-                }
-            } catch (IOException e) {
-                throw new Panic("readln: " + e.getMessage());
-            }
-        }
-        return line.isEmpty() ? null : line.toString();
+        if (name.equals("panic")) throw new Panic((String) a[0]);
+        return unknown("prelude." + name);
     }
 
     private Object type(String name, TypeVal t, Object[] a) {

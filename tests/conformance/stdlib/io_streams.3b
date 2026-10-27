@@ -1,0 +1,28 @@
+// std::io standard streams (§16): printing, stdin shared with readln, stream misuse.
+use std::io;
+use std::io::ModeErr;
+
+fn main() -> () | Err {
+    print("a");
+    print(1);
+    println('c');
+    eprint("to ");
+    eprintln("stderr");
+    let mut out = io::stdout();
+    out.write_line("via stdout()")?;
+    out.write_bytes([104, 105, 10])?;
+    out.flush()?;
+
+    // readln and stdin() read through one buffer.
+    println(readln());
+    let mut input = io::stdin();
+    println(input.read_line());
+    println(readln("> "));
+    println(input.read_bytes(3)?);
+    println(input.read());
+    println(readln());
+
+    println(input.write("x") is ModeErr);
+    println(io::stderr().read_line() is ModeErr);
+    println(input.seek(0) is io::IoErr);
+}

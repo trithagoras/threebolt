@@ -23,6 +23,8 @@ pub unsafe fn from_cstr(p: Ptr<std::c::char>) -> str;
 /// The string of `cs`'s characters, in order: the inverse of `chars()`.
 pub fn from_chars(cs: Iterable<char>) -> str;
 pub fn from_chars(cs: Iterator<char>) -> str;
+/// The string `bytes` encode in UTF-8 (the inverse of `bytes()`); invalid sequences become U+FFFD.
+pub fn from_utf8(bytes: [u8]) -> str;
 
 pub fn to_str(self) -> str;
 pub fn eq(self, o: Self) -> bool;

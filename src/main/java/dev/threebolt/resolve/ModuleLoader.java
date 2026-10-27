@@ -46,6 +46,9 @@ public final class ModuleLoader {
 
     private static final ModulePath PRELUDE = ModulePath.of("std", "prelude");
     private static final ModulePath COLLECTIONS = ModulePath.of("std", "collections");
+    private static final ModulePath IO = ModulePath.of("std", "io");
+    /** The std::io functions in the prelude. */
+    private static final List<String> IO_PRELUDE = List.of("print", "println", "eprint", "eprintln", "readln");
     private static final ModulePath C = ModulePath.of("std", "c");
 
     private static final Set<String> PRIMITIVES = Set.of(
@@ -79,7 +82,7 @@ public final class ModuleLoader {
         Module entry = parse(entryPath, file, new Source(fileName, reader.apply(file)));
         found.put(entryPath, Optional.of(entry));
 
-        for (var p : List.of(PRELUDE, COLLECTIONS, C)) {
+        for (var p : List.of(PRELUDE, COLLECTIONS, C, IO)) {
             if (find(p) == null) throw new IllegalStateException("missing std module " + p);
         }
         while (!pending.isEmpty()) discoverImports(pending.pop());
@@ -132,6 +135,7 @@ public final class ModuleLoader {
         if (m.ast() == null) return;
         var inScope = new java.util.HashSet<>(PRIMITIVES);
         inScope.addAll(List.of("Self", "Map", "Set", "c"));
+        inScope.addAll(IO_PRELUDE);
         var prelude = found.get(PRELUDE);
         if (prelude != null && prelude.isPresent() && prelude.get().ast() != null) {
             for (Item item : prelude.get().ast().items()) inScope.add(itemName(item));
@@ -435,7 +439,10 @@ public final class ModuleLoader {
 
     // ---- Prelude (§16) ----
 
-    /** The pub items of std::prelude, plus Map and Set from std::collections and the module alias `c`. */
+    /**
+     * The pub items of std::prelude, plus Map and Set from std::collections, the printing functions
+     * of std::io and the module alias `c`.
+     */
     private Map<String, List<Symbol>> preludeNames() {
         var names = new LinkedHashMap<String, List<Symbol>>();
         find(PRELUDE).scope().items().forEach((name, decls) -> {
@@ -443,6 +450,7 @@ public final class ModuleLoader {
             if (!pub.isEmpty()) names.put(name, pub);
         });
         for (String name : List.of("Map", "Set")) names.put(name, List.copyOf(find(COLLECTIONS).scope().items(name)));
+        for (String name : IO_PRELUDE) names.put(name, List.copyOf(find(IO).scope().items(name)));
         names.put("c", List.of(new Symbol.ModuleRef(find(C))));
         return Map.copyOf(names);
     }

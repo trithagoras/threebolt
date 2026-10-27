@@ -129,7 +129,7 @@ class ServerTest {
         assertEquals(uri(main), loc.getUri());
         assertEquals(new Position(4, 12), loc.getRange().getStart());
         loc = definition(main, "println");
-        assertTrue(loc.getUri().endsWith("/std/prelude.3b"), loc.getUri());
+        assertTrue(loc.getUri().endsWith("/std/io.3b"), loc.getUri());
         assertTrue(Files.readString(Path.of(java.net.URI.create(loc.getUri()))).contains("pub fn println"));
     }
 

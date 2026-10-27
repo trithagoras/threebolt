@@ -1,0 +1,50 @@
+// std::io paths (§16): existence, sizes, directories, renaming, copying, removing.
+use std::io;
+use std::io::{IoErr, NotFoundErr, ExistsErr, IsDirErr, NotDirErr, NotEmptyErr};
+
+fn main() -> () | Err {
+    let root = io::temp_dir() + "/threebolt-conformance-io-paths";
+    let dir = root + "/one/two";
+    io::create_dirs(dir)?;
+    io::create_dirs(dir)?;                       // fine if it exists
+    println(io::is_dir(dir));
+    let r = io::create_dir(dir);
+    println(r is ExistsErr);
+
+    let a = dir + "/a.txt";
+    io::write_text(a, "héllo")?;
+    println(io::exists(a));
+    println(io::is_file(a));
+    println(io::is_dir(a));
+    println(io::file_size(a)?);                  // bytes, not characters
+
+    let b = dir + "/b.txt";
+    io::copy(a, b)?;
+    println(io::read_text(b)?);
+    println(io::list_dir(dir)?);
+    let c = dir + "/c.txt";
+    io::rename(b, c)?;
+    println(io::exists(b));
+    println(io::list_dir(dir)?);
+
+    // Errors keep their path.
+    let missing = dir + "/missing.txt";
+    let e = io::read_text(missing);
+    if e is NotFoundErr { println(e.path == missing); }
+    println(io::file_size(missing) is NotFoundErr);
+    println(io::remove(missing) is NotFoundErr);
+    println(io::open(dir) is IsDirErr);
+    println(io::create_dir(a + "/sub") is NotDirErr);
+    println(io::list_dir(a) is NotDirErr);
+    let ne = io::remove(dir);
+    if ne is NotEmptyErr { println(ne.message() == "directory not empty: " + dir); }
+    println(io::exists(missing));
+
+    io::remove(a)?;
+    io::remove(c)?;
+    io::remove(dir)?;
+    io::remove(root + "/one")?;
+    println(io::list_dir(root)?);
+    io::remove(root)?;
+    println(io::exists(root));
+}

@@ -47,7 +47,7 @@ class ModuleLoaderTest {
         write("unrelated.3b", "this does not even parse");
         var program = load();
         assertEquals(List.of(), errors());
-        assertEquals(java.util.Set.of("main", "game::entity", "std::prelude", "std::collections", "std::c"),
+        assertEquals(java.util.Set.of("main", "game::entity", "std::prelude", "std::collections", "std::c", "std::io"),
                 program.all().stream().map(m -> m.path().toString()).collect(java.util.stream.Collectors.toSet()));
         var scope = program.entry().scope();
         assertInstanceOf(Symbol.ModuleRef.class, scope.lookup("entity").getFirst());
@@ -82,7 +82,7 @@ class ModuleLoaderTest {
         var scope = load().entry().scope();
         assertEquals(List.of(), errors());
         var println = (Item.Fn) declaration(scope.lookup("println"));
-        assertEquals("std/prelude.3b", println.span().source().name());
+        assertEquals("std/io.3b", println.span().source().name());
         var c = assertInstanceOf(Symbol.ModuleRef.class, scope.lookup("c").getFirst());
         assertEquals("std::c", c.module().path().toString());
         assertEquals("m.3b", declaration(scope.lookup("Map")).span().source().name());

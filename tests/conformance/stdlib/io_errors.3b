@@ -1,0 +1,11 @@
+// std::io misuse.
+use std::io;
+
+fn main() -> () | Err {
+    let f = io::open("a.txt", "rw");
+    let g = io::open("a.txt")?;
+    g.read_line();
+    let mut h = io::open("a.txt", mode: "w")?;
+    h.write("x");
+    println(io::stdin());
+}

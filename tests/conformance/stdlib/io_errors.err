@@ -1,0 +1,5 @@
+io_errors.3b:5:31: error[E0200]: expected '"r" | "r+" | "rt" | "r+t" | "rt+" | "rb" | "r+b" | "rb+" | "w" | "w+" | "wt" | "w+t" | "wt+" | "wb" | "w+b" | "wb+" | "a" | "a+" | "at" | "a+t" | "at+" | "ab" | "a+b" | "ab+" | "x" | "x+" | "xt" | "x+t" | "xt+" | "xb" | "x+b" | "xb+"', found '"rw"'
+io_errors.3b:7:5: error[E0301]: 'read_line' takes `mut self`, but cannot assign to immutable binding 'g'; declare it `let mut`
+io_errors.3b:7:5: error[E0211]: this value of type 'str | null | IoErr' may be an error; handle it, propagate it with `?`, or discard it with `_ = ...;`
+io_errors.3b:8:17: error[E0204]: no overload of 'open' takes these arguments
+io_errors.3b:10:5: error[E0216]: 'File' does not implement 'Display' (required by 'T')

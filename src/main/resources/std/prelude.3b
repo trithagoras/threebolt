@@ -1,15 +1,9 @@
 // std::prelude: implicitly imported into every module (spec §16). The loader also adds `Map` and
-// `Set` from std::collections and the module alias `c` for std::c.
+// `Set` from std::collections, `print`, `println`, `eprint`, `eprintln` and `readln` from std::io,
+// and the module alias `c` for std::c.
 //
 // Functions without a body are intrinsics provided by the interpreter.
 
-pub fn print<T: Display>(x: T);
-pub fn println<T: Display>(x: T);
-pub fn eprintln<T: Display>(x: T);
-/// Prints `prompt`, flushes stdout and reads a line from stdin without its `\n` or `\r\n`;
-/// null at end of input.
-pub fn readln(prompt: str) -> str | null;
-pub fn readln() -> str | null => readln("");
 pub fn panic(msg: str) -> !;
 pub fn error(msg: str) -> Err => MsgErr::new(msg);
 pub fn len<T: Len>(x: T) -> usize => x.len;

@@ -32,11 +32,8 @@ import dev.threebolt.types.Type;
 import dev.threebolt.types.TypeInfo;
 import dev.threebolt.types.TypeParamInfo;
 import dev.threebolt.types.TypeSystem;
-import java.io.BufferedReader;
 import java.io.InputStream;
-import java.io.InputStreamReader;
 import java.io.PrintStream;
-import java.nio.charset.StandardCharsets;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -59,12 +56,13 @@ public final class Interpreter {
     final TypeSystem ts;
     private final CheckedProgram program;
     /** UTF-8, malformed input replaced with U+FFFD; read under its own lock. */
-    final BufferedReader stdin;
+    final InputStream stdin;
     final PrintStream out;
     final PrintStream err;
     final Natives natives;
     final Ffi ffi = new Ffi(this);
     final Threads threads = new Threads(this);
+    final Io io = new Io(this);
     /** The `Done` sentinel (§16). */
     final Obj done;
 
@@ -85,7 +83,7 @@ public final class Interpreter {
     public Interpreter(CheckedProgram program, InputStream in, PrintStream out, PrintStream err) {
         this.program = program;
         this.ts = program.ts();
-        this.stdin = new BufferedReader(new InputStreamReader(in, StandardCharsets.UTF_8));
+        this.stdin = in;
         this.out = out;
         this.err = err;
         this.natives = new Natives(this);

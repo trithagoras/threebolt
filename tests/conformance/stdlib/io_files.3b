@@ -1,0 +1,87 @@
+// std::io files (§16): whole-file helpers, line reads, modes, bytes, seeking and the errors.
+use std::io;
+use std::io::{File, IoErr, ExistsErr, ModeErr, ClosedErr, SeekFrom};
+
+fn main() -> () | Err {
+    let dir = io::temp_dir() + "/threebolt-conformance-io-files";
+    io::create_dirs(dir)?;
+    let p = f"{dir}/a.txt";
+
+    // Whole files; line reads drop `\n` and `\r\n` and keep a last line without one.
+    io::write_text(p, "alpha\nbeta\r\n\ngamma")?;
+    println(io::read_text(p)?.len);
+    println(io::read_lines(p)?);
+    io::append_text(p, "\ndelta\n")?;
+    let mut n = 0;
+    for line in io::lines(p)? {
+        n += 1;
+        println(f"{n}: [{line?}]");
+    }
+
+    // read_line until null, which repeats; close is idempotent and ends further use.
+    let mut f = io::open(p)?;
+    println(f.read_line());
+    println(f.read());
+    println(f.read_line());
+    println(f.read_line());
+    println(f.path == p);
+    f.close();
+    f.close();
+    println(f.closed);
+    let r = f.read_line();
+    println(r is ClosedErr);
+
+    // `w` truncates, `x` refuses an existing file, `r+` writes where reading stopped.
+    let mut w = io::open(p, "w")?;
+    defer w.close();
+    w.write_line("12345")?;
+    w.write("67890")?;
+    println(w.read() is ModeErr);
+    let x = io::open(p, "x");
+    if x is ExistsErr { println(x.message().ends_with("already exists: " + p)); }
+    let mut rw = io::open(p, "r+")?;
+    defer rw.close();
+    println(rw.read_line());
+    rw.write("ab")?;
+    println(io::read_text(p)?);
+
+    // `a+` reads from the start but always writes at the end.
+    let mut ap = io::open(p, "a+")?;
+    defer ap.close();
+    println(ap.read_line());
+    ap.write("!")?;
+    println(ap.read());
+    println(io::read_lines(p)?);
+
+    // Bytes, which need a binary mode; invalid UTF-8 reads as U+FFFD in text.
+    let b = f"{dir}/b.bin";
+    io::write_bytes(b, [104, 105, 255, 10, 0, 1, 2])?;
+    println(io::read_bytes(b)?);
+    println(io::read_text(b)?.chars().map(c => c as u32).to_list());
+    let mut bf = io::open(b, "rb")?;
+    defer bf.close();
+    println(bf.read_bytes(2)?);
+    println(bf.tell()?);
+    println(bf.seek(-2, from: SeekFrom::End)?);
+    println(bf.read_bytes(10)?);
+    println(bf.read_bytes(10)?);
+    println(bf.seek(1)?);
+    println(bf.read_bytes(1)?);
+    println(bf.seek(1, from: SeekFrom::Current)?);
+    println(bf.read_bytes(1)?);
+    let t = bf.read_line();
+    if t is ModeErr { println(t.message().starts_with("binary file has no text methods: ")); }
+    let mut tf = io::open(b)?;
+    defer tf.close();
+    let e = tf.read_bytes();
+    if e is IoErr { println(e.message().starts_with("text file has no byte methods")); }
+
+    // `x` creates a file that does not exist yet.
+    let fresh = f"{dir}/fresh.txt";
+    _ = io::remove(fresh);
+    let mut xf = File::open(fresh, "x+")?;
+    defer xf.close();
+    xf.write("new")?;
+    println(xf.seek(0)?);
+    println(xf.read());
+}

@@ -1,14 +1,8 @@
-// wordle!
-use std::io::fopen;
+use std::io;
 use std::random;
 
 fn main() -> () | Err {
-    let mut lines: [str] = [];
-    let mut f = fopen("words.txt")?;
-    defer {
-        let _ = f.close();
-    }
-    lines = f.read_lines()?;
+    let lines = io::read_lines("words.txt")?;
     println(f"Loaded {len(lines)} words.");
 
     let word = random::choice(lines);
