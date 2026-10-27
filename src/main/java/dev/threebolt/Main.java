@@ -67,7 +67,7 @@ public final class Main {
         var diagnostics = new Diagnostics();
         var program = Driver.check(file, diagnostics);
         if (program == null) return report(diagnostics);
-        return Driver.run(program, args, System.out, System.err);
+        return Driver.run(program, args, System.in, System.out, System.err);
     }
 
     private static int dumpTokens(Path file) throws IOException {

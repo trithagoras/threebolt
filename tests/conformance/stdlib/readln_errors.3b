@@ -1,0 +1,6 @@
+// readln misuse.
+fn main() {
+    let s: str = readln();
+    let t = readln(1);
+    let u = readln(prompt: "> ");
+}

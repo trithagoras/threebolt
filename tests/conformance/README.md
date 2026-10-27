@@ -16,5 +16,6 @@ A case without errors is then run (its `main`, as `threebolt run` would):
   traces, `main`'s error message); a missing file means empty.
 - `//! exit: N` on a line of its own sets the expected exit code (default 0; panics are 101).
 - `//! args: a b c` passes arguments to `main(args: [str])`.
+- `<case>.in`, if present, is the program's stdin (otherwise stdin is empty).
 
 `./gradlew test -PupdateGolden` also rewrites `.out` and `.stderr` (not the `//!` directives).

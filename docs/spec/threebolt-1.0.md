@@ -687,7 +687,7 @@ C layout (declaration order, C alignment). Fields must be ABI types; an `@c stru
 
 Implicitly imported names:
 
-**Functions:** `print<T: Display>(x: T)`, `println<T: Display>(x: T)`, `eprintln<T: Display>(x: T)` (write `x.to_str()`; `println` and `eprintln` add a newline), `panic(msg: str) -> !`, `error(msg: str) -> Err`, `len<T: Len>(x: T) -> usize`.
+**Functions:** `print<T: Display>(x: T)`, `println<T: Display>(x: T)`, `eprintln<T: Display>(x: T)` (write `x.to_str()`; `println` and `eprintln` add a newline), `readln() -> str | null` and `readln(prompt: str) -> str | null` (write `prompt` to stdout, flush stdout, then read one line from stdin as UTF-8, invalid bytes becoming U+FFFD; the result excludes the terminating `\n` or `\r\n`; a final line without a terminator is still returned; `null` at end of input; an I/O error panics), `panic(msg: str) -> !`, `error(msg: str) -> Err`, `len<T: Len>(x: T) -> usize`.
 
 **Types:** `MsgErr`, `Done`, `Type`, `List<T>` (`[T]`), `Map<K: Hash + Eq, V>`, `Set<T: Hash + Eq>`, `Range<T>`, `Ptr<T>`, module alias `c`.
 
@@ -948,3 +948,6 @@ Semantics the spec left open, decided while implementing:
 
 ### 2026-10-27 — `Err` is the error trait
 - §12, §16 Renamed the error trait `Error` to `Err` and the prelude's message-error class `Err` to `MsgErr`. `error(msg)` now returns `Err` (a `MsgErr` behind the trait reference), so `T | Err` accepts `error(...)` and every user error alike; `impl Display for Err` keeps any `Err` printable. Before, `T | Err` meant the concrete class, so a user error that implemented `Error` without subclassing `Err` could not be returned or `?`-propagated through it.
+
+### 2026-10-27 — `readln`
+- §16 Prelude functions `readln()` and `readln(prompt: str)`, returning `str | null`: print the prompt (an overload rather than a default parameter, so it is positional), flush stdout, and read a line from stdin without its `\n`/`\r\n`; `null` at end of input (like `pop`, not an error); an I/O error panics.

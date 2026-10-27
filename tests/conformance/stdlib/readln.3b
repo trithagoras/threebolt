@@ -1,0 +1,16 @@
+// readln (§16): prompts, line terminators, UTF-8, end of input.
+fn main() {
+    let name = readln("name? ") ?? "nobody";
+    println(f"hello, {name}");
+    let n = i32::parse(readln() ?? "") ?? -1;
+    println(n * 2);
+    println(f"[{readln()}]");                // `\r\n` is stripped
+    println(f"[{readln()}]");                // an empty line is "", not null
+    println(readln() ?? "?");                // UTF-8 (`é`, then an invalid byte as U+FFFD)
+    let mut count = 0;
+    while let line = readln() {
+        count += 1;
+        println(f"{count}: {line}");
+    }
+    println(readln());                       // still null after end of input
+}

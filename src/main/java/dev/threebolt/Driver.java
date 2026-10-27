@@ -5,6 +5,7 @@ import dev.threebolt.interp.Interpreter;
 import dev.threebolt.resolve.ModuleLoader;
 import dev.threebolt.types.CheckedProgram;
 import dev.threebolt.types.Checker;
+import java.io.InputStream;
 import java.io.PrintStream;
 import java.nio.file.Path;
 import java.util.List;
@@ -25,8 +26,8 @@ public final class Driver {
      * exit code once the process ends: when `main` returns, or on a panic or `exit` on any thread
      * (§2.4, §13.1). Threebolt threads still running are daemons and are told to stop.
      */
-    public static int run(CheckedProgram program, List<String> args, PrintStream out, PrintStream err) {
-        var interpreter = new Interpreter(program, out, err);
+    public static int run(CheckedProgram program, List<String> args, InputStream in, PrintStream out, PrintStream err) {
+        var interpreter = new Interpreter(program, in, out, err);
         var thread = new Thread(null, () -> interpreter.run(args), "main", Interpreter.STACK_SIZE);
         thread.setDaemon(true);
         thread.start();

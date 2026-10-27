@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import dev.threebolt.diag.Diagnostic;
 import dev.threebolt.diag.Diagnostics;
+import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.PrintStream;
@@ -20,7 +21,8 @@ import org.junit.jupiter.api.TestFactory;
 /**
  * Runs tests/conformance (see its README): each case is checked, and its diagnostics compared
  * with the case's `.err` file (none expected without one). A case without errors is then run and
- * its stdout, stderr and exit code compared with `.out`, `.stderr` and the `//! exit:` directive.
+ * its stdout, stderr and exit code compared with `.out`, `.stderr` and the `//! exit:` directive
+ * (with `.in`, if present, as stdin).
  * `-PupdateGolden` rewrites the `.err`, `.out` and `.stderr` files instead.
  */
 class ConformanceTest {
@@ -66,7 +68,10 @@ class ConformanceTest {
         int code;
         try (var o = new PrintStream(out, true, StandardCharsets.UTF_8);
              var e = new PrintStream(err, true, StandardCharsets.UTF_8)) {
-            code = Driver.run(program, directive(source, "args").map(a -> List.of(a.split(" +"))).orElse(List.of()), o, e);
+            var args = directive(source, "args").map(a -> List.of(a.split(" +"))).orElse(List.of());
+            Path stdin = sibling(entry, ".in");
+            var in = new ByteArrayInputStream(Files.isRegularFile(stdin) ? Files.readAllBytes(stdin) : new byte[0]);
+            code = Driver.run(program, args, in, o, e);
         }
         golden(sibling(entry, ".out"), out.toString(StandardCharsets.UTF_8));
         golden(sibling(entry, ".stderr"), err.toString(StandardCharsets.UTF_8));

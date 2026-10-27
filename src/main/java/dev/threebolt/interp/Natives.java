@@ -20,6 +20,7 @@ import dev.threebolt.types.Type;
 import dev.threebolt.types.TypeInfo;
 import dev.threebolt.types.TypeParamInfo;
 import dev.threebolt.types.TypeSystem;
+import java.io.IOException;
 import java.math.BigInteger;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
@@ -102,10 +103,34 @@ final class Natives {
                 in.out.flush();
                 in.err.println(in.display(a[0]));
             }
+            case "readln" -> {
+                return readln((String) a[0]);
+            }
             case "panic" -> throw new Panic((String) a[0]);
             default -> unknown("prelude." + name);
         }
         return Unit.UNIT;
+    }
+
+    /** A line of stdin without its `\n` or `\r\n`, or null at end of input (§16). */
+    private Object readln(String prompt) {
+        in.out.print(prompt);
+        in.out.flush();
+        var line = new StringBuilder();
+        synchronized (in.stdin) {
+            try {
+                for (int c; (c = in.stdin.read()) != -1; ) {
+                    if (c == '\n') {
+                        if (!line.isEmpty() && line.charAt(line.length() - 1) == '\r') line.setLength(line.length() - 1);
+                        return line.toString();
+                    }
+                    line.append((char) c);
+                }
+            } catch (IOException e) {
+                throw new Panic("readln: " + e.getMessage());
+            }
+        }
+        return line.isEmpty() ? null : line.toString();
     }
 
     private Object type(String name, TypeVal t, Object[] a) {

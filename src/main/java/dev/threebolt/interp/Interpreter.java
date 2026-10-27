@@ -32,7 +32,11 @@ import dev.threebolt.types.Type;
 import dev.threebolt.types.TypeInfo;
 import dev.threebolt.types.TypeParamInfo;
 import dev.threebolt.types.TypeSystem;
+import java.io.BufferedReader;
+import java.io.InputStream;
+import java.io.InputStreamReader;
 import java.io.PrintStream;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -54,6 +58,8 @@ import java.util.function.UnaryOperator;
 public final class Interpreter {
     final TypeSystem ts;
     private final CheckedProgram program;
+    /** UTF-8, malformed input replaced with U+FFFD; read under its own lock. */
+    final BufferedReader stdin;
     final PrintStream out;
     final PrintStream err;
     final Natives natives;
@@ -76,9 +82,10 @@ public final class Interpreter {
     /** The Java threads running Threebolt code, interrupted when the process ends. */
     private final Set<Thread> running = ConcurrentHashMap.newKeySet();
 
-    public Interpreter(CheckedProgram program, PrintStream out, PrintStream err) {
+    public Interpreter(CheckedProgram program, InputStream in, PrintStream out, PrintStream err) {
         this.program = program;
         this.ts = program.ts();
+        this.stdin = new BufferedReader(new InputStreamReader(in, StandardCharsets.UTF_8));
         this.out = out;
         this.err = err;
         this.natives = new Natives(this);
