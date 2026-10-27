@@ -135,7 +135,49 @@ Built in one go rather than slice by slice, because one checker and one interpre
 - Rename refuses std and built-in names, `self`, non-identifiers and shorthand fields; it renames a method's whole override chain, edits `use` paths, and leaves uses through an import alias alone.
 - Build: `./gradlew vscodeServer` (fat jar `build/server/threebolt.jar`, copied into `editors/vscode/server/`). The `antlr` configuration is kept off the runtime classpath (the tool is 17 MB).
 - Tests: `lsp.ServerTest` (in-process server over a temp program), `types.SymbolIndexTest` (every name in examples and conformance spells its target and its definition).
-- Not done: completion, signature help, semantic tokens, doc comments in hovers (they are on the `DOC` channel, not in the AST), formatting (`AstPrinter` drops comments), renaming trait methods across impls (only override chains are linked), named arguments (`f(x: 1)`) are not indexed.
+- Not done: completion and signature help (planned in the next section), semantic tokens, doc comments in hovers (they are on the `DOC` channel, not in the AST), formatting (`AstPrinter` drops comments), renaming trait methods across impls (only override chains are linked), named arguments (`f(x: 1)`) are not indexed.
+
+### Editor support — next: completion and signature help (tier 3b, not started)
+Goal: `textDocument/completion` after `.`, `::` and on bare identifiers, and `textDocument/signatureHelp` inside call parentheses. Branch off `lsp` (or main once it is merged). No language semantics change, so the spec does not change.
+
+**The core problem:** the code being completed rarely parses (`p.` alone is a syntax error), and `AstParser` gives no AST when the parse fails. So the server patches the text before checking it.
+
+**Approach: a placeholder identifier.**
+1. On a completion request, take the editor's current text and insert a placeholder identifier `__3b_complete` at the cursor (`p.` → `p.__3b_complete`, `shapes::` → `shapes::__3b_complete`, `pri` → `pri__3b_complete`, so the typed prefix becomes `pri` and is filtered on afterwards).
+2. Parse it. If that fails, retry with `;` after the placeholder, then with `);`. Checked 2026-10-27: `p.__3b_complete` followed by another statement on the next line fails on the missing `;`, and a trailing comma `f(1, )` parses (only an argument-count error). Drop the patched text if no variant parses (see the fallback below).
+3. Check the patched program synchronously on the analysis thread (`Analysis.run` with a reader that substitutes the patched buffer). A full check of `examples/arena` takes about 0.27 s for a cold JVM run, startup included, so the warm in-server check should be fast. Measure it first; caching std's parse is the next step if it is slow.
+4. The checker reaches the placeholder through the normal error paths (no such member, unresolved name, module has no item). At those points, a new hook on `SymbolIndex` (e.g. `completionSite(...)`, recorded only when the name is the placeholder) captures what the editor needs:
+   - `Exprs.member` / `getter` / `Calls.methodCall`, member access: the receiver's type (after narrowing) and `c.ctx.enclosing` (for visibility).
+   - `Exprs.pathTarget` / `memberTarget`, `Type::x`: the qualifier type and decl (enum members, statics, static fns, primitive constants such as `MIN`/`MAX`/`NAN`, trait statics via `T::`).
+   - `Names.continueFrom` / `fullyQualified`, `module::x`: the module (its items, `pub` only from another module, plus submodules from `program.modules()`).
+   - Bare identifier (`Exprs.path`, single segment, unresolved): a snapshot of the scope: visible locals (walk `Checker.Scope` parents), `self`, `ctx.typeScope.params()`, `ctx.module.scope()` (items, imports, prelude), primitives.
+   - `TypeResolver.named` (type position, e.g. `let x: Po|`): types only (module scope types, type params, primitives, `Self`).
+5. Turn the captured site into `CompletionItem`s: label, kind (Field/Method/Function/Struct/Class/Interface/Enum/EnumMember/Module/Variable/Constant/TypeParameter/Keyword), `detail` = the `SymbolIndex.describe` text (signatures), filtered by the typed prefix. Locals sort first, then members declared on the type itself, then inherited/trait members, then prelude.
+
+**Listing members (new code; `Calls.methodCandidates(t, name)` only finds one name).** Add `Calls.allMembers(Type t)` (or a `Members` helper) that mirrors `methodCandidates` but collects every name: inherent methods incl. base classes (`collectClassMethods`), trait methods through `ts.implsOf` and `TypeSystem.selfAndSupers`, type-parameter bounds, union-safe traits for unions, builtin member tables for primitives (`ts.prims`) and std types (`List`, `Map`, `str`, ...). Fields come from `TypeInfo.allFields`. Respect visibility with `Exprs.checkAccess` semantics, but without reporting. Mark getters as properties (no parentheses). Instance members after `.`, statics after `::`. Keep the existing `methodCandidates` behaviour unchanged, and unit-test that each name `allMembers` lists resolves through `methodCandidates`.
+
+**Context fallback when no patched variant parses:** offer the current file's module-level names, the prelude and keywords (from `ThreeboltLexer`'s vocabulary), using the last analysis that parsed. Do not guess member lists.
+
+**`use` lines:** `use a::|` resolves in `ModuleLoader`, not the checker. Complete module paths from the files under the source root plus `ModuleLoader.STD_MODULES` (expose it), and items of a loaded module. Handle this by looking at tokens before any patching, since it needs no types.
+
+**Signature help:**
+- Find the innermost unclosed `(` before the cursor with the lexer (balanced `()[]{}`; the lexer never fails). Count the commas at depth 0 to get the active argument; a `name:` before the cursor selects that parameter by name.
+- Resolve the callee with the same placeholder trick (`f(1, __3b_complete)`, retrying with `)` / `);`). Add a hook in `Calls.pathCall` / `methodCall` / `superCall`: when an argument span contains the placeholder, record the candidate list (all overloads: `FnTarget.candidates()` or `methodCandidates`), substituted with the receiver's `env` so the parameter types are instantiated.
+- Answer with one `SignatureInformation` per overload; parameter labels as `name: Type` with `= ...` for optional ones (reuse `SymbolIndex.signature`'s parameter rendering, split per parameter), and the active parameter as computed above.
+- Trigger characters: `(` and `,`. Re-trigger on `)`.
+
+**Server and client wiring:** `ServerCapabilities.setCompletionProvider(new CompletionOptions(false, List.of(".", ":")))` (for `:` complete only after `::`) and `setSignatureHelpProvider(new SignatureHelpOptions(List.of("(", ",")))`. The VS Code client needs no change; repackage the extension (see editors/vscode/README.md). Keep completion requests off the debounced path: run them on the analysis executor, ahead of pending debounced work, and never record their patched analysis in `Workspace` (it must not publish diagnostics or become the analysis that queries answer from).
+
+**Tests:** `lsp.CompletionTest` in `ServerTest`'s style, with sources that mark the cursor with `|`:
+- after `.`: fields, methods, getters, inherited and trait methods, private members hidden outside the type, a narrowed union;
+- after `Type::`: enum members, statics, a primitive's `MAX`;
+- after `module::`: `pub` items only, submodules;
+- bare names: locals in scope only (not later ones or ones from a sibling block), params, `self`, imports, prelude, type params;
+- type positions: types only;
+- a statement missing its `;`, and text that cannot be patched (the fallback);
+- signature help: overloads, active parameter by position and by name, a nested call, a method on a generic receiver (instantiated types).
+
+**Afterwards (optional, separate commits):** doc comments in hovers and completion details (attach the `DOC`-channel tokens before each item/member in `AstBuilder`, or collect them in the loader keyed by the following item's span); `textDocument/semanticTokens` from `SymbolIndex.refsIn` (types vs. values vs. modules, which the TextMate grammar can only guess from capitalisation).
 
 ## Conventions for the implementing agent
 - The spec is the source of truth; if code and spec disagree, fix one deliberately and record it.
