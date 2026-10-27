@@ -1,0 +1,77 @@
+// all io stuff! TODO: move print/println/eprintln + readln here!
+
+extern "C" {
+    fn fopen(path: Ptr<c::char>, mode: Ptr<c::char>) -> Ptr<u8>;   // FILE* as an opaque pointer
+    fn fgets(buf: Ptr<c::char>, n: c::int, f: Ptr<u8>) -> Ptr<c::char>;
+    fn fclose(f: Ptr<u8>) -> c::int;
+}
+
+// TODO: abstract with more specific file errors (e.g. insufficient permissions, etc. based on errno)
+pub abstract class FileErr : Err {
+    pub virtual fn message(self) -> str => "File error";
+}
+
+pub class FileOpenErr : FileErr {
+    let path: str;
+
+    pub fn new(path: str) -> FileOpenErr => { path };
+    pub override fn message(self) -> str => f"File at path {self.path} could not be opened.";
+}
+
+pub class FileClosedErr : FileErr {
+    pub fn new() -> FileClosedErr => { };
+    pub override fn message(self) -> str => f"File is not open.";
+}
+
+// TODO: extend this obviously! Just for demo purposes.
+type FileOpenMode = 'r' | 'w';
+
+/// always ensure to run `close()` to cleanup resources!
+pub class File {
+    let handle: Ptr<u8>;
+
+    pub get fn opened(self) -> bool => !self.handle.is_null();
+
+    fn new(handle: Ptr<u8>) -> File => { handle };
+
+    pub fn open(path: str, mode: FileOpenMode | null = null) -> File | FileErr {
+        let mode = (mode ?? 'r').to_str().to_cstr();
+        let cpath = path.to_cstr();
+        let f = unsafe => fopen(cpath, mode);
+        
+        defer unsafe => c::free(cpath);     // defer freeing memory for path and mode -- NOT handle!
+        defer unsafe => c::free(mode);
+
+        if (f.is_null()) {
+            // TODO: check C's global errno!
+
+            // no need to free handle because it was not successfully set.
+            return FileOpenErr::new(path);
+        }
+
+        return File::new(f);
+    }
+
+    pub fn close(mut self) -> () | FileErr {
+        self.demand_file_opened()?;
+        unsafe => fclose(self.handle);
+        self.handle = Ptr<u8>::null();
+    }
+
+    // TODO: iter?
+    pub fn read_lines(mut self) -> [str] | FileErr {
+        self.demand_file_opened()?;
+        let mut lines: [str] = [];
+        let buf = c::alloc<c::char>(4096);
+        defer unsafe => c::free(buf);
+        while !(unsafe => fgets(buf, 4096, self.handle)).is_null() {
+            lines.push((unsafe => str::from_cstr(buf)).trim());
+        }
+        return lines;
+    }
+
+    fn demand_file_opened(self) -> () | FileClosedErr => () if self.opened else FileClosedErr::new();
+}
+
+// convenient wrapper
+pub fn fopen(path: str, mode: FileOpenMode | null = null) -> File | FileErr => File::open(path, mode: mode);
