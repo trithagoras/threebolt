@@ -32,8 +32,11 @@ final class Patterns {
 
     /** A `let`/`for` pattern: must match every value of {@code type} (§11). */
     Ir.Pat irrefutable(Pattern p, Type type) {
+        int before = diag.count() + diag.dropped();
         var pat = pattern(p, type, new LinkedHashMap<>(), null);
-        if (type != Type.ERROR && !covers(pat, type)) {
+        // A pattern that is already wrong (e.g. the wrong tuple arity) needs no second error.
+        boolean reported = diag.count() + diag.dropped() > before;
+        if (type != Type.ERROR && !reported && !covers(pat, type)) {
             diag.error(Code.REFUTABLE_PATTERN, p.span(), "this pattern does not match every '" + type
                     + "'; `let` and `for` need irrefutable patterns");
         }
