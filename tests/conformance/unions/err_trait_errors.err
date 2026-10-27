@@ -1,0 +1,2 @@
+err_trait_errors.3b:3:14: error[E0403]: 'Bad' is missing 'message' required by trait 'Err'
+err_trait_errors.3b:6:12: error[E0200]: expected 'i32 | Bad', found 'Err'

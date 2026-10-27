@@ -16,7 +16,7 @@ import java.util.Set;
  */
 public final class TypeSystem {
     /** Well-known std declarations, set by the {@link Declarer}. */
-    public TypeInfo list, map, set, range, done, err, typeDecl, ptr, nativeIter;
+    public TypeInfo list, map, set, range, done, typeDecl, ptr, nativeIter;
     public TypeInfo display, eq, ord, hash, truthy, len, error, defaultTrait, iterator, iterable, contains, index, indexMut;
     public TypeInfo num, signed, integer, floatTrait;
     public final Map<String, TypeInfo> operatorTraits = new HashMap<>();

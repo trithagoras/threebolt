@@ -82,7 +82,7 @@ use std::math::*;               // every pub item of a module
 - Trait method implementations are always public.
 
 ### 2.4 Entry point
-- The entry module MUST declare `fn main()` or `fn main(args: [str])`, return type `()` or `() | E` where every non-`()` member implements `Error`.
+- The entry module MUST declare `fn main()` or `fn main(args: [str])`, return type `()` or `() | E` where every non-`()` member implements `Err`.
 - `args` excludes the program name.
 - Returning an error: its `message()` (just the message, followed by a newline) is written to stderr, exit code 1. Normal return: exit code 0. `std::process::exit(code: i32)` terminates immediately; pending `defer`s do not run.
 
@@ -93,7 +93,7 @@ use std::math::*;               // every pub item of a module
 ### 3.1 Primitive types
 `i8 i16 i32 i64 isize u8 u16 u32 u64 usize f32 f64 bool char str`
 
-- Primitive names are lowercase and predeclared, not keywords; static members use paths as for any type (`i32::parse(s)`, `u64::MAX`, `str::from_cstr(p)`). Declaring a type with a primitive's name is an error (outside the standard library: `c::char`, §14.2, is an alias in `std::c`). Nominal and stdlib types are PascalCase (`Type`, `Err`, `List`, `Ptr`, …).
+- Primitive names are lowercase and predeclared, not keywords; static members use paths as for any type (`i32::parse(s)`, `u64::MAX`, `str::from_cstr(p)`). Declaring a type with a primitive's name is an error (outside the standard library: `c::char`, §14.2, is an alias in `std::c`). Nominal and stdlib types are PascalCase (`Type`, `MsgErr`, `List`, `Ptr`, …).
 - `str`: immutable UTF-8 text, reference semantics but immutable (identity unobservable). No integer indexing; `.chars()`, `.bytes()`, `.len` (bytes).
 - `char`: Unicode scalar value (32-bit).
 - `()`: unit, the empty tuple; sole value `()`.
@@ -348,7 +348,7 @@ A **place** is a local binding, parameter, `self`, a field access on a place or 
 
 - A `{` at the start of a statement always begins a block. Blocks create scopes. Blocks are not expressions.
 - Assignment is a statement, not an expression (except as an `=>` body, §7.1).
-- Expression statements: any expression. Discarding a value whose type contains a member implementing `Error` ⇒ error; use `_ = expr;`.
+- Expression statements: any expression. Discarding a value whose type contains a member implementing `Err` ⇒ error; use `_ = expr;`.
 
 ### 6.2 Assignment
 `place = expr;` and `place op= expr;` for `+ - * / % & | ^ << >>`. `place op= e` evaluates `place` once. `_ = expr;` evaluates and discards.
@@ -484,7 +484,7 @@ x => { let y = x * 2; return y; }
 - A collection literal operand (`[...]`, `[v; n]`, `[k: v]`, `[]`, `[:]`) takes `T` as its expected type (§7.7): `[] as [i32]`, `[:] as Map<str, i32>`.
 
 ### 7.10 `?` propagation
-- Postfix `e?` where `e: U`. Let `F` = members of `U` that are `null` or implement `Error`. If `F` is empty ⇒ error.
+- Postfix `e?` where `e: U`. Let `F` = members of `U` that are `null` or implement `Err`. If `F` is empty ⇒ error.
 - At runtime, if the value's type is in `F`, the enclosing function (or lambda) returns it immediately (running defers). Otherwise the expression yields the value, typed `U minus F`.
 - Every member of `F` must be assignable to the enclosing return type ⇒ else error.
 
@@ -591,8 +591,10 @@ Prelude traits for code generic over numbers, after Haskell's numeric classes:
 
 ## 12. Errors
 
-- `trait Error { fn message(self) -> str; }`.
-- stdlib `pub class Err : Error, Display` with `pub fn new(msg: str) -> Self`, `pub virtual fn message(self) -> str` (subclasses may override it) and `to_str` = `message()`; prelude function `error(msg: str) -> Err` ≡ `Err::new(msg)`. User errors: any struct or class implementing `Error` (or subclassing `Err`).
+- `trait Err { fn message(self) -> str; }`. User errors: any struct or class implementing `Err`.
+- `Err` as a type is a trait reference (§8.3) holding any error, so `T | Err` is the everyday fallible result: a function returning it may return `error(...)`, any user error, or propagate either with `?`. The value keeps its runtime type (`e is NotFound`).
+- The prelude has `impl Display for Err` (`to_str` = `message()`), so every value of static type `Err` is printable; a user error type is `Display` only if it implements it itself.
+- stdlib `pub class MsgErr : Err, Display` with `pub fn new(msg: str) -> Self`, `pub virtual fn message(self) -> str` (subclasses may override it) and `to_str` = `message()`. Prelude function `error(msg: str) -> Err` ≡ `MsgErr::new(msg)`. Its result is an `Err`, not assignable to a specific error type: `fn f() -> i32 | NotFound { return error("x"); }` ⇒ error.
 - Fallible functions return unions: `fn load(p: str) -> File | NotFound | Err`.
 - Propagation `?` (§7.10); must-use (§6.1); default `??` handles only null.
 - No exceptions: no `try`/`catch`/`throw`.
@@ -687,7 +689,7 @@ Implicitly imported names:
 
 **Functions:** `print<T: Display>(x: T)`, `println<T: Display>(x: T)`, `eprintln<T: Display>(x: T)` (write `x.to_str()`; `println` and `eprintln` add a newline), `panic(msg: str) -> !`, `error(msg: str) -> Err`, `len<T: Len>(x: T) -> usize`.
 
-**Types:** `Err`, `Done`, `Type`, `List<T>` (`[T]`), `Map<K: Hash + Eq, V>`, `Set<T: Hash + Eq>`, `Range<T>`, `Ptr<T>`, module alias `c`.
+**Types:** `MsgErr`, `Done`, `Type`, `List<T>` (`[T]`), `Map<K: Hash + Eq, V>`, `Set<T: Hash + Eq>`, `Range<T>`, `Ptr<T>`, module alias `c`.
 
 **Traits:**
 
@@ -696,7 +698,7 @@ Implicitly imported names:
 | `Truthy` | `fn truthy(self) -> bool` | §6.6 |
 | `Len` | `get fn len(self) -> usize` | `str`, collections |
 | `Display` | `fn to_str(self) -> str` | f-strings; primitives, `str`, enums, `Type` |
-| `Error` | `fn message(self) -> str` | §12; `Err` also implements `Display` |
+| `Err` | `fn message(self) -> str` | §12; `Err` (as a trait reference) and `MsgErr` implement `Display` |
 | `Default` | `fn default() -> Self` | static |
 | `Eq` | `fn eq(self, o: Self) -> bool` | `==`/`!=` |
 | `Ord : Eq` | `fn cmp(self, o: Self) -> i32` | `<0`, `0`, `>0` |
@@ -943,3 +945,6 @@ Semantics the spec left open, decided while implementing:
 
 ### 2026-10-27 — glob imports
 - §2.2 Added `use p::*`: imports every `pub` item of module `p`; items and explicit imports shadow glob names; two globs disagreeing on a name ⇒ error.
+
+### 2026-10-27 — `Err` is the error trait
+- §12, §16 Renamed the error trait `Error` to `Err` and the prelude's message-error class `Err` to `MsgErr`. `error(msg)` now returns `Err` (a `MsgErr` behind the trait reference), so `T | Err` accepts `error(...)` and every user error alike; `impl Display for Err` keeps any `Err` printable. Before, `T | Err` meant the concrete class, so a user error that implemented `Error` without subclassing `Err` could not be returned or `?`-propagated through it.

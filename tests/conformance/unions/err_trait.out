@@ -1,0 +1,7 @@
+ok: 2
+not found: b
+timeout: timed out
+error: empty key
+no key 'z'
+empty key
+MsgErr

@@ -1,0 +1,9 @@
+// §3.5: an `Err` is not implicitly a specific error type; a type needs `message` to implement `Err`.
+
+struct Bad : Err {}
+
+fn f() -> i32 | Bad {
+    return error("no");
+}
+
+fn main() { _ = f(); }

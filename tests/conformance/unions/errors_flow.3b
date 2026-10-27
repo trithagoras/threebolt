@@ -1,7 +1,7 @@
 // §12, §7.10, §6.5: errors are values; `?` propagates null and errors (running defers); `??`
 // defaults only null; must-use.
 
-struct NotFound : Error {
+struct NotFound : Err {
     let key: str;
     pub fn message(self) -> str => f"no key '{self.key}'";
 }
