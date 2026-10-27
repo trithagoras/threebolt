@@ -266,6 +266,7 @@ final class Patterns {
                 diag.error(Code.BAD_FIELD, fp.field().span(), "'" + decl.name() + "' has no field '" + fp.field().text() + "'");
                 continue;
             }
+            c.index.ref(fp.field().span(), f, null);
             if (!f.owner().isStruct()) c.exprs.checkAccess(f.owner(), f.visibility, "field '" + f.name() + "'", fp.field().span());
             var base = inst == null ? null : f.owner() == decl ? inst : TypeSystem.baseInstance(inst, f.owner());
             var ft = base == null ? Type.ERROR : TypeSystem.subst(f.type, TypeSystem.bind(f.owner().typeParams, base.args()));

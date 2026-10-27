@@ -107,6 +107,7 @@ public final class TypeResolver {
             var param = scope.params().get(first);
             if (param != null) {
                 noArgs(n);
+                names.symbolIndex.ref(path.getFirst().span(), param, null);
                 return param.type();
             }
             if (first.equals("Self")) {

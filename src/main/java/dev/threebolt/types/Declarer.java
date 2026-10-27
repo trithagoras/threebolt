@@ -52,9 +52,13 @@ public final class Declarer {
     private final Module prelude;
 
     public Declarer(Program program, Diagnostics diagnostics) {
+        this(program, diagnostics, SymbolIndex.disabled());
+    }
+
+    Declarer(Program program, Diagnostics diagnostics, SymbolIndex index) {
         this.program = program;
         this.diagnostics = diagnostics;
-        this.names = new Names(program, diagnostics);
+        this.names = new Names(program, diagnostics, index);
         this.types = new TypeResolver(ts, names, diagnostics);
         this.prelude = program.module(ModulePath.of("std", "prelude"));
     }

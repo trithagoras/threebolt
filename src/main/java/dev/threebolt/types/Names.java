@@ -41,12 +41,14 @@ public final class Names {
 
     private final Program program;
     private final Diagnostics diagnostics;
+    final SymbolIndex symbolIndex;
     /** Semantic info for each declaration item. */
     final Map<Item, Object> infos = new HashMap<>();
 
-    Names(Program program, Diagnostics diagnostics) {
+    Names(Program program, Diagnostics diagnostics, SymbolIndex index) {
         this.program = program;
         this.diagnostics = diagnostics;
+        this.symbolIndex = index;
     }
 
     public Object info(Item item) {
@@ -66,6 +68,7 @@ public final class Names {
             return fullyQualified(from, path);
         }
         var entity = entity(symbols);
+        record(first, entity);
         return continueFrom(from, entity, path, 1);
     }
 
@@ -84,7 +87,10 @@ public final class Names {
         for (int k = path.size(); k >= 1; k--) {
             var mp = new ModulePath(path.subList(0, k).stream().map(Name::text).toList());
             var m = program.module(mp);
-            if (m != null) return continueFrom(from, new ModuleEntity(m), path, k);
+            if (m != null) {
+                record(path.get(k - 1), new ModuleEntity(m));
+                return continueFrom(from, new ModuleEntity(m), path, k);
+            }
         }
         Name first = path.getFirst();
         diagnostics.error(Code.UNRESOLVED_NAME, first.span(), "cannot find '" + first.text() + "' in this scope");
@@ -100,6 +106,7 @@ public final class Names {
                 var sub = program.module(m.path().child(seg.text()));
                 if (sub != null) {
                     entity = new ModuleEntity(sub);
+                    record(seg, entity);
                     index++;
                     continue;
                 }
@@ -120,9 +127,22 @@ public final class Names {
                 items = pub;
             }
             entity = entity(items);
+            record(seg, entity);
             index++;
         }
         return new Resolved(entity, index);
+    }
+
+    private void record(Name name, Entity entity) {
+        Object target = switch (entity) {
+            case ModuleEntity(Module m) -> m;
+            case TypeEntity(TypeInfo t) -> t;
+            case FnEntity(List<FnInfo> fns) -> fns.getFirst();
+            case ConstEntity(ConstInfo c) -> c;
+            case StaticEntity(StaticInfo s) -> s;
+            case PrimEntity p -> null;
+        };
+        symbolIndex.ref(name.span(), target, null);
     }
 
     private Entity entity(List<? extends Symbol> symbols) {

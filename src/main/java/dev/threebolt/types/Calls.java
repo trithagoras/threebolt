@@ -99,6 +99,7 @@ final class Calls {
             case Exprs.StaticTarget s -> valueCall(e, new Typed(new Ir.Read(new Ir.StaticPlace(s.info())), s.info().type));
             case Exprs.FnTarget f -> {
                 var bound = resolve(f.candidates(), null, e.args(), f.typeArgs(), e.span(), f.name());
+                if (bound != null) c.index.ref(p.segments().getLast().name().span(), bound.cand().fn(), null);
                 yield bound == null ? Exprs.error() : build(bound, null, null, e.span());
             }
             case Exprs.TypeTarget t -> {
@@ -159,6 +160,7 @@ final class Calls {
         }
         var bound = resolve(instance, r.value().type(), e.args(), m.typeArgs(), e.span(), name);
         if (bound == null) return Exprs.error();
+        c.index.ref(m.name().span(), bound.cand().fn(), null);
         checkMethodAccess(bound.cand().fn(), m.name().span());
         Ir.Place recvPlace = null;
         if (bound.cand().fn().receiver == FnInfo.Receiver.MUT_SELF) {
@@ -193,6 +195,7 @@ final class Calls {
         }
         var bound = resolve(cands, owner.base, e.args(), m.typeArgs(), e.span(), m.name().text());
         if (bound == null) return Exprs.error();
+        c.index.ref(m.name().span(), bound.cand().fn(), null);
         if (bound.cand().fn().dispatch() == Dispatch.ABSTRACT) {
             diag.error(Code.BAD_SUPER, m.name().span(), "'" + bound.cand().fn().qualifiedName() + "' is abstract");
         }
