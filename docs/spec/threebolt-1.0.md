@@ -124,7 +124,8 @@ use std::collections::Map as Dict;
 - Type aliases are transparent: `type Result<T> = T | Err;` — `Result<Entity>` *is* `Entity | Err`.
 - A union value carries its runtime type; there is no user-visible wrapper.
 - Literal members are subsumed by their base type: `"a" | str` ≡ `str`.
-- Methods, fields and getters cannot be accessed on a union-typed value; narrow first (§9). Exception: a union whose members are all literals of one base type (`"left" | "right"`) behaves as that base type for member access and trait implementations (`d.len`, f-string `Display`). Unions participate in conditions (§6.6), `==` (§7.3), and `Hash` (when every member implements `Hash`) — nothing else.
+- Fields cannot be accessed on a union-typed value, and neither can methods or getters except through the traits below; narrow first (§9). Exception: a union whose members are all literals of one base type (`"left" | "right"`) behaves as that base type for member access and trait implementations (`d.len`, f-string `Display`). Unions participate in conditions (§6.6), `==` (§7.3), and `Hash` (when every member implements `Hash`).
+- **Traits of unions:** a union implements a trait `X` when every member implements the same instance of `X` and `X` is *union-safe*: neither `X` nor any of its supertraits has a static member, and `Self` appears in their members only as the receiver. So `i32 | str` and `T | Err` implement `Display` (`println(x)`, `f"{x}"`, `x.to_str()`), while `Add`, `Ord` and `Default` are never implemented by a union. A call through such a trait dispatches on the value's runtime member, as through a trait reference (§8.3). These implementations are automatic and cannot be written with `impl`. `Eq` and `Hash` follow their own rules above.
 - Recursive aliases are permitted when recursion passes through a nominal or collection type: `type Json = null | bool | f64 | str | [Json] | Map<str, Json>;`
 
 ### 3.5 Assignability (`S` to `T`)
@@ -143,7 +144,7 @@ Generic types are **invariant**: `[Dog]` is not assignable to `[Animal]`. `fn` t
 ### 3.6 Numeric conversions
 - Implicit (lossless) widening: signed→wider signed, unsigned→wider unsigned, unsigned→strictly wider signed, `i8..i32`/`u8..u32`→`f64`, `i8 i16 u8 u16`→`f32`, `f32`→`f64`. `isize`/`usize` widen only to themselves and `i64`/`u64` respectively, and nothing widens implicitly to `isize`/`usize` (platform independence).
 - Everything else requires `as` (§7.9).
-- Integer literals adopt the expected type if it is an integer or float type and the value fits (error if not). Float literals adopt an expected float type. With no expected type: integer → `i32`, float → `f64`.
+- Integer literals adopt the expected type if it is an integer or float type and the value fits (error if not). Float literals adopt an expected float type. Against a numeric type parameter, see §10.1. With no expected type: integer → `i32`, float → `f64`.
 - Against a union expected type, an unsuffixed integer literal takes: an equal literal member if there is one; else `i32` if it is a member and the value fits; else the first integer or float member (in declaration order) that the value fits. `let w: i64 | str = 5;` stores an `i64`.
 - Inference widens literal types: `let d = "left";` has type `str`; `let d: Direction = "left";` has type `Direction`.
 
@@ -272,6 +273,7 @@ pub trait Default { fn default() -> Self; }            // static requirement
 - `trait A : B + C` — implementors of `A` must implement `B` and `C`; a reference of type `A` may call `B` and `C` instance members.
 - Traits may be generic: `trait Iterator<T>`. No associated types.
 - Implementations match trait signatures exactly (receiver mutability included). Default bodies may be replaced by the implementor.
+- A trait's static functions, including inherited default bodies, can be called through an implementing type: `Position::default()`, `Mod7::zero()` (§10.1).
 
 ### 4.10 `impl`
 ```rs
@@ -468,7 +470,7 @@ x => { let y = x * 2; return y; }
 
 ### 7.9 Casts
 - `x as T`:
-  - numeric → numeric: truncation/wrap for integers, IEEE conversion for floats, float→int truncates toward zero and saturates (NaN → 0). Never panics.
+  - numeric → numeric: truncation/wrap for integers, IEEE conversion for floats, float→int truncates toward zero and saturates (NaN → 0). Never panics. This also applies to type parameters whose runtime arguments are numeric (§10.1).
   - integer ↔ enum: §4.11.
   - `char` → integer: the scalar value, wrapped like an integer cast. Integer → `char`: panics if the value is not a Unicode scalar value. `bool` → integer: `0`/`1`.
   - downcast/trait/union narrowing: checked at runtime, **panics** on failure. Struct from box yields a copy.
@@ -541,9 +543,24 @@ For `x.m(...)`: inherent methods of `x`'s static type (and base classes), then m
 - Generic parameters on functions, methods, structs, classes, traits, aliases: `<T, U: Bound + Bound2>`.
 - **Reified:** `typeof(T)`, `x is T`, `x as T` work for type parameters at runtime.
 - **Invariant** type arguments.
-- **Inference:** type arguments are inferred from argument types (unification against parameter types, including lambda parameter/return types where determinable). This includes the type arguments of a generic type in a static call: `Pair::new(1, "a")` is `Pair<i32, str>::new(1, "a")`. Expected-type (return-position) inference is not performed. Uninferable ⇒ explicit type arguments required.
+- **Inference:** type arguments are inferred from argument types (unification against parameter types, including lambda parameter/return types where determinable). This includes the type arguments of a generic type in a static call: `Pair::new(1, "a")` is `Pair<i32, str>::new(1, "a")`. Expected-type (return-position) inference is not performed, with one exception: when a type parameter `T` is the call's return type and appears only as the type of parameters whose arguments are unsuffixed numeric literals, and the call has a non-union expected type that meets `T`'s bounds and that every such literal fits, `T` is the expected type (`let b: u8 = random::randint(0, 255);` is `randint<u8>`). Uninferable ⇒ explicit type arguments required.
 - A bound `T: Trait` permits calling `Trait`'s instance members on `T` values and its static functions via `T::f()`.
 - Unbounded `T` permits only: assignment, passing, `== null` / `!= null`, `is`, `as`, `as?`, `.type()`.
+
+### 10.1 Numeric traits
+Prelude traits for code generic over numbers, after Haskell's numeric classes:
+
+| Trait | Supertraits | Members |
+|---|---|---|
+| `Num` | `Eq Ord Display Add Sub Mul Div Rem` | `from_i64(n: i64) -> Self` (static; panics if `n` does not fit), `zero()`, `one()` (static; default `from_i64(0)`/`(1)`), `abs`, `min`, `max` (defaults via `Ord`) |
+| `Signed` | `Num Neg` | — |
+| `Integer` | `Num Hash BitAnd BitOr BitXor Not Shl Shr` | `min_value() max_value() bits()` (static), `pow(self, exp: u32)`, `checked_ wrapping_ saturating_` `add sub mul` |
+| `Float` | `Signed` | `from_f64(x: f64) -> Self`, `nan() infinity() epsilon()` (static), `pow sqrt floor ceil round trunc sin cos tan exp ln log10 is_nan is_infinite` |
+
+- Every integer and float type implements `Num`; the signed integers and floats `Signed`; the integers `Integer`; `f32`/`f64` `Float`. User types may implement them like any trait.
+- **Literals:** an unsuffixed integer literal whose expected type is a type parameter `T` with `T: Num` is `T::from_i64(n)` (the literal must fit in `i64`, else error); a float literal whose expected type is a `T: Float` is `T::from_f64(x)`. So `fn double<T: Num>(x: T) -> T => x * 2;` works for every number type, and a literal that does not fit the type argument panics at runtime (`double` cannot overflow-check `2` against `u8` statically).
+- **Conversions:** `x as U` where `x` or `U` involves a type parameter converts numerically (§7.9) when, after substitution, the value is a primitive number and `U` a primitive numeric type; otherwise it is the ordinary checked cast.
+- Unions never implement these traits (§3.4).
 
 ---
 
@@ -687,22 +704,23 @@ Implicitly imported names:
 | `IndexMut<I, V> : Index<I, V>` | `fn set(mut self, i: I, v: V)` | `c[i] = v` |
 | `Iterator<T>` | `fn next(mut self) -> T \| Done` + defaults: `map filter for_each fold any all count enumerate of_type<U> to_list first` | `Done` sentinel avoids null-collapse |
 | `Iterable<T>` | `fn iter(self) -> Iterator<T>` | `for` loops |
+| `Num Signed Integer Float` | §10.1 | generic numeric code |
 
 **Collections** (`[T]`, `Map`, `Set`): implement `Len`, `Truthy`, `Iterable`, `Index`/`IndexMut` (`[T]`, `Map`). `[T]`: `push(mut self, v)`, `pop(mut self) -> T | null`, `insert`, `remove`, getter `first -> T | null`, `enumerate() -> Iterator<(usize, T)>`. `Map`: `get(k) -> V | null`, `contains_key(k)`, getters `keys`, `values` (iterators), `remove`. **Convention:** ergonomic accessors (`get`, `pop`, `first`) use `T | null` and accept null-collapse for nullable element types (disambiguate with `len`/`contains_key`); only `Iterator::next` uses `Done`. Full API is a separate stdlib document.
 
-**Numeric methods:** `min max abs pow sqrt` (floats), `wrapping_* checked_* saturating_*`, `T::parse(s: str) -> T | null`, `T::MIN`, `T::MAX`.
+**Numeric methods:** the members of the numeric traits (§10.1); `min max abs pow sqrt` (floats), `wrapping_* checked_* saturating_*`, `T::parse(s: str) -> T | null`, `T::MIN`, `T::MAX`.
 
 **Primitive trait impls:** every primitive implements `Display` and `Eq`; all but `bool` implement `Ord`; all but floats implement `Hash`. Numeric types implement `Add Sub Mul Div Rem`, signed ones (and floats) `Neg`; integers implement `BitAnd BitOr BitXor Not Shl Shr`. `str` also implements `Len`, `Truthy` and `Add` (concatenation).
 
-**`Display` formats:** integers in decimal; `bool` as `true`/`false`; `char` as itself. Floats print the shortest digits that round-trip, never with an exponent, and integral values without a fraction: `1`, `0.5`, `0.30000000000000004`, `1000000000000000000000`, `-0`, `inf`, `-inf`, `NaN`.
+**`Display` formats:** `null` as `null` (`null` implements `Display`, so `T | null` does when `T` does); integers in decimal; `bool` as `true`/`false`; `char` as itself. Floats print the shortest digits that round-trip, never with an exponent, and integral values without a fraction: `1`, `0.5`, `0.30000000000000004`, `1000000000000000000000`, `-0`, `inf`, `-inf`, `NaN`.
 
 **Copies out of collections:** reading an element of a collection (indexing, iteration, `get`, `pop`, …) yields a copy when the element type is a value type (§5.3).
 
 **`str` and `char` members:** `str` lengths and offsets are UTF-8 byte counts (`len`, `find`, `slice`); `slice` panics if an offset is not on a character boundary. Besides the members above, the 1.0 stdlib provides `str`: `chars bytes contains starts_with ends_with find slice upper lower trim split replace repeat`; `char`: `is_digit is_alphabetic is_alphanumeric is_whitespace is_uppercase is_lowercase to_upper to_lower`; floats: `floor ceil round trunc sin cos tan exp ln log10 is_nan is_infinite` and constants `EPSILON INFINITY NEG_INFINITY NAN`; `[T]`: `clear reverse contains`, getter `last`; `Map`: `clear`; `Set`: `insert contains remove clear`. The stdlib sources are the full reference.
 
-**`std::math`** (not in the prelude; `use std::math;`): Python-style functions on `f64` (narrower numerics widen, §3.6). Constants `PI E TAU INF NAN`. Rounding and parts: `floor ceil trunc round copysign fmod clamp`, `modf(x) -> (f64, f64)` (fraction, whole); `isnan isinf isfinite`, `isclose(a, b, rel_tol: f64 = 1e-9, abs_tol: f64 = 0.0)`. Powers and logarithms: `pow sqrt cbrt exp exp2 expm1 log2 log10 log1p`, `log(x, base: f64 = E)`. Trigonometry (radians): `sin cos tan asin acos atan atan2(y, x) hypot degrees radians sinh cosh tanh asinh acosh atanh`. `fsum(xs: [f64])` (compensated sum). Integers: `gcd lcm` on `i64` (results non-negative), and `isqrt factorial comb perm` on `u64`; `comb`/`perm` are `0` when `k > n`, and a result that does not fit in `u64` panics.
+**`std::math`** (not in the prelude; `use std::math;`): Python-style functions on `f64` (narrower numerics widen, §3.6). Constants `PI E TAU INF NAN`. Rounding and parts: `floor ceil trunc round copysign fmod`, `modf(x) -> (f64, f64)` (fraction, whole); `isnan isinf isfinite`, `isclose(a, b, rel_tol: f64 = 1e-9, abs_tol: f64 = 0.0)`; `clamp<T: Num>(x: T, lo: T, hi: T) -> T`. Powers and logarithms: `pow sqrt cbrt exp exp2 expm1 log2 log10 log1p`, `log(x, base: f64 = E)`. Trigonometry (radians): `sin cos tan asin acos atan atan2(y, x) hypot degrees radians sinh cosh tanh asinh acosh atanh`. `fsum(xs: [f64])` (compensated sum). Integers: `gcd<T: Integer>(a: T, b: T) -> T` and `lcm` (results non-negative), and `isqrt factorial comb perm` on `u64`; `comb`/`perm` are `0` when `k > n`, and a result that does not fit in `u64` panics.
 
-**`std::random`** (not in the prelude): pseudo-random numbers in the style of Python's `random`, not for cryptography. `Random` is a xoshiro256** generator seeded through splitmix64, so a seed determines the same sequence on every implementation: `Random::new()` (seeded from the OS), `Random::new(seed: u64)`, and `mut self` methods `seed(s: u64)`, `next_u64() -> u64`, `getrandbits(k: u32) -> u64` (`k <= 64`), `random() -> f64` (`0.0..1.0`, 53 bits), `uniform(a: f64, b: f64) -> f64`, `randint(a: i64, b: i64) -> i64` (`a..=b`), `randrange(stop: i64)`, `randrange(start: i64, stop: i64, step: i64 = 1) -> i64`, `chance(p: f64) -> bool`, `gauss(mu: f64, sigma: f64) -> f64`, `expovariate(lambd: f64) -> f64`, `choice<T>(xs: [T]) -> T`, `choices<T>(xs: [T], k: usize = 1, weights: [f64] | null = null) -> [T]` (with replacement), `shuffle<T>(xs: [T])` (in place), `sample<T>(xs: [T], k: usize) -> [T]` (without replacement). Integer draws are unbiased (rejection sampling). An empty range, an empty list, `k` larger than the list in `sample`, or mismatched or non-positive weights panic. The module's free functions of the same names (except `next_u64`) use one shared generator, seeded from the OS on first use; it is a mutable static, so unsynchronized (§4.2).
+**`std::random`** (not in the prelude): pseudo-random numbers in the style of Python's `random`, not for cryptography. `Random` is a xoshiro256** generator seeded through splitmix64, so a seed determines the same sequence on every implementation: `Random::new()` (seeded from the OS), `Random::new(seed: u64)`, and `mut self` methods `seed(s: u64)`, `next_u64() -> u64`, `getrandbits(k: u32) -> u64` (`k <= 64`), `random() -> f64` (`0.0..1.0`, 53 bits), `uniform(a: f64, b: f64) -> f64`, `randint<T: Integer>(a: T, b: T) -> T` (`a..=b`), `randrange<T: Integer>(stop: T)`, `randrange<T: Integer>(start: T, stop: T, step: T = 1) -> T`, `chance(p: f64) -> bool`, `gauss(mu: f64, sigma: f64) -> f64`, `expovariate(lambd: f64) -> f64`, `choice<T>(xs: [T]) -> T`, `choices<T>(xs: [T], k: usize = 1, weights: [f64] | null = null) -> [T]` (with replacement), `shuffle<T>(xs: [T])` (in place), `sample<T>(xs: [T], k: usize) -> [T]` (without replacement). Integer draws are unbiased (rejection sampling). An empty range, an empty list, `k` larger than the list in `sample`, or mismatched or non-positive weights panic. The module's free functions of the same names (except `next_u64`) use one shared generator, seeded from the OS on first use; it is a mutable static, so unsynchronized (§4.2).
 
 **Keyword-named members:** a standard library declaration may name a member with a keyword followed by `_` (`fn null_()`); it is called by the keyword (`Ptr<T>::null()`). User code cannot do this.
 
@@ -899,3 +917,13 @@ Semantics the spec left open, decided while implementing:
 
 ### 2026-10-27 — `std::math` and `std::random`
 - §16 Two std modules, outside the prelude: `std::math` (Python's `math` on `f64`, plus integer `gcd lcm isqrt factorial comb perm`) and `std::random` (Python's `random`: a `Random` class and free functions over a shared generator). The generator algorithm (xoshiro256** seeded through splitmix64) is part of the spec, so seeded sequences are portable.
+
+### 2026-10-27 — traits of unions, `null` displays
+- §3.4 A union implements a union-safe trait (no static members; `Self` only as the receiver, also in supertraits) when every member implements the same instance of it; its members are callable on the union and dispatch on the runtime member. Before, only `Eq`, `Hash` and conversions to trait references worked, so `println(x)` on an `i32 | str` was an error while `let d: Display = x;` was not.
+- §16 `null` implements `Display` (as `null`).
+
+### 2026-10-27 — numeric traits
+- §10.1 Prelude traits `Num`, `Signed`, `Integer`, `Float`, implemented by the primitives (and open to user types). Literals of a `Num`/`Float` type parameter call `T::from_i64`/`T::from_f64`; `as` converts numerically through type parameters.
+- §10 Inference takes the expected type for a return-type parameter determined only by unsuffixed numeric literals.
+- §16 `std::random`'s `randint`/`randrange` and `std::math`'s `gcd`/`lcm`/`clamp` are generic. A trait's static members (including default bodies) can be called through an implementing type: `Mod7::zero()`.
+- Fix: `abs` on an unsigned integer is the identity (it negated values with the top bit set).

@@ -138,6 +138,15 @@ final class Exprs {
             if (p.isFloat()) return floatLit(value.toString(), suffix, expected, span, false);
             return intOf(value, p, span);
         }
+        var param = numParam(expected, ts.num);
+        if (param != null) {
+            if (!Prim.I64.fits(value)) {
+                diag.error(Code.LITERAL_OUT_OF_RANGE, span, "literal " + value + " does not fit in 'i64', which `"
+                        + param + "::from_i64` takes");
+                return error();
+            }
+            return numLiteral(param, ts.num, "from_i64", new Values.Int(Prim.I64, value.longValue()), span);
+        }
         var target = integerTarget(value, expected);
         if (target != null && target.isFloat()) return floatOf(value.doubleValue(), target);
         return intOf(value, target == null ? Prim.I32 : target, span);
@@ -181,9 +190,24 @@ final class Exprs {
                 }
             }
         }
-        if (p == null) p = Prim.F64;
         double v = Double.parseDouble(digits);
+        var param = p == null ? numParam(expected, ts.floatTrait) : null;
+        if (param != null) return numLiteral(param, ts.floatTrait, "from_f64", Ops.flt(Prim.F64, negate ? -v : v), span);
+        if (p == null) p = Prim.F64;
         return floatOf(negate ? -v : v, p);
+    }
+
+    /** {@code expected} when it is a type parameter implementing {@code trait} (§10.1), else null. */
+    private Type.Param numParam(Type expected, TypeInfo trait) {
+        if (expected == null || !(TypeSystem.expand(expected) instanceof Type.Param p)) return null;
+        return ts.implementsAs(p, trait) != null ? p : null;
+    }
+
+    /** A literal of a numeric type parameter: {@code T::from_i64(n)} or {@code T::from_f64(x)}. */
+    private Typed numLiteral(Type.Param param, TypeInfo trait, String fn, Object value, Span span) {
+        var from = trait.methods(fn).getFirst();
+        return new Typed(new Ir.Call(from, Ir.CallKind.TRAIT_STATIC, null, null, List.of(new Ir.Lit(value)),
+                new int[] {0}, List.of(), List.of(), param, span), param);
     }
 
     private Typed floatOf(double v, Prim p) {
@@ -436,6 +460,26 @@ final class Exprs {
             }
             return new FnTarget(cands, name, seg.typeArgs());
         }
+        if (!decl.isTrait() && argsGiven) {
+            // A static member of a trait the type implements, e.g. a default body: `Mod7::zero()`.
+            var cands = new ArrayList<Calls.Candidate>();
+            var seen = new HashSet<FnInfo>();
+            for (TypeInfo t = decl; t != null; t = t.baseDecl()) {
+                for (ImplInfo impl : ts.implsOf(t)) {
+                    var inst = ts.implementsAs(owner, impl.trait.decl());
+                    if (inst == null) continue;
+                    for (var tr : TypeSystem.selfAndSupers(inst)) {
+                        for (FnInfo f : tr.decl().methods(name)) {
+                            if (!f.isStatic() || !seen.add(f)) continue;
+                            var env = TypeSystem.bind(tr.decl().typeParams, tr.args());
+                            env.put(tr.decl().selfParam, owner);
+                            cands.add(new Calls.Candidate(f, Ir.CallKind.TRAIT_STATIC, env, Set.of(), owner, false));
+                        }
+                    }
+                }
+            }
+            if (!cands.isEmpty()) return new FnTarget(cands, name, seg.typeArgs());
+        }
         var instance = decl.methods(name);
         if (decl.isTrait() && !instance.isEmpty()) {
             // Trait::m(x, ...) calls m on x (§8.5).
@@ -565,12 +609,13 @@ final class Exprs {
     private Typed getter(Recv r, Expr.Member m) {
         var t = r.value().type();
         if (t == Type.ERROR) return error();
-        if (TypeSystem.expand(t) instanceof Type.Union) {
+        var cands = c.calls.methodCandidates(t, m.name().text());
+        if (cands.isEmpty() && TypeSystem.expand(t) instanceof Type.Union) {
             diag.error(Code.UNION_MEMBER_ACCESS, m.name().span(), "cannot access '" + m.name().text()
-                    + "' on a value of union type '" + t + "'; narrow it first (§9)");
+                    + "' on a value of union type '" + t
+                    + "': no union-safe trait that every member implements has it (§3.4); narrow it first (§9)");
             return error();
         }
-        var cands = c.calls.methodCandidates(t, m.name().text());
         var getters = cands.stream().filter(k -> k.fn().isGetter()).toList();
         if (getters.isEmpty()) {
             if (!cands.isEmpty()) {

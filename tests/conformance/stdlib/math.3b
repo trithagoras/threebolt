@@ -39,6 +39,8 @@ fn main() {
     println(f"{plain} {math::fsum(tenths)} {math::fsum([1e100, 1.0, -1e100])}");
 
     // Integers.
+    let g: u8 = math::gcd(200, 150);
+    println(f"{g} {g.type()} {math::gcd(-4_i64, 6).type()} {math::clamp(7_u8, 1, 5)} {math::clamp(0.5, 0, 1)}");
     println(f"{math::gcd(12, 18)} {math::gcd(-12, 18)} {math::gcd(0, 0)} {math::lcm(4, 6)} {math::lcm(-4, 6)} {math::lcm(0, 5)}");
     println(f"{math::isqrt(0)} {math::isqrt(15)} {math::isqrt(16)} {math::isqrt(u64::MAX)}");
     println(f"{math::factorial(0)} {math::factorial(5)} {math::factorial(20)}");

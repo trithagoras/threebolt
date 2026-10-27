@@ -1,0 +1,7 @@
+errors.3b:3:35: error[E0200]: expected 'T', found 'f64'
+errors.3b:4:27: error[E0201]: literal 10000000000000000000 does not fit in 'i64', which `T::from_i64` takes
+errors.3b:5:27: error[E0207]: operator '+' is not defined for 'T' and '1'
+errors.3b:9:5: error[E0216]: 'u32' does not implement 'Signed' (required by 'T')
+errors.3b:10:5: error[E0216]: 'f64' does not implement 'Integer' (required by 'T')
+errors.3b:11:18: error[E0200]: expected 'str', found 'i32'
+errors.3b:13:13: error[E0216]: 'i32 | str' does not implement 'Integer' (required by 'T')

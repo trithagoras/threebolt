@@ -1,0 +1,9 @@
+// §10.1: a literal of a numeric type parameter that does not fit the type argument panics.
+//! exit: 101
+
+fn add_big<T: Num>(x: T) -> T => x + 1000;
+
+fn main() {
+    println(add_big(1_i16));
+    println(add_big(1_u8));
+}

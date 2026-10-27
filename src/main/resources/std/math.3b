@@ -1,6 +1,7 @@
-// std::math: Python-style mathematical functions on `f64` (spec §16). Narrower numeric types widen
-// to `f64` implicitly (§3.6). Floats also have methods for the common ones (`x.sqrt()`); these are
-// the free-function forms, plus the functions floats lack.
+// std::math: Python-style mathematical functions (spec §16). The float functions take `f64`, so
+// integers and `f32` widen into them (`math::sqrt(2)`, §3.6); `clamp`, `gcd` and `lcm` are generic
+// (§10.1). Floats also have methods for the common ones (`x.sqrt()`); these are the free-function
+// forms, plus the functions floats lack.
 
 pub const PI: f64 = 3.141592653589793;
 pub const E: f64 = 2.718281828459045;
@@ -24,7 +25,8 @@ pub fn modf(x: f64) -> (f64, f64) {
     let whole = x.trunc();
     return (x - whole, whole);
 }
-pub fn clamp(x: f64, lo: f64, hi: f64) -> f64 => lo.max(hi.min(x));
+/// `x` limited to `lo..=hi`, for any number type.
+pub fn clamp<T: Num>(x: T, lo: T, hi: T) -> T => lo.max(hi.min(x));
 
 pub fn isnan(x: f64) -> bool => x.is_nan();
 pub fn isinf(x: f64) -> bool => x.is_infinite();
@@ -101,7 +103,7 @@ pub fn fsum(xs: [f64]) -> f64 {
 // ---- Integers ----
 
 /// The greatest common divisor, always non-negative; `gcd(0, 0)` is `0`.
-pub fn gcd(a: i64, b: i64) -> i64 {
+pub fn gcd<T: Integer>(a: T, b: T) -> T {
     let mut x = a.abs();
     let mut y = b.abs();
     while y != 0 {
@@ -113,8 +115,8 @@ pub fn gcd(a: i64, b: i64) -> i64 {
 }
 
 /// The least common multiple, always non-negative; `0` if either argument is.
-pub fn lcm(a: i64, b: i64) -> i64 {
-    if a == 0 || b == 0 { return 0; }
+pub fn lcm<T: Integer>(a: T, b: T) -> T {
+    if a == 0 || b == 0 { return T::zero(); }
     return (a / gcd(a, b) * b).abs();
 }
 

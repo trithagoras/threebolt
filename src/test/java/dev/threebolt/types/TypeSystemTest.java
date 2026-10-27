@@ -250,6 +250,27 @@ class TypeSystemTest {
     }
 
     @Test
+    void unionsImplementUnionSafeTraitsOfEveryMember() {
+        assertTrue(ts.unionSafe(ts.display));
+        assertTrue(ts.unionSafe(decl("Loud")), "supertrait members are checked too");
+        assertFalse(ts.unionSafe(ts.ord), "Self as a parameter");
+        assertFalse(ts.unionSafe(ts.defaultTrait), "a static member");
+        assertEquals(ts.nominal(ts.display), ts.implementsAs(union(Prim.I32, Prim.STR), ts.display));
+        assertEquals(ts.nominal(ts.display), ts.implementsAs(union(Prim.I32, Type.NULL), ts.display), "null displays");
+        assertEquals(type("Speak"), ts.implementsAs(union(type("Dog"), type("Pt")), decl("Speak")));
+        assertNull(ts.implementsAs(union(type("Dog"), Prim.I32), decl("Speak")), "not every member");
+        assertNull(ts.implementsAs(union(Prim.I32, Prim.STR), ts.ord));
+        assertNull(ts.implementsAs(union(ts.listOf(Prim.STR), ts.listOf(Prim.I32)), ts.iterable),
+                "members implement different instances");
+    }
+
+    @Test
+    void sameIsStructural() { // recursive aliases are covered by unions/traits.3b (`Json`)
+        assertTrue(TypeSystem.same(union(Prim.I32, Prim.STR), union(Prim.STR, Prim.I32)));
+        assertFalse(TypeSystem.same(ts.listOf(Prim.I32), ts.listOf(Prim.I64)));
+    }
+
+    @Test
     void nameofSpelling() {
         assertEquals("List<i32>", TypeSystem.name(ts.listOf(Prim.I32)));
         assertEquals("Box<List<str>>", TypeSystem.name(type("Box", ts.listOf(Prim.STR))));

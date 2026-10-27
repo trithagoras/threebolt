@@ -11,7 +11,7 @@ fn main() {
     let mut r = Random::new(1);
     let i = r.below(3);
     let c = random::sample([1, 2], -1);
-    let k: i32 = random::randint(1, 6);
+    let k: str = random::randint(1, 6);
     let fixed = Random::new(1);
     fixed.random();
 }

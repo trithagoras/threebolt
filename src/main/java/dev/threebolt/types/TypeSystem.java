@@ -18,6 +18,7 @@ public final class TypeSystem {
     /** Well-known std declarations, set by the {@link Declarer}. */
     public TypeInfo list, map, set, range, done, err, typeDecl, ptr, nativeIter;
     public TypeInfo display, eq, ord, hash, truthy, len, error, defaultTrait, iterator, iterable, index, indexMut;
+    public TypeInfo num, signed, integer, floatTrait;
     public final Map<String, TypeInfo> operatorTraits = new HashMap<>();
     public final Map<Prim, TypeInfo> prims = new LinkedHashMap<>();
 
@@ -39,6 +40,11 @@ public final class TypeSystem {
     public ImplInfo impl(TypeInfo trait, TypeInfo target) {
         var byType = impls.get(trait);
         return byType == null ? null : byType.get(target);
+    }
+
+    /** Every trait with at least one impl. */
+    public Set<TypeInfo> implementedTraits() {
+        return impls.keySet();
     }
 
     public List<ImplInfo> implsOf(TypeInfo target) {
@@ -261,7 +267,7 @@ public final class TypeSystem {
         s = expand(s);
         t = expand(t);
         if (s == Type.ERROR || t == Type.ERROR || s == Type.NEVER) return true;
-        if (s.equals(t)) return true;
+        if (same(s, t)) return true;
         if (s instanceof Type.Union u) {
             for (Type m : u.members()) if (!assignable(m, t)) return false;
             return true;
@@ -284,6 +290,39 @@ public final class TypeSystem {
         }
         if (s instanceof Type.Fn sf && t instanceof Type.Fn tf && tf.isExtern() && !sf.isExtern()) return false;
         return false;
+    }
+
+    /**
+     * Type equality up to recursive aliases: {@code Map<str, Json>} written out equals the alias's
+     * own member {@code Map<str, Json>}, where one {@code Json} is expanded and the other is not.
+     */
+    public static boolean same(Type a, Type b) {
+        return same(a, b, new HashSet<>());
+    }
+
+    private static boolean same(Type a, Type b, Set<List<Type>> assumed) {
+        if (a.equals(b)) return true;
+        if (a instanceof Type.AliasRef || b instanceof Type.AliasRef) {
+            if (!assumed.add(List.of(a, b))) return true;
+            return same(expand(a), expand(b), assumed);
+        }
+        return switch (a) {
+            case Type.Nominal an when b instanceof Type.Nominal bn ->
+                    an.decl() == bn.decl() && sameAll(an.args(), bn.args(), assumed);
+            case Type.Tuple at when b instanceof Type.Tuple bt -> sameAll(at.elements(), bt.elements(), assumed);
+            case Type.Array aa when b instanceof Type.Array ba -> aa.size() == ba.size() && same(aa.element(), ba.element(), assumed);
+            case Type.Fn af when b instanceof Type.Fn bf -> af.isExtern() == bf.isExtern()
+                    && same(af.ret(), bf.ret(), assumed) && sameAll(af.params(), bf.params(), assumed);
+            case Type.Union au when b instanceof Type.Union bu -> au.members().size() == bu.members().size()
+                    && au.members().stream().allMatch(m -> bu.members().stream().anyMatch(n -> same(m, n, assumed)));
+            default -> false;
+        };
+    }
+
+    private static boolean sameAll(List<Type> as, List<Type> bs, Set<List<Type>> assumed) {
+        if (as.size() != bs.size()) return false;
+        for (int i = 0; i < as.size(); i++) if (!same(as.get(i), bs.get(i), assumed)) return false;
+        return true;
     }
 
     /** {@code t}'s instance of the class {@code base}, walking the base chain; null if none. */
@@ -382,9 +421,25 @@ public final class TypeSystem {
             case Type.Union u -> {
                 var base = literalBase(u);
                 if (base != u) return implementsAs(base, trait);
-                if (trait != eq && trait != hash) return null;
-                for (Type m : u.members()) if (m != Type.NULL && implementsAs(m, trait) == null) return null;
-                return nominal(trait);
+                if (trait == eq || trait == hash) {
+                    for (Type m : u.members()) if (m != Type.NULL && implementsAs(m, trait) == null) return null;
+                    return nominal(trait);
+                }
+                if (!unionSafe(trait)) return null;
+                // A recursive alias (`type Json = null | [Json] | ...`) implements it unless shown otherwise.
+                var key = List.<Object>of(u, trait);
+                if (!unionsInProgress.add(key)) return nominal(trait);
+                try {
+                    Type.Nominal common = null;
+                    for (Type m : u.members()) {
+                        var inst = implementsAs(m, trait);
+                        if (inst == null || (common != null && !common.equals(inst))) return null;
+                        common = inst;
+                    }
+                    return common;
+                } finally {
+                    unionsInProgress.remove(key);
+                }
             }
             case Type.Array a -> {
                 if (trait == len || trait == truthy) return nominal(trait);
@@ -395,12 +450,39 @@ public final class TypeSystem {
             }
             case Type.Special s -> {
                 if (s == Type.Special.UNIT && (trait == eq || trait == hash)) return nominal(trait);
+                if (s == Type.Special.NULL && trait == display) return nominal(trait);
                 return null;
             }
             default -> {
                 return null;
             }
         }
+    }
+
+    private final Set<List<Object>> unionsInProgress = new HashSet<>();
+    private final Map<TypeInfo, Boolean> unionSafe = new java.util.concurrent.ConcurrentHashMap<>();
+
+    /**
+     * Whether a union may implement {@code trait} (§3.4): no static members and `Self` only as the
+     * receiver, in the trait and its supertraits.
+     */
+    public boolean unionSafe(TypeInfo trait) {
+        return unionSafe.computeIfAbsent(trait, t -> {
+            var decls = new ArrayList<TypeInfo>(List.of(t));
+            for (int i = 0; i < decls.size(); i++) {
+                for (var s : decls.get(i).traits) if (!decls.contains(s.decl())) decls.add(s.decl());
+            }
+            for (var d : decls) {
+                var self = Set.of(d.selfParam);
+                for (var fns : d.methods.values()) {
+                    for (FnInfo f : fns) {
+                        if (f.isStatic() || mentions(f.ret, self)) return false;
+                        for (var p : f.params) if (mentions(p.type(), self)) return false;
+                    }
+                }
+            }
+            return true;
+        });
     }
 
     private Type.Nominal viaImpl(TypeInfo decl, Type target, TypeInfo trait) {

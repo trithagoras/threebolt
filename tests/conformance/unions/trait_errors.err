@@ -1,0 +1,8 @@
+trait_errors.3b:10:16: error[E0410]: cannot implement a trait for 'i32 | str'
+trait_errors.3b:16:5: error[E0216]: 'i32 | str' does not implement 'Ord' (required by 'T')
+trait_errors.3b:17:15: error[E0214]: cannot call 'abs' on a value of union type 'i32 | str': no union-safe trait that every member implements has it (§3.4); narrow it first (§9)
+trait_errors.3b:18:15: error[E0214]: cannot call 'cmp' on a value of union type 'i32 | str': no union-safe trait that every member implements has it (§3.4); narrow it first (§9)
+trait_errors.3b:19:15: error[E0214]: cannot call 'name' on a value of union type 'i32 | str': no union-safe trait that every member implements has it (§3.4); narrow it first (§9)
+trait_errors.3b:20:15: error[E0214]: cannot call 'same' on a value of union type 'i32 | str': no union-safe trait that every member implements has it (§3.4); narrow it first (§9)
+trait_errors.3b:21:15: error[E0214]: cannot access 'len' on a value of union type 'i32 | str': no union-safe trait that every member implements has it (§3.4); narrow it first (§9)
+trait_errors.3b:22:13: error[E0207]: operator '+' is not defined for 'i32 | str' and 'i32 | str'
