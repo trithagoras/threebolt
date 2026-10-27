@@ -31,6 +31,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.function.Function;
 
 /**
  * Loads a program (§2.1): the entry file, every module reachable from it through `use`, and the
@@ -53,6 +54,8 @@ public final class ModuleLoader {
     private static final Set<String> ATTRIBUTES = Set.of("c", "flags", "link");
 
     private final Diagnostics diagnostics;
+    /** Reads a source file; an editor substitutes its unsaved buffers. */
+    private final Function<Path, String> reader;
     private Path root;
     /** Every module path looked up so far; empty when there is no such module. */
     private final Map<ModulePath, Optional<Module>> found = new HashMap<>();
@@ -60,7 +63,12 @@ public final class ModuleLoader {
     private final ArrayDeque<Module> pending = new ArrayDeque<>();
 
     public ModuleLoader(Diagnostics diagnostics) {
+        this(diagnostics, ModuleLoader::read);
+    }
+
+    public ModuleLoader(Diagnostics diagnostics, Function<Path, String> reader) {
         this.diagnostics = diagnostics;
+        this.reader = reader;
     }
 
     public Program load(Path entryFile) {
@@ -68,7 +76,7 @@ public final class ModuleLoader {
         root = file.getParent();
         String fileName = file.getFileName().toString();
         var entryPath = ModulePath.of(fileName.endsWith(".3b") ? fileName.substring(0, fileName.length() - 3) : fileName);
-        Module entry = parse(entryPath, new Source(fileName, read(file)));
+        Module entry = parse(entryPath, file, new Source(fileName, reader.apply(file)));
         found.put(entryPath, Optional.of(entry));
 
         for (var p : List.of(PRELUDE, COLLECTIONS, C)) {
@@ -98,18 +106,19 @@ public final class ModuleLoader {
                 String name = "std/" + String.join("/", rel) + ".3b";
                 String text = resource(name);
                 if (path.equals(C)) text += cIntegerAliases();
-                m = parse(path, new Source(name, text));
+                m = parse(path, null, new Source(name, text));
             }
         } else if (existsExactly(path.segments())) {
             String name = String.join("/", path.segments()) + ".3b";
-            m = parse(path, new Source(name, read(root.resolve(name))));
+            var file = root.resolve(name);
+            m = parse(path, file, new Source(name, reader.apply(file)));
         }
         found.put(path, Optional.ofNullable(m));
         return m;
     }
 
-    private Module parse(ModulePath path, Source source) {
-        var m = new Module(path, source, AstParser.compilationUnit(source, diagnostics));
+    private Module parse(ModulePath path, Path file, Source source) {
+        var m = new Module(path, file, source, AstParser.compilationUnit(source, diagnostics));
         loaded.put(path, m);
         pending.push(m);
         return m;
@@ -192,7 +201,7 @@ public final class ModuleLoader {
         return Files.isRegularFile(dir);
     }
 
-    private static String read(Path file) {
+    public static String read(Path file) {
         try {
             return Files.readString(file);
         } catch (IOException e) {
