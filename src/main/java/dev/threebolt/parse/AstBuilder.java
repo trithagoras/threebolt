@@ -371,6 +371,7 @@ public final class AstBuilder {
                 default -> throw unexpected(ctx.isTarget());
             };
         }
+        if (ctx.IN() != null) return new Expr.Binary(Expr.BinaryOp.IN, left, range(ctx.rangeExpr(1)), span(ctx));
         if (ctx.compareOp() == null) return left;
         var op = ctx.compareOp();
         var binOp = switch (op.getStart().getType()) {

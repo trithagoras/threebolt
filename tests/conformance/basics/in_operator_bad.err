@@ -1,0 +1,4 @@
+in_operator_bad.3b:2:14: error[E0207]: operator 'in' is not defined for 'i32': it does not implement `Contains`
+in_operator_bad.3b:3:15: error[E0200]: expected 'char', found 'str'
+in_operator_bad.3b:5:13: error[E0207]: operator 'in' is not defined for '[fn() -> i32]': it does not implement `Contains`
+in_operator_bad.3b:6:17: error[E0200]: expected 'i32', found 'str'

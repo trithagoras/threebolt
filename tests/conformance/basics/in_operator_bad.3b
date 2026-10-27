@@ -1,0 +1,7 @@
+fn main() {
+    let ok = 1 in 2;
+    let sub = "ell" in "hello";
+    let f = () => 1;
+    let g = f in [f];
+    let wrong = "a" in [1, 2];
+}

@@ -146,6 +146,9 @@ pub trait Iterator<T> {
 
 pub trait Iterable<T> { fn iter(self) -> Iterator<T>; }
 
+/// `x in c` (§7.3).
+pub trait Contains<T: Eq> { fn contains(self, x: T) -> bool; }
+
 pub class Err : Error, Display {
     let msg: str;
     pub fn new(msg: str) -> Self => { msg };
@@ -269,6 +272,33 @@ class OfTypeIter<T, U> : Iterator<U> {
 }
 
 // impls
+impl<T: Eq> Contains<T> for [T] {
+    fn contains(self, x: T) -> bool => self.contains(x);
+}
+
+impl<T: Eq> Contains<T> for Range<T> {
+    fn contains(self, x: T) -> bool => self.contains(x);
+}
+
+/// Searches the rest of the iterator, consuming it up to the first match.
+impl<T: Eq> Contains<T> for Iterator<T> {
+    fn contains(self, x: T) -> bool {
+        for y in self { if y == x { return true; } }
+        return false;
+    }
+}
+
+impl Iterable<char> for str {
+    fn iter(self) -> Iterator<char> => self.chars();
+}
+
+impl Contains<char> for str {
+    fn contains(self, c: char) -> bool {
+        for ch in self.chars() { if ch == c { return true; } }
+        return false;
+    }
+}
+
 impl<T: Display> Display for [T] {
     pub fn to_str(self) -> str {
         let mut result = "[";

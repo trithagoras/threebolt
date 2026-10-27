@@ -237,6 +237,7 @@ public final class Declarer {
         ts.defaultTrait = stdType(p.items("Default"));
         ts.iterator = stdType(p.items("Iterator"));
         ts.iterable = stdType(p.items("Iterable"));
+        ts.contains = stdType(p.items("Contains"));
         ts.index = stdType(p.items("Index"));
         ts.indexMut = stdType(p.items("IndexMut"));
         ts.num = stdType(p.items("Num"));
@@ -512,10 +513,16 @@ public final class Declarer {
         var target = resolve(item.target(), scope);
         if (trait == null || target == Type.ERROR) return;
         TypeInfo decl = switch (TypeSystem.expand(target)) {
-            case Type.Nominal n when !n.decl().isTrait() -> n.decl();
+            case Type.Nominal n -> n.decl();
             case Prim p -> ts.prims.get(p);
             default -> null;
         };
+        if (decl != null && decl.isTrait()
+                && TypeSystem.selfAndSupers((Type.Nominal) TypeSystem.expand(target)).stream().anyMatch(s -> s.decl() == trait.decl())) {
+            diagnostics.error(Code.BAD_IMPL, item.target().span(),
+                    "'" + target + "' already implements '" + trait.decl().name() + "' as a supertrait");
+            return;
+        }
         if (decl == null) {
             String why = target instanceof Type.Param ? "blanket impls over a type parameter are not permitted"
                     : "cannot implement a trait for '" + target + "'";

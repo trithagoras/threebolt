@@ -298,7 +298,7 @@ andExpr : andExpr AND_AND comparisonExpr | comparisonExpr ;
 // not separate alternatives: choosing between alternatives that share the `rangeExpr` prefix
 // would happen before `typeArgsAhead()` can be evaluated and resolve `f(a < b, c > (d))` as
 // comparisons.
-comparisonExpr : rangeExpr (compareOp rangeExpr | IS isTarget)? ;
+comparisonExpr : rangeExpr (compareOp rangeExpr | IS isTarget | IN rangeExpr)? ;
 
 // §7.3, §17.18: after `is`, a pattern or a type, chosen by `isPatternAhead()`.
 isTarget

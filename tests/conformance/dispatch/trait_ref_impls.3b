@@ -1,0 +1,40 @@
+// An impl may target a trait reference (§4.10).
+trait Shape { fn area(self) -> f64; }
+trait Named { fn name(self) -> str; }
+
+struct Square : Shape {
+    let side: f64;
+    pub fn area(self) -> f64 => self.side * self.side;
+}
+
+/// Implements `Named` itself, which wins over the impl for `Shape`.
+struct Circle : Shape, Named {
+    pub fn area(self) -> f64 => 3.0;
+    pub fn name(self) -> str => "circle";
+}
+
+impl Named for Shape {
+    fn name(self) -> str => f"shape of area {self.area()}";
+}
+
+fn describe<T: Named>(x: T) -> str => x.name();
+
+class Node { pub fn new() -> Self => {}; }
+
+fn same<T: Eq>(a: T, b: T) -> bool => a == b;
+
+fn main() {
+    let s: Shape = Square { side: 2.0 };
+    println(s.name());
+    println(describe(s));
+    let c: Shape = Circle {};
+    println(c.name());
+    let n: Named = s;
+    println(n.name());
+
+    // Classes and trait references implement `Eq` by identity (§4.5).
+    let a = Node::new();
+    println(same(a, a));
+    println(same(a, Node::new()));
+    println(same(s, s));
+}

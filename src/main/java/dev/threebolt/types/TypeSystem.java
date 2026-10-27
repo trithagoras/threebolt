@@ -17,7 +17,7 @@ import java.util.Set;
 public final class TypeSystem {
     /** Well-known std declarations, set by the {@link Declarer}. */
     public TypeInfo list, map, set, range, done, err, typeDecl, ptr, nativeIter;
-    public TypeInfo display, eq, ord, hash, truthy, len, error, defaultTrait, iterator, iterable, index, indexMut;
+    public TypeInfo display, eq, ord, hash, truthy, len, error, defaultTrait, iterator, iterable, contains, index, indexMut;
     public TypeInfo num, signed, integer, floatTrait;
     public final Map<String, TypeInfo> operatorTraits = new HashMap<>();
     public final Map<Prim, TypeInfo> prims = new LinkedHashMap<>();
@@ -40,6 +40,13 @@ public final class TypeSystem {
     public ImplInfo impl(TypeInfo trait, TypeInfo target) {
         var byType = impls.get(trait);
         return byType == null ? null : byType.get(target);
+    }
+
+    /** The impls of {@code trait} whose target is a trait reference (§4.10). */
+    public List<ImplInfo> traitRefImpls(TypeInfo trait) {
+        var byType = impls.get(trait);
+        if (byType == null) return List.of();
+        return byType.values().stream().filter(i -> i.targetDecl.isTrait()).toList();
     }
 
     /** Every trait with at least one impl. */
@@ -370,8 +377,8 @@ public final class TypeSystem {
     /**
      * The instance of {@code trait} that {@code t} implements (e.g. {@code Iterable<i32>} for
      * {@code [i32]}), or null. Covers type-parameter bounds, trait references and their
-     * supertraits, impls (also through base classes), and the automatic impls: struct, tuple and
-     * union {@code Eq}/{@code Hash} (§3.4, §4.5).
+     * supertraits, impls (also through base classes, and on trait references), and the automatic
+     * impls: struct, tuple and union {@code Eq}/{@code Hash}, class and trait-reference {@code Eq} (§3.4, §4.5).
      */
     public Type.Nominal implementsAs(Type t, TypeInfo trait) {
         t = expand(t);
@@ -391,7 +398,8 @@ public final class TypeSystem {
             case Type.Nominal n -> {
                 if (n.decl().isTrait()) {
                     for (var s : selfAndSupers(n)) if (s.decl() == trait) return s;
-                    return null;
+                    if (trait == eq) return nominal(eq);
+                    return viaImpl(n.decl(), n, trait);
                 }
                 for (Type.Nominal cur = n; cur != null; ) {
                     var found = viaImpl(cur.decl(), cur, trait);
@@ -399,6 +407,7 @@ public final class TypeSystem {
                     var b = cur.decl().base;
                     cur = b == null ? null : substNominal(b, bind(cur.decl().typeParams, cur.args()));
                 }
+                if (n.decl().isClass() && trait == eq) return nominal(eq);
                 if (n.decl().isStruct() && (trait == eq || trait == hash)) {
                     if (!implementsInProgress.add(n)) return nominal(trait);
                     try {
@@ -444,6 +453,7 @@ public final class TypeSystem {
             case Type.Array a -> {
                 if (trait == len || trait == truthy) return nominal(trait);
                 if (trait == iterable) return nominal(trait, a.element());
+                if (trait == contains) return implementsAs(a.element(), eq) != null ? nominal(trait, a.element()) : null;
                 if (trait == index || trait == indexMut) return nominal(trait, Prim.USIZE, a.element());
                 if (trait == eq || trait == hash) return implementsAs(a.element(), trait) != null ? nominal(trait) : null;
                 return null;

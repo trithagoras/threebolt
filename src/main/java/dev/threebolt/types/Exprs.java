@@ -841,6 +841,9 @@ final class Exprs {
             case RANGE, RANGE_INCLUSIVE -> {
                 return range(b);
             }
+            case IN -> {
+                return membership(b);
+            }
             default -> {}
         }
         // An expected numeric type flows into arithmetic operands, so literals adopt it (§3.6).
@@ -853,6 +856,25 @@ final class Exprs {
         }
         var l = expr(b.left(), hint);
         return binary(b.op(), l, b.right(), b.span(), null);
+    }
+
+    /** {@code x in xs} is {@code Contains::contains(xs, x)}, evaluating {@code xs} first (§7.3). */
+    private Typed membership(Expr.Binary b) {
+        var coll = expr(b.right(), null);
+        if (coll.type() == Type.ERROR) {
+            expr(b.left(), null);
+            return error();
+        }
+        var inst = ts.implementsAs(coll.type(), ts.contains);
+        if (inst == null) {
+            expr(b.left(), null);
+            diag.error(Code.BAD_OPERAND, b.span(), "operator 'in' is not defined for '" + TypeSystem.widen(coll.type()) + "': it does not implement `Contains`");
+            return error();
+        }
+        var x = c.check(b.left(), inst.args().getFirst());
+        var fn = ts.contains.methods("contains").getFirst();
+        return new Typed(new Ir.Call(fn, Ir.CallKind.TRAIT, coll.ir(), null, List.of(x), new int[] {0}, List.of(), null, null,
+                b.span()), Prim.BOOL);
     }
 
     private static boolean arithmetic(BinaryOp op) {

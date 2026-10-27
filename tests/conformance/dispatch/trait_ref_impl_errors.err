@@ -1,0 +1,2 @@
+trait_ref_impl_errors.3b:5:13: error[E0410]: 'Ord' already implements 'Eq' as a supertrait
+trait_ref_impl_errors.3b:11:16: error[E0202]: 'Square' has no method 'name'
