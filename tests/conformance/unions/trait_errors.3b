@@ -1,0 +1,23 @@
+// §3.4: only union-safe traits implemented by every member reach a union, and `impl` cannot
+// target a union.
+trait Named { fn name(self) -> str; }
+trait Same { fn same(self, o: Self) -> bool; }
+impl Named for i32 { fn name(self) -> str => "int"; }
+impl Same for i32 { fn same(self, o: Self) -> bool => true; }
+impl Same for str { fn same(self, o: Self) -> bool => true; }
+
+type IntOrStr = i32 | str;
+impl Named for IntOrStr { fn name(self) -> str => "either"; }
+
+fn ordered<T: Ord>(x: T) {}
+
+fn main() {
+    let x: i32 | str = 1;
+    ordered(x);
+    let a = x.abs();
+    let c = x.cmp(x);
+    let n = x.name();
+    let s = x.same(x);
+    let l = x.len;
+    let y = x + x;
+}

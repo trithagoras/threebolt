@@ -124,7 +124,8 @@ use std::collections::Map as Dict;
 - Type aliases are transparent: `type Result<T> = T | Err;` — `Result<Entity>` *is* `Entity | Err`.
 - A union value carries its runtime type; there is no user-visible wrapper.
 - Literal members are subsumed by their base type: `"a" | str` ≡ `str`.
-- Methods, fields and getters cannot be accessed on a union-typed value; narrow first (§9). Exception: a union whose members are all literals of one base type (`"left" | "right"`) behaves as that base type for member access and trait implementations (`d.len`, f-string `Display`). Unions participate in conditions (§6.6), `==` (§7.3), and `Hash` (when every member implements `Hash`) — nothing else.
+- Fields cannot be accessed on a union-typed value, and neither can methods or getters except through the traits below; narrow first (§9). Exception: a union whose members are all literals of one base type (`"left" | "right"`) behaves as that base type for member access and trait implementations (`d.len`, f-string `Display`). Unions participate in conditions (§6.6), `==` (§7.3), and `Hash` (when every member implements `Hash`).
+- **Traits of unions:** a union implements a trait `X` when every member implements the same instance of `X` and `X` is *union-safe*: neither `X` nor any of its supertraits has a static member, and `Self` appears in their members only as the receiver. So `i32 | str` and `T | Err` implement `Display` (`println(x)`, `f"{x}"`, `x.to_str()`), while `Add`, `Ord` and `Default` are never implemented by a union. A call through such a trait dispatches on the value's runtime member, as through a trait reference (§8.3). These implementations are automatic and cannot be written with `impl`. `Eq` and `Hash` follow their own rules above.
 - Recursive aliases are permitted when recursion passes through a nominal or collection type: `type Json = null | bool | f64 | str | [Json] | Map<str, Json>;`
 
 ### 3.5 Assignability (`S` to `T`)
@@ -694,7 +695,7 @@ Implicitly imported names:
 
 **Primitive trait impls:** every primitive implements `Display` and `Eq`; all but `bool` implement `Ord`; all but floats implement `Hash`. Numeric types implement `Add Sub Mul Div Rem`, signed ones (and floats) `Neg`; integers implement `BitAnd BitOr BitXor Not Shl Shr`. `str` also implements `Len`, `Truthy` and `Add` (concatenation).
 
-**`Display` formats:** integers in decimal; `bool` as `true`/`false`; `char` as itself. Floats print the shortest digits that round-trip, never with an exponent, and integral values without a fraction: `1`, `0.5`, `0.30000000000000004`, `1000000000000000000000`, `-0`, `inf`, `-inf`, `NaN`.
+**`Display` formats:** `null` as `null` (`null` implements `Display`, so `T | null` does when `T` does); integers in decimal; `bool` as `true`/`false`; `char` as itself. Floats print the shortest digits that round-trip, never with an exponent, and integral values without a fraction: `1`, `0.5`, `0.30000000000000004`, `1000000000000000000000`, `-0`, `inf`, `-inf`, `NaN`.
 
 **Copies out of collections:** reading an element of a collection (indexing, iteration, `get`, `pop`, …) yields a copy when the element type is a value type (§5.3).
 
@@ -899,3 +900,7 @@ Semantics the spec left open, decided while implementing:
 
 ### 2026-10-27 — `std::math` and `std::random`
 - §16 Two std modules, outside the prelude: `std::math` (Python's `math` on `f64`, plus integer `gcd lcm isqrt factorial comb perm`) and `std::random` (Python's `random`: a `Random` class and free functions over a shared generator). The generator algorithm (xoshiro256** seeded through splitmix64) is part of the spec, so seeded sequences are portable.
+
+### 2026-10-27 — traits of unions, `null` displays
+- §3.4 A union implements a union-safe trait (no static members; `Self` only as the receiver, also in supertraits) when every member implements the same instance of it; its members are callable on the union and dispatch on the runtime member. Before, only `Eq`, `Hash` and conversions to trait references worked, so `println(x)` on an `i32 | str` was an error while `let d: Display = x;` was not.
+- §16 `null` implements `Display` (as `null`).

@@ -120,13 +120,13 @@ final class Calls {
         if (name.equals("type") && e.args().isEmpty() && m.typeArgs().isEmpty()) {
             return new Typed(new Ir.TypeOfValue(r.value().ir()), c.exprs.typeType());
         }
-        if (TypeSystem.expand(t) instanceof Type.Union) {
+        var cands = methodCandidates(t, name);
+        if (cands.isEmpty() && TypeSystem.expand(t) instanceof Type.Union) {
             diag.error(Code.UNION_MEMBER_ACCESS, m.name().span(), "cannot call '" + name + "' on a value of union type '"
-                    + t + "'; narrow it first (§9)");
+                    + t + "': no union-safe trait that every member implements has it (§3.4); narrow it first (§9)");
             for (var a : e.args()) c.exprs.expr(a.value(), null);
             return Exprs.error();
         }
-        var cands = methodCandidates(t, name);
         if (cands.isEmpty()) {
             // A field holding a function: `self.f(x)`.
             var field = c.exprs.fieldPlace(m);
@@ -243,6 +243,22 @@ final class Calls {
             }
             case Type.Param p -> {
                 for (var b : p.param().bounds) for (var tr : TypeSystem.selfAndSupers(b)) traitMembers(tr, t, name, out);
+            }
+            case Type.Union u -> {
+                // Members of the union-safe traits every member implements (§3.4).
+                var traits = new LinkedHashSet<TypeInfo>(ts.implementedTraits());
+                for (Type m : u.members()) {
+                    if (TypeSystem.expand(m) instanceof Type.Nominal n && n.decl().isTrait()) {
+                        for (var s : TypeSystem.selfAndSupers(n)) traits.add(s.decl());
+                    } else if (m instanceof Type.Param p) {
+                        for (var b : p.param().bounds) for (var s : TypeSystem.selfAndSupers(b)) traits.add(s.decl());
+                    }
+                }
+                for (TypeInfo tr : traits) {
+                    if (tr.methods(name).isEmpty() || !ts.unionSafe(tr)) continue;
+                    var inst = ts.implementsAs(u, tr);
+                    if (inst != null) traitMembers(inst, t, name, out);
+                }
             }
             case Type.Array a -> {
                 if (ARRAY_METHODS.contains(name)) {

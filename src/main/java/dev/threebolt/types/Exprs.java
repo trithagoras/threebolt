@@ -565,12 +565,13 @@ final class Exprs {
     private Typed getter(Recv r, Expr.Member m) {
         var t = r.value().type();
         if (t == Type.ERROR) return error();
-        if (TypeSystem.expand(t) instanceof Type.Union) {
+        var cands = c.calls.methodCandidates(t, m.name().text());
+        if (cands.isEmpty() && TypeSystem.expand(t) instanceof Type.Union) {
             diag.error(Code.UNION_MEMBER_ACCESS, m.name().span(), "cannot access '" + m.name().text()
-                    + "' on a value of union type '" + t + "'; narrow it first (§9)");
+                    + "' on a value of union type '" + t
+                    + "': no union-safe trait that every member implements has it (§3.4); narrow it first (§9)");
             return error();
         }
-        var cands = c.calls.methodCandidates(t, m.name().text());
         var getters = cands.stream().filter(k -> k.fn().isGetter()).toList();
         if (getters.isEmpty()) {
             if (!cands.isEmpty()) {

@@ -1,4 +1,4 @@
-errors.3b:9:14: error[E0214]: cannot access 'len' on a value of union type 'i32 | str'; narrow it first (§9)
+errors.3b:9:14: error[E0214]: cannot access 'len' on a value of union type 'i32 | str': no union-safe trait that every member implements has it (§3.4); narrow it first (§9)
 errors.3b:13:11: error[E0213]: match is not exhaustive: `Color::Blue` is not covered; add an arm or `_ =>`
 errors.3b:14:11: error[E0213]: match is not exhaustive: `false` is not covered; add an arm or `_ =>`
 errors.3b:15:11: error[E0213]: match is not exhaustive: a value of type 'str' is not covered; add an arm or `_ =>`
