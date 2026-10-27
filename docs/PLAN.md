@@ -61,9 +61,10 @@ Each phase ends with green tests. Work in **vertical slices** after Phase 3: eac
 - Prelude: a built-in table, namely the `pub` items of `std::prelude`, plus `Map`/`Set` from `std::collections` and the module alias `c` (`std::c`, LP64 aliases for now). The std files only declare names; members land with their phases.
 - CLI: `threebolt check|ast|print <file>` (besides `tokens`/`parse`).
 - Tests: `AstBuilderTest`, `AstPrinterTest`, `AstRoundTripTest` (examples, std, conformance, spec snippets, `src/test/resources/printer/tricky.3b`), `ModuleLoaderTest`, `ConformanceTest` (`tests/conformance`, see its README; `.err` files, `-PupdateGolden`).
-- Left for Phase 4: the `main` signature check (§2.4); resolving names inside bodies (local scopes, paths like `a::b::f` without a `use`, which need a rule in the spec first).
+- Left for Phase 4: the `main` signature check (§2.4, confirmed as specified); resolving names inside bodies, including fully-qualified paths without a `use` (decided: spec §2.2). Modules named only by such paths must also be loaded, so the loader has to discover them from paths in types and bodies, not just from `use` items.
 
 ### Phase 4 — Slice: "hello, arithmetic"
+Front-end carry-over from Phase 3: body/local name resolution, fully-qualified paths (§2.2) and loading the modules they name, the §2.4 `main` check.
 `fn main`, `println`, `let`/`let mut`, shadowing, primitives & numeric literal typing/widening (§3.6), operators (§7.3), checked overflow (§13.2), `if`/`while`/`loop`/`for` over ranges, `str` + f-strings (`Display` for primitives), functions, named-only optional params, overloads (§4.4), `const`, `static`, panics + exit codes.
 
 ### Phase 5 — Slice: types & values

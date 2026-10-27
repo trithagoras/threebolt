@@ -54,7 +54,7 @@ After `.` (member access) or `::` (path segment) any keyword is accepted as a na
 
 ### 2.1 Modules
 - Every `.3b` file is a module. The **source root** is the directory containing the entry file. Module path = file path relative to root, `/` → `::`, extension dropped (`game/entity.3b` → `game::entity`). Module paths are case-sensitive.
-- The **program** is the entry module, every module reachable from it through `use` (transitively), and the standard library modules. Other files under the source root are not part of it (their `impl`s do not apply).
+- The **program** is the entry module, every module reachable from it (transitively) through `use` or a fully-qualified path (§2.2), and the standard library modules. Other files under the source root are not part of it (their `impl`s do not apply).
 - Standard library modules live under `std::`. The prelude (§16) is implicitly imported everywhere.
 - A module contains only items: `use`, `fn`, `struct`, `class`, `trait`, `impl`, `enum`, `type`, `const`, `static let`, `extern` blocks.
 
@@ -69,6 +69,7 @@ use std::collections::Map as Dict;
 - `use p::n` imports module `p::n` if that file exists, else the items named `n` of module `p` (for a function, every `pub` overload). If both exist ⇒ error (ambiguous import).
 - A module's items and imports share one namespace: an import may not have the same name as an item of the module, or as another import of something different (importing the same thing twice is permitted). Functions with the same name form an overload set (§4.4); any other repeated name ⇒ error. Items and imports shadow prelude names.
 - `use` declarations cannot be `pub`: there are no re-exports in 1.0.
+- **Fully-qualified paths** need no `use`: in a type or expression path `a::b::C` whose first segment is not a name in scope (item, import or prelude name), the leading segments name a module from the source root (or `std::…`), e.g. `std::process::exit(1)`, `game::entity::Entity::new()`. A name in scope wins: after `use game::entity;`, `entity::Entity` uses the import. The same rules as `use` apply: only `pub` items of other modules are accessible.
 - Trait methods are callable on any implementing type without importing the trait (impls are global, §8.5).
 
 ### 2.3 Visibility
@@ -819,3 +820,4 @@ fn main(args: [str]) -> () | Err {
 - §2.2 Defined how `use p::n` chooses between a module and an item (both ⇒ ambiguity error), the shared item/import namespace, and that items and imports shadow the prelude. `use` cannot be `pub` (no re-exports in 1.0; added to "Not in 1.0").
 - §3.1 The primitive-name rule exempts the standard library (`c::char`).
 - §7.7 Tuple indices are plain decimals (`t.01`, `t.0_u8` are errors).
+- §2.2 Fully-qualified paths (`std::process::exit(1)`) work without a `use`; modules they name are part of the program (§2.1).
