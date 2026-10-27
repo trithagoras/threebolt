@@ -1,0 +1,38 @@
+// §12: `Err` is a trait; `T | Err` holds any error. `error(msg)` returns an `Err` (a `MsgErr`), a
+// custom error converts to `Err`, `?` propagates either into `T | Err`, and the runtime type survives.
+
+struct NotFound : Err {
+    let key: str;
+    pub fn message(self) -> str => f"no key '{self.key}'";
+}
+
+class Timeout : MsgErr {
+    pub fn new(msg: str) -> Self => { ..MsgErr::new(msg) };
+}
+
+fn lookup(key: str) -> i32 | NotFound {
+    if key == "a" { return 1; }
+    return NotFound { key };
+}
+
+fn fetch(key: str) -> i32 | Err {
+    if key == "slow" { return Timeout::new("timed out"); }
+    if key == "" { return error("empty key"); }
+    return lookup(key)? + 1;
+}
+
+fn describe(r: i32 | Err) -> str => match r {
+    e is NotFound => f"not found: {e.key}",
+    e is Timeout => f"timeout: {e.message()}",
+    e is Err => f"error: {e}",
+    v => f"ok: {v}",
+};
+
+fn main() {
+    for k in ["a", "b", "slow", ""] { println(describe(fetch(k))); }
+    let e: Err = NotFound { key: "z" };
+    println(e);
+    let r = fetch("");
+    println(r);
+    println(error("plain").type());
+}

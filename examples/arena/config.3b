@@ -2,7 +2,7 @@
 
 pub type Mode = "quick" | "full";
 
-pub struct BadRounds : Error {
+pub struct BadRounds : Err {
     let input: str;
     pub fn message(self) -> str => f"expected 'quick', 'full' or a number, got '{self.input}'";
 }

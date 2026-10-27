@@ -389,7 +389,7 @@ public final class Checker {
         return new Ir.Eval(t.ir());
     }
 
-    /** Discarding a value whose type has an `Error` member is an error (§6.1). */
+    /** Discarding a value whose type has an `Err` member is an error (§6.1). */
     void mustUse(Type type, Span span) {
         if (type == Type.ERROR || type == Type.NEVER) return;
         for (Type m : TypeSystem.members(type)) {

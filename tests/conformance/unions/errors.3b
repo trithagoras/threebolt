@@ -1,6 +1,6 @@
 // Compile errors of the unions/narrowing/errors slice.
 
-struct E : Error { pub fn message(self) -> str => "e"; }
+struct E : Err { pub fn message(self) -> str => "e"; }
 enum Color { Red, Green, Blue }
 
 fn fallible() -> i32 | E => 1;

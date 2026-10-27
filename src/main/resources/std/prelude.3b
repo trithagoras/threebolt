@@ -7,13 +7,13 @@ pub fn print<T: Display>(x: T);
 pub fn println<T: Display>(x: T);
 pub fn eprintln<T: Display>(x: T);
 pub fn panic(msg: str) -> !;
-pub fn error(msg: str) -> Err => Err::new(msg);
+pub fn error(msg: str) -> Err => MsgErr::new(msg);
 pub fn len<T: Len>(x: T) -> usize => x.len;
 
 pub trait Truthy { fn truthy(self) -> bool; }
 pub trait Len { get fn len(self) -> usize; }
 pub trait Display { fn to_str(self) -> str; }
-pub trait Error { fn message(self) -> str; }
+pub trait Err { fn message(self) -> str; }
 pub trait Default { fn default() -> Self; }
 pub trait Eq { fn eq(self, o: Self) -> bool; }
 pub trait Ord : Eq { fn cmp(self, o: Self) -> i32; }
@@ -149,7 +149,8 @@ pub trait Iterable<T> { fn iter(self) -> Iterator<T>; }
 /// `x in c` (§7.3).
 pub trait Contains<T: Eq> { fn contains(self, x: T) -> bool; }
 
-pub class Err : Error, Display {
+/// The error `error(msg)` returns: just a message. Subclass it for a message-only error type.
+pub class MsgErr : Err, Display {
     let msg: str;
     pub fn new(msg: str) -> Self => { msg };
     pub virtual fn message(self) -> str => self.msg;
@@ -297,6 +298,10 @@ impl Contains<char> for str {
         for ch in self.chars() { if ch == c { return true; } }
         return false;
     }
+}
+
+impl Display for Err {
+    fn to_str(self) -> str => self.message();
 }
 
 impl<T: Display> Display for [T] {

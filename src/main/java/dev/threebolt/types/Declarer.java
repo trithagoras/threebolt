@@ -220,7 +220,6 @@ public final class Declarer {
         ts.list = stdType(p.items("List"));
         ts.range = stdType(p.items("Range"));
         ts.done = stdType(p.items("Done"));
-        ts.err = stdType(p.items("Err"));
         ts.typeDecl = stdType(p.items("Type"));
         ts.ptr = stdType(p.items("Ptr"));
         ts.nativeIter = stdType(p.items("NativeIter"));
@@ -233,7 +232,7 @@ public final class Declarer {
         ts.hash = stdType(p.items("Hash"));
         ts.truthy = stdType(p.items("Truthy"));
         ts.len = stdType(p.items("Len"));
-        ts.error = stdType(p.items("Error"));
+        ts.error = stdType(p.items("Err"));
         ts.defaultTrait = stdType(p.items("Default"));
         ts.iterator = stdType(p.items("Iterator"));
         ts.iterable = stdType(p.items("Iterable"));
@@ -986,7 +985,7 @@ public final class Declarer {
             if (m != Type.UNIT && m != Type.ERROR && ts.implementsAs(m, ts.error) == null) retOk = false;
         }
         if (!retOk) {
-            diagnostics.error(Code.INVALID_MAIN, at, "`main` must return `()` or `() | E` where every `E` implements `Error`");
+            diagnostics.error(Code.INVALID_MAIN, at, "`main` must return `()` or `() | E` where every `E` implements `Err`");
         }
     }
 }
