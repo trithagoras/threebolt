@@ -115,8 +115,8 @@ attribute : AT IDENTIFIER (LPAREN (literal (COMMA literal)* COMMA?)? RPAREN)? ;
 
 visibility : PUB | PROT ;
 
-// use a::b::C;  use a::b::{C, D as E};  use a::b as c;
-useDecl : USE IDENTIFIER (COLON_COLON IDENTIFIER)* (AS IDENTIFIER | COLON_COLON useGroup)? SEMI ;
+// use a::b::C;  use a::b::{C, D as E};  use a::b as c;  use a::b::*;
+useDecl : USE IDENTIFIER (COLON_COLON IDENTIFIER)* (AS IDENTIFIER | COLON_COLON useGroup | COLON_COLON STAR)? SEMI ;
 
 useGroup : LBRACE useName (COMMA useName)* COMMA? RBRACE ;
 

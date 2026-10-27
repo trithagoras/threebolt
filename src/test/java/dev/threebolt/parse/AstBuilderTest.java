@@ -103,8 +103,9 @@ class AstBuilderTest {
 
     @Test
     void items() {
-        assertEquals("(Use [] PUB [a b] null [(UseName C null) (UseName D E)])", item("pub use a::b::{C, D as E};"));
-        assertEquals("(Use [] PRIVATE [a b] c null)", item("use a::b as c;"));
+        assertEquals("(Use [] PUB [a b] null [(UseName C null) (UseName D E)] false)", item("pub use a::b::{C, D as E};"));
+        assertEquals("(Use [] PRIVATE [a b] c null false)", item("use a::b as c;"));
+        assertEquals("(Use [] PRIVATE [a b] null null true)", item("use a::b::*;"));
         assertEquals("(Fn [] PRIVATE NONE false false sq [] [(Named false x (Named [f64] []) null)] (Named [f64] [])"
                 + " (Binary MUL " + path("x") + " " + path("x") + "))", item("fn sq(x: f64) -> f64 => x * x;"));
         assertEquals("(Extern [(Attribute link [(StrLit \"m\")])] PRIVATE \"C\" [(Fn [] PRIVATE NONE false false sqrt"

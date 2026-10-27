@@ -1,0 +1,16 @@
+// §2.2: `use m::*` imports every pub item of a module; local items and explicit imports shadow it.
+
+use geo::*;
+use std::math::*;
+
+fn hidden() -> i32 => 7;     // geo's private `hidden` isn't imported, so no clash
+
+fn main() {
+    let p = Point { x: UNIT, y: 2 };
+    println(describe(p));
+    println(describe(origin()));
+    println(describe(3));
+    println(hidden());
+    println(geo::origin().x);
+    println(PI > 3.0);
+}

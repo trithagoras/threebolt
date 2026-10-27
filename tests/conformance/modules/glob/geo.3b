@@ -1,0 +1,6 @@
+pub struct Point { let x: i32; let y: i32; }
+pub fn origin() -> Point => Point { x: 0, y: 0 };
+pub fn describe(p: Point) -> str => f"({p.x}, {p.y})";
+pub fn describe(n: i32) -> str => f"#{n}";
+pub const UNIT: i32 = 1;
+fn hidden() -> i32 => 42;

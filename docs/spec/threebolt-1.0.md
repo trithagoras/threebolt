@@ -64,9 +64,11 @@ use std::io::File;              // item
 use game::component::{Component, Position};
 use game::entity;               // module; then entity::Entity
 use std::collections::Map as Dict;
+use std::math::*;               // every pub item of a module
 ```
 - Only `pub` items may be imported from another module. Cyclic module imports are permitted (resolution is whole-program).
 - `use p::n` imports module `p::n` if that file exists, else the items named `n` of module `p` (for a function, every `pub` overload). If both exist ⇒ error (ambiguous import).
+- `use p::*` (a **glob import**) imports every `pub` item of module `p` (`p` must be a module, not a type or enum). The module's own items and its explicit imports silently shadow glob-imported names; two glob imports that bring the same name for different things ⇒ error (at the later `use`), even if the name is never used.
 - A module's items and imports share one namespace: an import may not have the same name as an item of the module, or as another import of something different (importing the same thing twice is permitted). Functions with the same name form an overload set (§4.4); any other repeated name ⇒ error. Items and imports shadow prelude names.
 - `use` declarations cannot be `pub`: there are no re-exports in 1.0.
 - **Fully-qualified paths** need no `use`: in a type or expression path `a::b::C` whose first segment is not a name in scope (item, import or prelude name), the leading segments name a module from the source root (or `std::…`), e.g. `std::process::exit(1)`, `game::entity::Entity::new()`. A name in scope wins: after `use game::entity;`, `entity::Entity` uses the import. The same rules as `use` apply: only `pub` items of other modules are accessible.
@@ -938,3 +940,6 @@ Semantics the spec left open, decided while implementing:
 
 ### 2026-10-27 — index assignment needs a mutable place
 - §5.1, §5.2 `c[i] = v` requires `c` to be a mutable place even when `c` has reference type, matching `c.set(i, v)` (`IndexMut::set` takes `mut self`). Before, `let xs = [1]; xs[0] = 2;` and `self.map[k] = v` in a `self` method were permitted while the equivalent `set` call was not.
+
+### 2026-10-27 — glob imports
+- §2.2 Added `use p::*`: imports every `pub` item of module `p`; items and explicit imports shadow glob names; two globs disagreeing on a name ⇒ error.

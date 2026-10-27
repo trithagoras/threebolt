@@ -134,7 +134,7 @@ public final class AstBuilder {
             alias = name(ids.getLast());
             ids = ids.subList(0, ids.size() - 1);
         }
-        return new Item.Use(attrs, vis, map(ids, this::name), alias, group, span);
+        return new Item.Use(attrs, vis, map(ids, this::name), alias, group, ctx.STAR() != null, span);
     }
 
     private Attribute attribute(AttributeContext ctx) {

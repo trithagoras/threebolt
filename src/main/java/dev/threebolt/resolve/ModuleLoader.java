@@ -143,7 +143,15 @@ public final class ModuleLoader {
             var path = pathOf(u.path());
             find(path);
             if (path.parent() != null) find(path.parent());
-            if (u.isGroup()) {
+            if (u.glob()) {
+                var target = find(path);
+                if (target != null && target.ast() != null) {
+                    for (Item t : target.ast().items()) {
+                        if (t.visibility() == Visibility.PUB) inScope.add(itemName(t));
+                        if (t instanceof Item.Extern x) x.fns().forEach(f -> inScope.add(f.name().text()));
+                    }
+                }
+            } else if (u.isGroup()) {
                 for (var n : u.group()) {
                     find(path.child(n.name().text()));
                     inScope.add((n.alias() != null ? n.alias() : n.name()).text());
@@ -309,7 +317,7 @@ public final class ModuleLoader {
     private void resolveImports(Module m) {
         if (m.ast() == null) return;
         for (Item item : m.ast().items()) {
-            if (!(item instanceof Item.Use u)) continue;
+            if (!(item instanceof Item.Use u) || u.glob()) continue;
             var path = pathOf(u.path());
             if (!u.isGroup()) {
                 var targets = resolve(m, path, u.path());
@@ -329,6 +337,27 @@ public final class ModuleLoader {
                 names.add(n.name());
                 var targets = resolve(m, full, names);
                 if (targets != null) bind(m, n.alias() != null ? n.alias() : n.name(), targets);
+            }
+        }
+        // Glob imports last: the module's items and explicit imports shadow them.
+        var globbed = new java.util.HashSet<String>();
+        for (Item item : m.ast().items()) {
+            if (!(item instanceof Item.Use u) || !u.glob()) continue;
+            var path = pathOf(u.path());
+            var target = find(path);
+            if (target == null) {
+                moduleNotFound(path, u.path());
+                continue;
+            }
+            for (var e : target.scope().items().entrySet()) {
+                var visible = e.getValue().stream()
+                        .filter(d -> target == m || d.item().visibility() == Visibility.PUB).toList();
+                if (visible.isEmpty() || !m.scope().items(e.getKey()).isEmpty()) continue;
+                var previous = m.scope().importNamed(e.getKey());
+                if (previous != null && !globbed.contains(e.getKey())) continue;
+                var name = new Name(e.getKey(), span(u.path()));
+                globbed.add(e.getKey());
+                bind(m, name, List.copyOf(visible));
             }
         }
     }

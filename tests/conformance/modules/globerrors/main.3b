@@ -1,0 +1,9 @@
+// §2.2: glob imports of a missing module, and two globs naming different things.
+
+use a::*;
+use b::*;
+use nowhere::*;
+
+fn main() {
+    println(only_a());
+}

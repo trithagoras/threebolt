@@ -116,6 +116,7 @@ public final class AstPrinter {
                     });
                     out.append('}');
                 }
+                if (u.glob()) out.append("::*");
                 out.append(';');
             }
             case Item.Fn f -> fn(f);

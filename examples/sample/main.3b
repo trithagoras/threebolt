@@ -1,10 +1,18 @@
+use std::thread;
 
-fn main() -> () | Err {
-    let dict = [
-        "hi": 5,
-        "yo": 2
-    ];
+type Result<T> = T | Err;
 
-    let set: Set<str> = ["hi", "world"];
-    println(set);
+fn main() -> Result<()> {
+    let t = thread::Thread::spawn(thrd);
+    t.join()?;
+}
+
+fn thrd() -> Result<()> {
+    let mut i = 0;
+    while i < 10 {
+        thread::sleep(1000);
+        i += 1;
+        println(f"Counter: {i}");
+    }
+    println("Goodbye.");
 }

@@ -1,0 +1,10 @@
+// wordle!
+use files::*;
+
+fn main() {
+    let mut lines: [str] = [];
+    for line in files::read_lines("words.txt") {
+        lines.push(line);
+    }
+    println(lines);
+}

@@ -9,9 +9,9 @@ public sealed interface Item extends Node {
 
     Visibility visibility();
 
-    /** {@code use a::b::C;}, {@code use a::b as c;}, {@code use a::b::{C, D as E};} (§2.2). */
+    /** {@code use a::b::C;}, {@code use a::b as c;}, {@code use a::b::{C, D as E};}, {@code use a::b::*;} (§2.2). */
     record Use(List<Attribute> attributes, Visibility visibility, List<Name> path, Name alias,
-               List<UseName> group, Span span) implements Item {
+               List<UseName> group, boolean glob, Span span) implements Item {
         /** {@code group} is null unless the `{...}` form was used. */
         public boolean isGroup() {
             return group != null;

@@ -165,11 +165,12 @@ public final class SymbolIndex {
 
     private void use(Program program, Names names, Module m, Item.Use u) {
         var path = u.path();
-        int prefix = u.isGroup() ? path.size() : path.size() - 1;
+        int prefix = u.isGroup() || u.glob() ? path.size() : path.size() - 1;
         for (int k = 1; k <= prefix; k++) {
             var mod = program.module(new ModulePath(path.subList(0, k).stream().map(Name::text).toList()));
             if (mod != null) ref(path.get(k - 1).span(), mod, null);
         }
+        if (u.glob()) return;
         if (!u.isGroup()) {
             imported(names, m, path.getLast(), u.alias() != null ? u.alias() : path.getLast());
         } else {
