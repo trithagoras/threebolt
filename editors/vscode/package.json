@@ -1,8 +1,8 @@
 {
   "name": "threebolt",
   "displayName": "Threebolt",
-  "description": "Threebolt (.3b) support: syntax highlighting, and a language server for errors, hover, go to definition, references and rename",
-  "version": "0.2.0",
+  "description": "Threebolt (.3b) support: syntax highlighting, and a language server for errors, hover, go to definition, references, rename, completion and signature help",
+  "version": "0.3.0",
   "publisher": "threebolt",
   "private": true,
   "license": "UNLICENSED",

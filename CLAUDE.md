@@ -44,7 +44,7 @@ src/main/resources/std/    std modules in Threebolt (bodyless fns are interprete
 src/test/java/…            JUnit 5 unit tests
 tests/conformance/         .3b programs + expected output / expected diagnostics (see its README)
 examples/                  sample Threebolt programs (must keep parsing as the grammar evolves)
-src/main/java/…/lsp/       language server (`threebolt lsp`, LSP4J) over types.SymbolIndex
+src/main/java/…/lsp/       language server (`threebolt lsp`, LSP4J) over types.SymbolIndex; completion via types.Completer hooks
 editors/vscode/            VS Code extension: TextMate grammar (keep in step with ThreeboltLexer.g4) + LSP client
 ```
 
@@ -53,4 +53,6 @@ editors/vscode/            VS Code extension: TextMate grammar (keep in step wit
 - Java: records + sealed interfaces for the AST, `var` where the type is obvious. Dependencies: ANTLR runtime and LSP4J (language server only). Keep the interpreter obviously correct before fast.
 - Every feature lands with tests: unit tests for the component plus a conformance program (and at least one compile-error case where the spec defines an error).
 - `examples/` and the spec's code snippets are informal test inputs — if one stops parsing, either the grammar or the snippet is wrong; fix it deliberately.
+- Language server: completion and signature help check a copy of the file with `Completion.PLACEHOLDER` at the cursor; the checker's hooks (`Completer`) list what fits. A new name-resolution path in the checker should call the completer where it meets the placeholder.
+- The VS Code extension bundles the server jar: after server changes, bump `editors/vscode/package.json`'s version and reinstall (see editors/vscode/README.md).
 - Small, focused commits.

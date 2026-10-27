@@ -3,7 +3,7 @@
 Support for `.3b` files:
 
 - **Syntax highlighting**: a TextMate grammar (`syntaxes/threebolt.tmLanguage.json`) that follows `ThreeboltLexer.g4`, plus comment toggling, bracket matching and auto-closing (`language-configuration.json`).
-- **Language server** (`threebolt lsp`, bundled as `server/threebolt.jar`): errors as you type, across every file of the program; outline; hover with types and signatures; go to definition (including into std); find references; highlight uses; rename.
+- **Language server** (`threebolt lsp`, bundled as `server/threebolt.jar`): errors as you type, across every file of the program; outline; hover with types and signatures; go to definition (including into std); find references; highlight uses; rename; completion after `.`, `::` and on names (including `use` paths); signature help in calls.
 
 Not published; install it locally.
 
@@ -35,6 +35,8 @@ A file is checked as part of the program rooted at the nearest `main.3b` at or a
 
 While a file has syntax errors, hover and navigation answer from its last version that parsed.
 
+Completion checks a copy of the file with a placeholder name at the cursor (and `;` or closing brackets when the statement is unfinished), so it sees narrowed types and only the locals in scope. When even that does not parse, it offers the file's module-level names, the prelude and keywords.
+
 ## Notes
 
 - Highlighting is lexical. Capitalised names are coloured as types (types, enum variants, type parameters), `name::` as a module path and `name(` as a call. `<` and `>` are always coloured as operators, including in generics.
@@ -42,4 +44,4 @@ While a file has syntax errors, hover and navigation answer from its last versio
 - Inside f-string `{…}` interpolations the code is highlighted as ordinary code. `{{` and `}}` are escapes, and a lone `}` is flagged.
 - To inspect scopes, run **Developer: Inspect Editor Tokens and Scopes**.
 - Rename leaves std and built-in names alone, and refuses a name used in a shorthand `{ x }`. Uses through an import alias (`use a::f as g`) keep the alias.
-- Not yet: completion, signature help, doc comments in hovers, formatting.
+- Not yet: doc comments in hovers and completions, semantic highlighting, formatting.
