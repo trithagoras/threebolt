@@ -1,0 +1,14 @@
+// §10.1 numeric trait misuse.
+fn negate<T: Signed>(x: T) -> T => -x;
+fn half<T: Integer>(x: T) -> T => x * 0.5;
+fn huge<T: Num>() -> T => 10000000000000000000;
+fn plain<T>(x: T) -> T => x + 1;
+fn ints<T: Integer>(x: T) -> T => x;
+
+fn main() {
+    negate(5_u32);
+    ints(1.5);
+    let s: str = ints(1);
+    let u: i32 | str = 1;
+    let v = ints(u);
+}

@@ -18,6 +18,7 @@ public final class TypeSystem {
     /** Well-known std declarations, set by the {@link Declarer}. */
     public TypeInfo list, map, set, range, done, err, typeDecl, ptr, nativeIter;
     public TypeInfo display, eq, ord, hash, truthy, len, error, defaultTrait, iterator, iterable, index, indexMut;
+    public TypeInfo num, signed, integer, floatTrait;
     public final Map<String, TypeInfo> operatorTraits = new HashMap<>();
     public final Map<Prim, TypeInfo> prims = new LinkedHashMap<>();
 

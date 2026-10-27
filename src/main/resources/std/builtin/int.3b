@@ -1,6 +1,13 @@
 // Members of every integer type (spec §16); `Self` is the integer type. Not a module: the
 // checker attaches these intrinsics to the primitive types.
 
+pub fn from_i64(n: i64) -> Self;
+pub fn zero() -> Self;
+pub fn one() -> Self;
+pub fn min_value() -> Self;
+pub fn max_value() -> Self;
+pub fn bits() -> u32;
+
 pub fn abs(self) -> Self;
 pub fn min(self, o: Self) -> Self;
 pub fn max(self, o: Self) -> Self;

@@ -235,6 +235,10 @@ public final class Declarer {
         ts.iterable = stdType(p.items("Iterable"));
         ts.index = stdType(p.items("Index"));
         ts.indexMut = stdType(p.items("IndexMut"));
+        ts.num = stdType(p.items("Num"));
+        ts.signed = stdType(p.items("Signed"));
+        ts.integer = stdType(p.items("Integer"));
+        ts.floatTrait = stdType(p.items("Float"));
         for (String op : List.of("Add", "Sub", "Mul", "Div", "Rem", "Neg", "BitAnd", "BitOr", "BitXor", "Not", "Shl", "Shr")) {
             ts.operatorTraits.put(op, stdType(p.items(op)));
         }
@@ -606,11 +610,17 @@ public final class Declarer {
             if (!p.isFloat()) traits.add(ts.hash);
             if (p.isNumeric()) {
                 for (String op : List.of("Add", "Sub", "Mul", "Div", "Rem")) traits.add(ts.operatorTraits.get(op));
-                if (p.isSigned()) traits.add(ts.operatorTraits.get("Neg"));
+                traits.add(ts.num);
+                if (p.isSigned()) {
+                    traits.add(ts.operatorTraits.get("Neg"));
+                    traits.add(ts.signed);
+                }
             }
             if (p.isInteger()) {
                 for (String op : List.of("BitAnd", "BitOr", "BitXor", "Not", "Shl", "Shr")) traits.add(ts.operatorTraits.get(op));
+                traits.add(ts.integer);
             }
+            if (p.isFloat()) traits.add(ts.floatTrait);
             if (p == Prim.STR) {
                 traits.add(ts.len);
                 traits.add(ts.truthy);

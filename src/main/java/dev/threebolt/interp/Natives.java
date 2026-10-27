@@ -294,11 +294,20 @@ final class Natives {
     }
 
     private Object integer(String name, Object self, Object[] a, FnInfo fn) {
-        if (name.equals("parse")) return Ops.parseInt((String) a[0], ownerPrim(fn));
+        switch (name) {
+            case "parse" -> { return Ops.parseInt((String) a[0], ownerPrim(fn)); }
+            case "from_i64" -> { return fromI64(ownerPrim(fn), ((Int) a[0]).v()); }
+            case "zero" -> { return new Int(ownerPrim(fn), 0); }
+            case "one" -> { return new Int(ownerPrim(fn), 1); }
+            case "min_value" -> { return new Int(ownerPrim(fn), ownerPrim(fn).min().longValue()); }
+            case "max_value" -> { return new Int(ownerPrim(fn), ownerPrim(fn).max().longValue()); }
+            case "bits" -> { return new Int(Prim.U32, ownerPrim(fn).bits()); }
+            default -> {}
+        }
         var x = (Int) self;
         var k = x.kind();
         return switch (name) {
-            case "abs" -> x.v() < 0 ? Ops.neg(x) : x;
+            case "abs" -> k.isSigned() && x.v() < 0 ? Ops.neg(x) : x;
             case "min" -> Ops.compare(x, (Int) a[0]) <= 0 ? x : a[0];
             case "max" -> Ops.compare(x, (Int) a[0]) >= 0 ? x : a[0];
             case "pow" -> Ops.pow(x, ((Int) a[0]).v());
@@ -320,6 +329,13 @@ final class Natives {
             case "shr" -> Ops.shr(x, (Int) a[0]);
             default -> family(name, x, a, k);
         };
+    }
+
+    /** {@code Num::from_i64}: the value {@code n} as a {@code k}; panics if it does not fit. */
+    private static Int fromI64(Prim k, long n) {
+        var r = Ops.exact(k, BigInteger.valueOf(n));
+        if (r == null) throw new Panic(n + " does not fit in '" + k + "'");
+        return r;
     }
 
     /** {@code wrapping_*}, {@code checked_*}, {@code saturating_*} (§13.2). */
@@ -352,7 +368,18 @@ final class Natives {
     }
 
     private Object floating(String name, Object self, Object[] a, FnInfo fn) {
-        if (name.equals("parse")) return Ops.parseFloat((String) a[0], ownerPrim(fn));
+        var p = ownerPrim(fn);
+        switch (name) {
+            case "parse" -> { return Ops.parseFloat((String) a[0], p); }
+            case "from_i64" -> { return Ops.flt(p, ((Int) a[0]).v()); }
+            case "from_f64" -> { return Ops.flt(p, ((Flt) a[0]).v()); }
+            case "zero" -> { return Ops.flt(p, 0); }
+            case "one" -> { return Ops.flt(p, 1); }
+            case "nan" -> { return Ops.flt(p, Double.NaN); }
+            case "infinity" -> { return Ops.flt(p, Double.POSITIVE_INFINITY); }
+            case "epsilon" -> { return Ops.flt(p, p == Prim.F32 ? Math.ulp(1.0f) : Math.ulp(1.0)); }
+            default -> {}
+        }
         var x = (Flt) self;
         var k = x.kind();
         double v = x.v();

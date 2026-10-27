@@ -44,13 +44,22 @@ final class Calls {
         this.diag = c.diag;
     }
 
+    /** The expected type of the call being resolved, for {@link #literalOnly} inference. */
+    private Type callExpected;
+
     Typed call(Expr.Call e, Type expected) {
-        return switch (e.callee()) {
-            case Expr.Member m when m.receiver() instanceof Expr.Super -> superCall(e, m);
-            case Expr.Member m -> methodCall(e, m);
-            case Expr.Path p -> pathCall(e, p);
-            default -> valueCall(e, c.exprs.expr(e.callee(), null));
-        };
+        var saved = callExpected;
+        callExpected = expected;
+        try {
+            return switch (e.callee()) {
+                case Expr.Member m when m.receiver() instanceof Expr.Super -> superCall(e, m);
+                case Expr.Member m -> methodCall(e, m);
+                case Expr.Path p -> pathCall(e, p);
+                default -> valueCall(e, c.exprs.expr(e.callee(), null));
+            };
+        } finally {
+            callExpected = saved;
+        }
     }
 
     private Typed valueCall(Expr.Call e, Typed fn) {
@@ -596,6 +605,8 @@ final class Calls {
     private Bound bind(Candidate k, List<Expr.Arg> positional, List<Expr.Arg> named, List<Type> explicit,
                        Span span, String name) {
         var f = k.fn();
+        var expected = callExpected;
+        callExpected = null;
         var env = new HashMap<>(k.env());
         var vars = new LinkedHashSet<>(k.vars());
         if (explicit.isEmpty()) vars.addAll(f.typeParams);
@@ -679,6 +690,7 @@ final class Calls {
             typed[idx] = c.exprs.lambda((Expr.Lambda) argOf[idx].value(), pt);
             ts.unify(paramType[idx], typed[idx].type(), env, vars);
         }
+        literalOnly(f, k, vars, env, argOf, paramType, typed, fixed, expected);
         // An argument that failed to type has been reported; inferring from it is no news.
         boolean argError = java.util.Arrays.stream(typed).anyMatch(t -> t != null && t.type() == Type.ERROR);
         for (var v : vars) {
@@ -715,6 +727,42 @@ final class Calls {
         var ret = TypeSystem.subst(TypeSystem.subst(f.ret, k.env()), env);
         stdCallRules(f, k.env(), ownerArgs, span);
         return new Bound(k, irArgs, order.stream().mapToInt(Integer::intValue).toArray(), typeArgs, ownerArgs, ret);
+    }
+
+    /**
+     * §10: a type argument that only unsuffixed numeric literals determine, of a call returning
+     * that type parameter, is the expected type when it meets the bounds and every such literal fits it:
+     * `let x: u8 = random::randint(1, 6);` is `randint<u8>`.
+     */
+    private void literalOnly(FnInfo f, Candidate k, Set<TypeParamInfo> vars, Map<TypeParamInfo, Type> env,
+                             Expr.Arg[] argOf, Type[] paramType, Typed[] typed, int fixed, Type expected) {
+        if (expected == null || TypeSystem.expand(expected) instanceof Type.Union || expected == Type.ERROR) return;
+        if (!(TypeSystem.expand(TypeSystem.subst(f.ret, k.env())) instanceof Type.Param ret) || !vars.contains(ret.param())) return;
+        var v = ret.param();
+        for (var b : v.bounds) if (ts.implementsAs(expected, b.decl()) == null) return;
+        var literals = new ArrayList<Integer>();
+        for (int i = 0; i < fixed; i++) {
+            if (argOf[i] == null || !TypeSystem.mentions(paramType[i], Set.of(v))) continue;
+            if (!(TypeSystem.expand(paramType[i]) instanceof Type.Param p && p.param() == v)) return;
+            if (!unsuffixedLiteral(argOf[i].value())) return;
+            literals.add(i);
+        }
+        if (literals.isEmpty()) return;
+        for (int i : literals) {
+            var arg = argOf[i].value();
+            if (!ts.assignable(diag.muted(() -> c.exprs.expr(arg, expected)).type(), expected)) return;
+        }
+        for (int i : literals) typed[i] = c.exprs.expr(argOf[i].value(), expected);
+        env.put(v, expected);
+    }
+
+    private static boolean unsuffixedLiteral(Expr e) {
+        return switch (e) {
+            case Expr.IntLit i -> i.suffix() == null;
+            case Expr.FloatLit fl -> fl.suffix() == null;
+            case Expr.Unary u when u.op() == Expr.UnaryOp.NEG -> unsuffixedLiteral(u.operand());
+            default -> false;
+        };
     }
 
     /** §14.1: C variadic arguments are scalars of ABI type (promoted at the call). */

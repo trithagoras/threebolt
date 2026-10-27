@@ -32,6 +32,68 @@ pub trait Not { fn not(self) -> Self; }
 pub trait Shl { fn shl(self, o: Self) -> Self; }
 pub trait Shr { fn shr(self, o: Self) -> Self; }
 
+/// Numbers (§10.1): every integer and float type, and user types that implement it. An integer
+/// literal whose expected type is a `Num` type parameter `T` is `T::from_i64(n)`.
+pub trait Num : Eq + Ord + Display + Add + Sub + Mul + Div + Rem {
+    /// The value `n`; panics if it does not fit.
+    fn from_i64(n: i64) -> Self;
+    fn zero() -> Self => Self::from_i64(0);
+    fn one() -> Self => Self::from_i64(1);
+    fn abs(self) -> Self;
+    fn min(self, o: Self) -> Self {
+        if self.cmp(o) <= 0 { return self; }
+        return o;
+    }
+    fn max(self, o: Self) -> Self {
+        if self.cmp(o) >= 0 { return self; }
+        return o;
+    }
+}
+
+/// Numbers with negation: the signed integer types and the float types.
+pub trait Signed : Num + Neg {}
+
+/// The integer types.
+pub trait Integer : Num + Hash + BitAnd + BitOr + BitXor + Not + Shl + Shr {
+    fn min_value() -> Self;
+    fn max_value() -> Self;
+    fn bits() -> u32;
+    fn pow(self, exp: u32) -> Self;
+    fn checked_add(self, o: Self) -> Self | null;
+    fn checked_sub(self, o: Self) -> Self | null;
+    fn checked_mul(self, o: Self) -> Self | null;
+    fn wrapping_add(self, o: Self) -> Self;
+    fn wrapping_sub(self, o: Self) -> Self;
+    fn wrapping_mul(self, o: Self) -> Self;
+    fn saturating_add(self, o: Self) -> Self;
+    fn saturating_sub(self, o: Self) -> Self;
+    fn saturating_mul(self, o: Self) -> Self;
+}
+
+/// The float types. A float literal whose expected type is a `Float` type parameter `T` is
+/// `T::from_f64(x)`.
+pub trait Float : Signed {
+    /// The nearest value to `x`.
+    fn from_f64(x: f64) -> Self;
+    fn nan() -> Self;
+    fn infinity() -> Self;
+    fn epsilon() -> Self;
+    fn pow(self, exp: Self) -> Self;
+    fn sqrt(self) -> Self;
+    fn floor(self) -> Self;
+    fn ceil(self) -> Self;
+    fn round(self) -> Self;
+    fn trunc(self) -> Self;
+    fn sin(self) -> Self;
+    fn cos(self) -> Self;
+    fn tan(self) -> Self;
+    fn exp(self) -> Self;
+    fn ln(self) -> Self;
+    fn log10(self) -> Self;
+    fn is_nan(self) -> bool;
+    fn is_infinite(self) -> bool;
+}
+
 pub trait Index<I, V> { fn index(self, i: I) -> V; }
 pub trait IndexMut<I, V> : Index<I, V> { fn set(mut self, i: I, v: V); }
 

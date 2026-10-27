@@ -1,0 +1,71 @@
+// §10.1 numeric traits: generic code over Num/Signed/Integer/Float, literals of a numeric type
+// parameter, numeric casts between type parameters, and a user type implementing Num.
+
+fn sum<T: Num>(xs: [T]) -> T {
+    let mut acc: T = 0;
+    for x in xs { acc += x; }
+    return acc;
+}
+
+fn mean<T: Float>(xs: [T]) -> T {
+    let mut acc = T::zero();
+    for x in xs { acc = acc + x; }
+    return acc / T::from_i64(xs.len as i64);
+}
+
+fn double<T: Num>(x: T) -> T => x * 2;
+fn half<T: Float>(x: T) -> T => x * 0.5;
+fn is_zero<T: Num>(x: T) -> bool => x == 0;
+fn below_ten<T: Num>(x: T) -> bool => x < 10;
+fn negate<T: Signed>(x: T) -> T => -x;
+fn range_of<T: Integer>() -> str => f"{T::min_value()}..={T::max_value()} ({T::bits()} bits)";
+fn convert<T: Num, U: Num>(x: T) -> U => x as U;
+fn hyp<T: Float>(a: T, b: T) -> T => (a * a + b * b).sqrt();
+
+fn pow_mod<T: Integer>(base: T, mut exp: T, m: T) -> T {
+    let mut result = T::one();
+    let mut b = base % m;
+    while exp > 0 {
+        if exp % 2 == 1 { result = result * b % m; }
+        b = b * b % m;
+        exp = exp / 2;
+    }
+    return result;
+}
+
+// Arithmetic modulo 7; Num's zero, one, min and max come from its defaults.
+struct Mod7 : Num, Display {
+    let v: i32;
+    pub fn from_i64(n: i64) -> Self => { v: ((n % 7 + 7) % 7) as i32 };
+    pub fn abs(self) -> Self => self;
+    pub fn eq(self, o: Self) -> bool => self.v == o.v;
+    pub fn cmp(self, o: Self) -> i32 => self.v.cmp(o.v);
+    pub fn to_str(self) -> str => f"{self.v} (mod 7)";
+    pub fn add(self, o: Self) -> Self => Mod7::from_i64((self.v + o.v) as i64);
+    pub fn sub(self, o: Self) -> Self => Mod7::from_i64((self.v - o.v) as i64);
+    pub fn mul(self, o: Self) -> Self => Mod7::from_i64((self.v * o.v) as i64);
+    pub fn div(self, o: Self) -> Self => self;
+    pub fn rem(self, o: Self) -> Self => self;
+}
+
+fn main() {
+    println(f"{sum([1, 2, 3])} {sum([1.5, 2.25])} {sum([] as [u8])} {sum([250_u8, 5_u8])}");
+    println(f"{mean([1.0, 2.0, 4.5])} {mean([1.0_f32, 2.0_f32])}");
+    println(f"{double(21_u8)} {double(-1.25)} {half(3.0_f32)} {half(-7.0)}");
+    println(f"{is_zero(0)} {is_zero(0.5)} {below_ten(9_u64)} {below_ten(10.5)}");
+    println(f"{negate(5)} {negate(-2.5)} {negate(i8::MAX)}");
+    println(range_of<u8>());
+    println(range_of<i64>());
+    println(f"{convert<f64, i32>(3.9)} {convert<i32, u8>(300)} {convert<u8, f32>(255)} {convert<i64, i64>(-1)}");
+    println(f"{hyp(3.0, 4.0)} {hyp(3.0_f32, 4.0_f32)}");
+    println(f"{pow_mod(4, 13, 497)} {pow_mod(2_u64, 62, 1000000007)}");
+
+    // Static members through the primitive types.
+    println(f"{u64::max_value()} {i8::bits()} {f32::epsilon() > 0.0} {f64::nan().is_nan()} {i32::from_i64(-5)}");
+    println(f"{(-3).abs()} {200_u8.abs()} {u64::MAX.abs() == u64::MAX}");
+
+    // A user type: literals become Mod7::from_i64.
+    println(sum([Mod7::from_i64(5), Mod7::from_i64(4)]));
+    println(double(Mod7::from_i64(6)));
+    println(f"{Mod7::zero()} {Mod7::one().max(Mod7::from_i64(10))} {is_zero(Mod7::from_i64(14))}");
+}
