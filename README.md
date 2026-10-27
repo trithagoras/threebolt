@@ -22,4 +22,7 @@ Requires JDK 25+.
 ./gradlew build
 ./gradlew run --args="tokens examples/arena/main.3b"   # token stream
 ./gradlew run --args="parse examples/arena/main.3b"    # parse tree
+./gradlew run --args="ast examples/arena/main.3b"      # AST
+./gradlew run --args="print examples/arena/main.3b"    # AST printed back as source
+./gradlew run --args="check examples/arena/main.3b"    # load modules, resolve `use`, report errors
 ```

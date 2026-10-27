@@ -23,6 +23,8 @@ Hobbyist general-purpose language (`.3b`): statically typed, GC-managed, Rust-fl
 ./gradlew test
 ./gradlew run --args="tokens examples/arena/main.3b"
 ./gradlew run --args="parse examples/arena/main.3b"
+./gradlew run --args="ast examples/arena/main.3b"     # also: print, check
+./gradlew test -PupdateGolden                     # rewrite lexer goldens and conformance .err files
 ```
 
 - Requires a JDK ≥ 25 (bytecode targets 25 via `--release 25`). If `java` isn't on PATH, use `JAVA_HOME=/opt/homebrew/opt/openjdk/libexec/openjdk.jdk/Contents/Home`.
@@ -35,9 +37,11 @@ Hobbyist general-purpose language (`.3b`): statically typed, GC-managed, Rust-fl
 src/main/antlr/…/parser/   ANTLR grammars
 src/main/java/dev/threebolt/
   Main.java                CLI
+  diag/                    Source, Span, diagnostics with stable E0xxx codes
   ast/ parse/ resolve/ types/ interp/ runtime/   (created as phases land — see PLAN)
+src/main/resources/std/    std modules in Threebolt (bodyless fns are interpreter intrinsics)
 src/test/java/…            JUnit 5 unit tests
-tests/conformance/         .3b programs + expected output / expected diagnostics
+tests/conformance/         .3b programs + expected output / expected diagnostics (see its README)
 examples/                  sample Threebolt programs (must keep parsing as the grammar evolves)
 ```
 
