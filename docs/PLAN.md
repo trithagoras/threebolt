@@ -52,11 +52,19 @@ Each phase ends with green tests. Work in **vertical slices** after Phase 3: eac
 - Spec clarifications from this phase: §1 keywords after `::`; §6.3 collection literals allowed in heads; §17 notes 12–16.
 - Tests: `ParserTest` (precedence, disambiguation, negative cases with line/col); `ParserAcceptanceTest` (every `examples/` file and every spec ```` ```rs ```` snippet parses; snippets may be modules, member lists, statement lists or one expression per line; `{ ... }` placeholder bodies are elided).
 
-### Phase 3 — AST + front-end plumbing
-- Records for every node with `Span`. Builder visitor ParseTree → AST (no semantics). AST pretty-printer; round-trip tests (parse → print → parse = same AST).
-- Module loader: source root = entry file's directory (§2.1); `use` resolution; prelude injection. Diagnostics infrastructure (error codes, spans, multiple errors per run).
+### Phase 3 — AST + front-end plumbing ✅
+- `ast/`: records under sealed interfaces (`Item`, `Member`, `Stmt`, `Expr`, `TypeExpr`, `Pattern`, `Param`; `Body` = what follows `=>`), each with a `Span`. Parentheses and other purely syntactic choices are dropped (`{ x }` → field `x: x`, `x as T?` → `Propagate(Cast)`, struct-pattern shorthand → binding); unions are kept as written, not flattened (that is §3.4 semantics). Optional parts are `null`.
+- `parse.AstBuilder` turns an error-free parse tree into the AST and decodes literal values (escapes, `\u{…}` scalar range → E0002, integer radix/suffix into `BigInteger` + suffix, float digits kept as text). Range checks against the target type are the checker's job (Phase 4). Tuple indices must be plain decimals (E0003). `parse.AstParser` = parse + build, reporting syntax errors as diagnostics; no AST when the parse failed.
+- `parse.AstPrinter` prints source that parses back to the same AST. Besides precedence it re-inserts parentheses for: initializers in heads (§6.3); `<` comparisons inside comma lists (else §7.5 may read `(a < b), c > (d)` as generic args); casts followed by `|`/`<` (would extend the type); statement-, lambda- and arm-initial `{` and statement-initial `match`. It adds `;` after a match statement when the next statement starts with `(`, `[` or `-`. `ast.AstDump` (reflective, span-free s-expressions) defines AST equality for the round-trip tests.
+- `diag/`: `Source` (code-point offsets, matching ANTLR), `Span`, `Code` (stable `E0xxx` ids: E00xx syntax, E01xx modules/names), `Diagnostic` (header + caret excerpt, notes), `Diagnostics`.
+- `resolve.ModuleLoader`: the program is the entry module plus its `use` closure (decided with the user over "all files under the root", spec §2.1). `std::` modules are classpath resources `src/main/resources/std/*.3b`; bodyless functions there are intrinsics. Builds each `ModuleScope` (items → imports → prelude) and reports: missing module/item, private item, ambiguous module-vs-item import, duplicate names (fn overloads excepted), primitive type names, unknown attributes, `pub use`. A module with syntax errors suppresses follow-on import errors.
+- Prelude: a built-in table, namely the `pub` items of `std::prelude`, plus `Map`/`Set` from `std::collections` and the module alias `c` (`std::c`, LP64 aliases for now). The std files only declare names; members land with their phases.
+- CLI: `threebolt check|ast|print <file>` (besides `tokens`/`parse`).
+- Tests: `AstBuilderTest`, `AstPrinterTest`, `AstRoundTripTest` (examples, std, conformance, spec snippets, `src/test/resources/printer/tricky.3b`), `ModuleLoaderTest`, `ConformanceTest` (`tests/conformance`, see its README; `.err` files, `-PupdateGolden`).
+- Left for Phase 4: the `main` signature check (§2.4, confirmed as specified); resolving names inside bodies, including fully-qualified paths without a `use` (decided: spec §2.2). Modules named only by such paths must also be loaded, so the loader has to discover them from paths in types and bodies, not just from `use` items.
 
 ### Phase 4 — Slice: "hello, arithmetic"
+Front-end carry-over from Phase 3: body/local name resolution, fully-qualified paths (§2.2) and loading the modules they name, the §2.4 `main` check.
 `fn main`, `println`, `let`/`let mut`, shadowing, primitives & numeric literal typing/widening (§3.6), operators (§7.3), checked overflow (§13.2), `if`/`while`/`loop`/`for` over ranges, `str` + f-strings (`Display` for primitives), functions, named-only optional params, overloads (§4.4), `const`, `static`, panics + exit codes.
 
 ### Phase 5 — Slice: types & values

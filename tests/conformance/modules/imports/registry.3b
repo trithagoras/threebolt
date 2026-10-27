@@ -1,0 +1,6 @@
+// Cycle: registry imports shapes::circle, which imports registry.
+use shapes::circle::Circle;
+
+pub fn register(s: str) { println(s); }
+
+pub fn unit() -> Circle => Circle { r: 1.0 };

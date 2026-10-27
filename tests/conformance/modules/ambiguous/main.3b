@@ -1,0 +1,4 @@
+// `a::b` is both the module a/b.3b and the item `b` of module a: an error, not a silent pick.
+use a::b;
+
+fn main() {}

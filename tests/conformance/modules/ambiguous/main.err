@@ -1,0 +1,2 @@
+main.3b:2:5: error[E0103]: 'a::b' names both a module and an item of module 'a'
+a.3b:1:1: note: the item is defined here

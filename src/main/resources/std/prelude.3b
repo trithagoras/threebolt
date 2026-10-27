@@ -1,0 +1,52 @@
+// std::prelude: implicitly imported into every module (spec §16). The loader also adds `Map` and
+// `Set` from std::collections and the module alias `c` for std::c.
+//
+// Functions without a body are intrinsics provided by the interpreter. This file declares the
+// prelude's names; members are filled in as their phases land (docs/PLAN.md).
+
+pub fn print(s: str);
+pub fn println(s: str);
+pub fn eprintln(s: str);
+pub fn panic(msg: str) -> !;
+pub fn error(msg: str) -> Err;
+pub fn len<T: Len>(x: T) -> usize => x.len;
+
+pub trait Truthy { fn truthy(self) -> bool; }
+pub trait Len { get fn len(self) -> usize; }
+pub trait Display { fn to_str(self) -> str; }
+pub trait Error { fn message(self) -> str; }
+pub trait Default { fn default() -> Self; }
+pub trait Eq { fn eq(self, o: Self) -> bool; }
+pub trait Ord : Eq { fn cmp(self, o: Self) -> i32; }
+pub trait Hash { fn hash(self) -> u64; }
+
+pub trait Add { fn add(self, o: Self) -> Self; }
+pub trait Sub { fn sub(self, o: Self) -> Self; }
+pub trait Mul { fn mul(self, o: Self) -> Self; }
+pub trait Div { fn div(self, o: Self) -> Self; }
+pub trait Rem { fn rem(self, o: Self) -> Self; }
+pub trait Neg { fn neg(self) -> Self; }
+pub trait BitAnd { fn bitand(self, o: Self) -> Self; }
+pub trait BitOr { fn bitor(self, o: Self) -> Self; }
+pub trait BitXor { fn bitxor(self, o: Self) -> Self; }
+pub trait Not { fn not(self) -> Self; }
+pub trait Shl { fn shl(self, o: Self) -> Self; }
+pub trait Shr { fn shr(self, o: Self) -> Self; }
+
+pub trait Index<I, V> { fn index(self, i: I) -> V; }
+pub trait IndexMut<I, V> : Index<I, V> { fn set(mut self, i: I, v: V); }
+
+// The default adapters (map, filter, ...) land with Phase 7.
+pub trait Iterator<T> { fn next(mut self) -> T | Done; }
+pub trait Iterable<T> { fn iter(self) -> Iterator<T>; }
+
+pub class Err : Error {
+    let msg: str;
+    pub fn message(self) -> str => self.msg;
+}
+
+pub struct Done;
+pub class Type {}
+pub class List<T> {}
+pub struct Range<T> {}
+pub struct Ptr<T> {}

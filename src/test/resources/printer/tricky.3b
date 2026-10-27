@@ -1,0 +1,116 @@
+// Inputs where the printer must re-insert parentheses (or `;`) for the output to parse back to
+// the same AST. Run by AstRoundTripTest.
+
+fn precedence() {
+    let a = (1 + 2) * 3;
+    let b = 1 + 2 * 3 - 4;
+    let c = a - (b - c);
+    let d = -(x as i64);
+    let e = (-x) as i64;
+    let f = (a ?? b) ?? c;
+    let g = a ?? b ?? c;
+    let h = (a if c else b) if d else e;
+    let i = a if c else b if d else e;
+    let j = (x => x + 1)(2);
+    let k = !(a && b) || c;
+    let l = (a < b) == (c < d);
+    let m = (a..b).len;
+    let n = (f(x))?.y;
+    let o = (x as T)?;
+    let p = x as T?;
+    let q = (a & b) == c;
+    let r = a & (b == c);
+    let s = (x is T) && y;
+    let t = (a | b) as u8;
+    let u = a - -b;
+    let v = (unsafe => p.read()) + 1;
+}
+
+fn generics() {
+    f((a < b), (c > (d)));
+    f(a < b, c > d);
+    let v = [x < y, z > (w)];
+    let w = [(x < y), z > (w)];
+    f((a < b), c > (d, e));
+    let m = [k: x < y, z > (w): 1];
+    g(x => a < b, c > (d));
+    h(a<b, c>(d));
+    let p = Point { x: a < b, y: c > (d) };
+}
+
+fn casts() {
+    let a = (x as u8) | y;
+    let b = (x as T) < y;
+    let c = a + (b as T) | c;
+    let d = x as A | B;
+    let e = (x as T) as U;
+}
+
+fn heads() {
+    if (Point { x: 0 }) == p {}
+    if p == (Point { x: 0 }).norm() {}
+    while ({ x: 1 }).ok() {}
+    for x in (Range { lo: 0, hi: 3 }) {}
+    match (Point { x: 0 }) { _ => {} }
+    if f(Point { x: 0 }) {}
+    if [Point { x: 0 }].len {}
+    if let p = (Point { x: 0 }).get() {}
+}
+
+fn statements() {
+    ({ x: 1 }).go();
+    ({ x: 1 }).y = 2;
+    (match x { _ => a }).go();
+    match x { _ => a };
+    (y);
+    match x { _ => a };
+    -1;
+    match x { _ => a }
+    y();
+    defer ({ x: 1 }).go();
+    defer { go(); }
+    let f = x => ({ a: 1 });
+    let g = x => { return 1; };
+    let h = match x { _ => ({ a }), _ => { return; } };
+    let k = (a, b) => a = b;
+    _ = f();
+    x >>= 2;
+    x >= 2;
+    unsafe { p.write(1); }
+}
+
+fn types(a: (fn() -> i32) | null, b: fn() -> i32 | null, c: A | (B | C), d: (i32,), e: [u8; 4], f: -1 | "x") {}
+
+fn patterns() {
+    match x {
+        (a is A) | b => 1,
+        a is A | B => 2,
+        (1 | 2) | 3 => 3,
+        Point { x, y: 0, .. } => 4,
+        Point { mut x } => 5,
+        [first, ..rest, last] => 6,
+        -5..=-1 => 7,
+        'a'..'z' => 8,
+        Color::Red => 9,
+        (a,) => 10,
+        () => 11,
+        is T => 12,
+        n if n < 0 => 13,
+        _ => {}
+    }
+}
+
+fn literals() {
+    let a = [0xFF, 0b1010, 0o17, 1_000_u64, 1.5_f32, 2.5e-3, 1_f32];
+    let b = "tab\t\"quote\" \u{1F600} \\";
+    let c = """multi
+line "quoted" """;
+    let d = f"{a} {{braces}} {f"{b}"} { {x: 1}.x }";
+    let e = '\'';
+    let f = (1).0;
+    let g = t.0.1;
+    let h = (1, 2,);
+    let i = (1,);
+    let j = [0; 4];
+    let k = [:];
+}

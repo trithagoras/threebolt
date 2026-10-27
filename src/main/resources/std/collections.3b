@@ -1,0 +1,4 @@
+// std::collections (spec §16). Map and Set are also in the prelude.
+
+pub class Map<K: Hash + Eq, V> {}
+pub class Set<T: Hash + Eq> {}
