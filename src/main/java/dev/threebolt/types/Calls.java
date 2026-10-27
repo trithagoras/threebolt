@@ -259,7 +259,7 @@ final class Calls {
 
     /** Fixed-size arrays share the list intrinsics that do not change the length. */
     private static final Set<String> ARRAY_METHODS = Set.of("len", "truthy", "iter", "index", "set", "contains",
-            "first", "last", "enumerate");
+            "first", "last", "enumerate", "with_ptr");
 
     private static Type.Nominal baseOf(Type.Nominal n) {
         var b = n.decl().base;
@@ -348,11 +348,27 @@ final class Calls {
             diag.error(Code.CANNOT_INFER, span, "name the type arguments of '" + f.qualifiedName() + "' to use it as a value");
             return Exprs.error();
         }
-        var type = new Type.Fn(paramTypes(f, env), TypeSystem.subst(f.ret, env), false);
+        // An extern is an `extern fn` value; a Threebolt function converts to one where expected (§14.7).
+        boolean toExtern = f.isExtern || (fnExpected != null && fnExpected.isExtern());
+        if (toExtern && !f.isExtern && !canBeCallback(f, span)) return Exprs.error();
+        var type = new Type.Fn(paramTypes(f, env), TypeSystem.subst(f.ret, env), toExtern);
         if (f.params.stream().anyMatch(FnInfo.ParamInfo::isOptional)) {
             diag.error(Code.WRONG_KIND, span, "a function with optional parameters cannot be used as a value");
         }
         return new Typed(new Ir.FnRef(f, f.typeParams.stream().map(p -> env.get(p)).toList(), type), type);
+    }
+
+    /** §14.7: a top-level, non-generic function with an ABI signature converts to `extern fn`. */
+    private boolean canBeCallback(FnInfo f, Span span) {
+        String why = null;
+        if (f.owner != null) why = "a method or static function";
+        else if (!f.typeParams.isEmpty()) why = "a generic function";
+        else if (f.params.stream().anyMatch(p -> !TypeSystem.isAbi(p.type(), false))
+                || (f.ret != Type.UNIT && !TypeSystem.isAbi(f.ret, false))) why = "a function whose signature has non-ABI types";
+        if (why == null) return true;
+        diag.error(Code.BAD_CALLBACK, span, "'" + f.qualifiedName() + "' is " + why
+                + "; only top-level, non-generic functions with ABI signatures convert to `extern fn`");
+        return false;
     }
 
     private static List<Type> paramTypes(FnInfo f, Map<TypeParamInfo, Type> env) {
@@ -402,7 +418,7 @@ final class Calls {
     private boolean applicable(Candidate k, List<Expr.Arg> positional, List<Expr.Arg> named, List<Type> explicit) {
         var f = k.fn();
         int required = f.requiredCount() + (k.ufcs() ? 1 : 0);
-        if (positional.size() != required) return false;
+        if (f.isVariadic ? positional.size() < required : positional.size() != required) return false;
         if (!explicit.isEmpty() && explicit.size() != f.typeParams.size()) return false;
         var seen = new HashSet<String>();
         for (var a : named) {
@@ -424,7 +440,12 @@ final class Calls {
                 return;
             }
         }
-        if (positional.size() != required) {
+        if (f.isVariadic && positional.size() < required) {
+            diag.error(Code.BAD_ARGUMENTS, span, "'" + name + "' takes at least " + required + " argument"
+                    + (required == 1 ? "" : "s") + ", found " + positional.size());
+            return;
+        }
+        if (positional.size() != required && !f.isVariadic) {
             diag.error(Code.BAD_ARGUMENTS, span, "'" + name + "' takes " + required + " positional argument"
                     + (required == 1 ? "" : "s") + ", found " + positional.size()
                     + (f.params.stream().anyMatch(FnInfo.ParamInfo::isOptional) ? " (optional parameters are named-only)" : ""));
@@ -564,8 +585,10 @@ final class Calls {
         if (explicit.isEmpty()) vars.addAll(f.typeParams);
         else for (int i = 0; i < explicit.size(); i++) env.put(f.typeParams.get(i), explicit.get(i));
 
-        // Map each argument to its parameter (index -1 is the UFCS receiver).
-        int n = f.params.size() + (k.ufcs() ? 1 : 0);
+        // Map each argument to its parameter (index 0 is the UFCS receiver); C variadic arguments
+        // come after the parameters and have no parameter type.
+        int fixed = f.params.size() + (k.ufcs() ? 1 : 0);
+        int n = fixed + (f.isVariadic ? Math.max(0, positional.size() - f.requiredCount()) : 0);
         var argOf = new Expr.Arg[n];
         var paramType = new Type[n];
         var order = new ArrayList<Integer>();
@@ -574,7 +597,8 @@ final class Calls {
         if (k.ufcs()) required.add(0);
         for (int i = 0; i < f.params.size(); i++) if (!f.params.get(i).isOptional()) required.add(i + (k.ufcs() ? 1 : 0));
         for (var a : positional) {
-            int idx = required.get(next++);
+            int idx = next < required.size() ? required.get(next) : fixed + next - required.size();
+            next++;
             argOf[idx] = a;
             order.add(idx);
         }
@@ -587,7 +611,7 @@ final class Calls {
                 }
             }
         }
-        for (int i = 0; i < n; i++) {
+        for (int i = 0; i < fixed; i++) {
             Type raw;
             if (k.ufcs() && i == 0) raw = ((TypeInfo) f.owner).selfParam.type();
             else raw = f.params.get(i - (k.ufcs() ? 1 : 0)).type();
@@ -604,6 +628,11 @@ final class Calls {
         var deferred = new ArrayList<Integer>();
         for (int idx : order) {
             var a = argOf[idx];
+            if (idx >= fixed) {
+                typed[idx] = c.exprs.expr(a.value(), null);
+                variadicArg(typed[idx].type(), a.span());
+                continue;
+            }
             if (a.value() instanceof Expr.Lambda l && l.params().stream().anyMatch(p -> p.type() == null)
                     && TypeSystem.mentions(paramType[idx], vars)) {
                 deferred.add(idx);
@@ -651,6 +680,10 @@ final class Calls {
                 irArgs.add(null);
                 continue;
             }
+            if (i >= fixed) {
+                irArgs.add(typed[i].ir());
+                continue;
+            }
             var target = TypeSystem.subst(paramType[i], env);
             irArgs.add(k.ufcs() && i == 0 ? typed[i].ir() : c.coerce(typed[i], target, argOf[i].value().span()));
         }
@@ -664,6 +697,44 @@ final class Calls {
             ownerArgs = owner.typeParams.stream().map(p -> env.getOrDefault(p, p.type())).toList();
         }
         var ret = TypeSystem.subst(TypeSystem.subst(f.ret, k.env()), env);
+        stdCallRules(f, k.env(), ownerArgs, span);
         return new Bound(k, irArgs, order.stream().mapToInt(Integer::intValue).toArray(), typeArgs, ownerArgs, ret);
+    }
+
+    /** §14.1: C variadic arguments are scalars of ABI type (promoted at the call). */
+    private void variadicArg(Type t, Span span) {
+        var w = TypeSystem.widen(t);
+        boolean cStruct = TypeSystem.expand(w) instanceof Type.Nominal n && n.decl().isC;
+        if (w == Type.ERROR || (TypeSystem.isAbi(w, false) && !cStruct)) return;
+        diag.error(Code.NOT_ABI_TYPE, span, "'" + w + "' cannot be passed as a C variadic argument; pass an integer, "
+                + "float, bool, pointer or enum" + (w == Prim.STR ? " (`to_cstr()` gives a `Ptr<c::char>`)" : ""));
+    }
+
+    /** Type rules of std intrinsics that their signatures cannot express. */
+    private void stdCallRules(FnInfo f, Map<TypeParamInfo, Type> ownerEnv, List<Type> ownerArgs, Span span) {
+        if (f.intrinsic == null) return;
+        switch (f.intrinsic) {
+            case "List.with_ptr" -> {
+                // §14.5: the elements are passed to C, so they must have ABI types.
+                var element = ownerEnv.get(((TypeInfo) f.owner).typeParams.getFirst());
+                if (element != null && !TypeSystem.isGeneric(element) && !TypeSystem.isAbi(element, false)) {
+                    diag.error(Code.NOT_ABI_TYPE, span, "'with_ptr' needs elements of a C ABI type, not '" + element + "'");
+                }
+            }
+            case "Atomic.new" -> {
+                var t = ownerArgs == null ? null : TypeSystem.expand(ownerArgs.getFirst());
+                var p = TypeSystem.prim(t == null ? Type.ERROR : t);
+                if (t != null && t != Type.ERROR && !TypeSystem.isGeneric(t) && (p == null || !(p.isInteger() || p == Prim.BOOL))) {
+                    diag.error(Code.UNSATISFIED_BOUND, span, "`Atomic<T>` holds an integer or `bool`, not '" + t + "'");
+                }
+            }
+            case "Atomic.fetch_add", "Atomic.fetch_sub" -> {
+                var t = ownerEnv.get(((TypeInfo) f.owner).typeParams.getFirst());
+                if (t != null && TypeSystem.prim(t) == Prim.BOOL) {
+                    diag.error(Code.BAD_OPERAND, span, "'" + f.name() + "' needs an integer `Atomic`, not `Atomic<bool>`");
+                }
+            }
+            default -> {}
+        }
     }
 }

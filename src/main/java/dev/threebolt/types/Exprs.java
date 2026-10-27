@@ -1185,6 +1185,11 @@ final class Exprs {
         if (expectedFn == null && expected != null) {
             for (Type m : TypeSystem.members(expected)) if (m instanceof Type.Fn f) expectedFn = f;
         }
+        if (expectedFn != null && expectedFn.isExtern()) {
+            diag.error(Code.BAD_CALLBACK, l.span(), "a lambda cannot convert to '" + expectedFn
+                    + "'; pass a top-level function instead (§14.7)");
+            return error();
+        }
         if (expectedFn != null && expectedFn.params().size() != l.params().size()) {
             diag.error(Code.BAD_LAMBDA, l.span(), "expected a function of " + expectedFn.params().size()
                     + " parameter(s), this lambda takes " + l.params().size());

@@ -78,6 +78,7 @@ public final class Declarer {
         for (ImplInfo i : userImpls) checkImpl(i);
         for (TypeInfo t : allTypes) checkType(t);
         checkOverloads();
+        checkAbi();
         checkMain();
     }
 
@@ -246,7 +247,7 @@ public final class Declarer {
     /** Attaches the intrinsic members of std/builtin/*.3b to the primitives. */
     private void primitiveMembers() {
         var lists = new HashMap<String, List<Member>>();
-        for (String cat : List.of("int", "float", "str", "char", "bool", "enum", "flags")) {
+        for (String cat : List.of("int", "float", "str", "char", "bool", "enum", "flags", "cstruct")) {
             String name = "std/builtin/" + cat + ".3b";
             var parsed = AstParser.memberList(new Source(name, resource(name)), diagnostics);
             lists.put(cat, parsed == null ? List.of() : parsed);
@@ -256,6 +257,7 @@ public final class Declarer {
             builtinMembers(ts.prims.get(p), cat, lists.get(cat));
         }
         for (TypeInfo t : allTypes) {
+            if (t.isC && t.isStruct()) builtinMembers(t, "cstruct", lists.get("cstruct"));
             if (!t.isEnum()) continue;
             builtinMembers(t, "enum", lists.get("enum"));
             if (t.isFlags) builtinMembers(t, "flags", lists.get("flags"));
@@ -269,7 +271,7 @@ public final class Declarer {
             var info = new FnInfo(f.name().text(), f, prelude, owner);
             info.intrinsic = category + "." + info.name();
             fnTypeParams(info);
-            signature(info, scope);
+            signature(info, scope.with(info.typeParams));
             owner.addMethod(info);
         }
     }
@@ -905,6 +907,33 @@ public final class Declarer {
             if (!ra.get(i).type().equals(TypeSystem.subst(rb.get(i).type(), env))) return false;
         }
         return true;
+    }
+
+    /** Extern signatures and `@c struct` fields use ABI types only (§14.1–§14.3). */
+    private void checkAbi() {
+        for (FnInfo f : allFns) {
+            if (!f.isExtern) continue;
+            for (var p : f.params) {
+                if (!TypeSystem.isAbi(p.type(), false)) notAbi(p.type(), p.span(), "an extern parameter");
+                if (p.isOptional()) diagnostics.error(Code.BAD_MODIFIER, p.span(), "extern parameters cannot have defaults");
+            }
+            if (f.ret != Type.UNIT && !TypeSystem.isAbi(f.ret, false)) notAbi(f.ret, f.ast.returnType().span(), "an extern result");
+        }
+        for (TypeInfo t : allTypes) {
+            if (!t.isC) continue;
+            if (!t.typeParams.isEmpty()) {
+                diagnostics.error(Code.NOT_ABI_TYPE, ((Item.Struct) t.item).name().span(), "an `@c struct` cannot be generic");
+                continue;
+            }
+            for (FieldInfo f : t.fields) {
+                if (!TypeSystem.isAbi(f.type, true)) notAbi(f.type, f.span(), "a field of an `@c struct`");
+            }
+        }
+    }
+
+    private void notAbi(Type t, Span span, String what) {
+        String hint = t == Prim.STR ? "; pass a `Ptr<c::char>` from `to_cstr()`" : "";
+        diagnostics.error(Code.NOT_ABI_TYPE, span, "'" + t + "' cannot be " + what + ": it is not a C ABI type" + hint);
     }
 
     /** §2.4: {@code fn main()} or {@code fn main(args: [str])}, returning () or () | errors. */

@@ -18,7 +18,10 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
-/** Union normalization (§3.4), assignability (§3.5), widening (§3.6), trait lookup (§4.10). */
+/**
+ * Union normalization (§3.4), assignability (§3.5), widening (§3.6), trait lookup (§4.10), ABI
+ * types (§14.2).
+ */
 class TypeSystemTest {
     private static final String PROGRAM = """
             trait Speak { fn speak(self) -> str; }
@@ -34,6 +37,8 @@ class TypeSystemTest {
             }
             struct Holder { let f: fn() -> i32; }
             class Box<T> { let v: T; }
+            @c struct CPair { let a: i32; let b: [u8; 4]; }
+            enum Color : u8 { Red }
             fn main() {}
             """;
 
@@ -250,5 +255,28 @@ class TypeSystemTest {
         assertEquals("Box<List<str>>", TypeSystem.name(type("Box", ts.listOf(Prim.STR))));
         assertEquals("fn(i32) -> str | null", TypeSystem.name(new Type.Fn(List.of(Prim.I32), union(Prim.STR, Type.NULL), false)));
         assertEquals("[i32]", ts.listOf(Prim.I32).toString(), "diagnostics use the surface spelling");
+    }
+
+    // ---- ABI types (§14.2) ----
+
+    @Test
+    void abiTypes() {
+        for (Type t : List.of(Prim.I8, Prim.U64, Prim.USIZE, Prim.F32, Prim.BOOL, type("CPair"), type("Color"),
+                type("Ptr", Prim.STR), new Type.Fn(List.of(Prim.I32), Prim.I32, true))) {
+            assertTrue(TypeSystem.isAbi(t, false), t + " is an ABI type");
+        }
+        for (Type t : List.of(Prim.STR, Prim.CHAR, type("Pt"), type("Dog"), ts.listOf(Prim.I32), Type.NULL,
+                union(Prim.I32, Type.NULL), new Type.Fn(List.of(), Prim.I32, false), new Type.Tuple(List.of(Prim.I32)))) {
+            assertFalse(TypeSystem.isAbi(t, false), t + " is not an ABI type");
+        }
+    }
+
+    @Test
+    void arraysAreAbiOnlyInsideCStructs() {
+        var bytes = new Type.Array(Prim.U8, 4);
+        assertFalse(TypeSystem.isAbi(bytes, false));
+        assertTrue(TypeSystem.isAbi(bytes, true));
+        assertTrue(TypeSystem.isAbi(new Type.Array(bytes, 2), true));
+        assertFalse(TypeSystem.isAbi(new Type.Array(Prim.STR, 2), true));
     }
 }
