@@ -1,0 +1,82 @@
+// std::random (§16): a seeded Random repeats its sequence on every platform; the free functions
+// share a generator seeded from the OS.
+use std::random;
+use std::random::Random;
+
+fn main() {
+    // xoshiro256** seeded through splitmix64.
+    let mut r = Random::new(42);
+    println(f"{r.next_u64()} {r.next_u64()}");
+    r.seed(42);
+    println(r.next_u64());
+
+    // The same seed gives the same sequence.
+    let mut a = Random::new(7);
+    let mut b = Random::new(7);
+    let mut same = true;
+    for _ in 0..100 { if a.random() != b.random() { same = false; } }
+    println(same);
+
+    let mut r = Random::new(2026);
+    println(f"{r.random()} {r.uniform(10, 20)} {r.getrandbits(8)} {r.getrandbits(0)}");
+
+    let mut rolls: [i64] = [];
+    for _ in 0..10 { rolls.push(r.randint(1, 6)); }
+    println(rolls);
+    println(f"{r.randrange(10)} {r.randrange(0, 100, step: 5)} {r.randrange(10, 0, step: -3)}");
+    println(f"{r.randint(i64::MIN, i64::MAX) is i64} {r.randint(5, 5)} {r.randrange(-3, -2)}");
+
+    let xs = ["a", "b", "c", "d", "e"];
+    println(r.choice(xs));
+    r.shuffle(xs);
+    println(xs);
+    println(r.sample(xs, 3));
+    println(r.choices(xs, k: 4));
+    println(r.choices(xs, k: 4, weights: [0, 0, 0, 1, 0]));
+    println(f"{r.chance(0)} {r.chance(1)}");
+    println(f"{r.gauss(0, 1)} {r.expovariate(2)}");
+
+    // Ranges and distributions over many draws.
+    let mut seen: Set<i64> = [];
+    let mut in_range = true;
+    for _ in 0..1000 {
+        let d = r.randint(1, 6);
+        if d < 1 || d > 6 { in_range = false; }
+        seen.insert(d);
+        let s = r.randrange(-5, 6, step: 5);
+        if s != -5 && s != 0 && s != 5 { in_range = false; }
+        let f = r.random();
+        if f < 0.0 || f >= 1.0 { in_range = false; }
+    }
+    println(f"{in_range} {seen.len}");
+
+    let n = 20000;
+    let mut sum = 0.0;
+    let mut sq = 0.0;
+    for _ in 0..n {
+        let g = r.gauss(10, 2);
+        sum += g;
+        sq += g * g;
+    }
+    let mean = sum / n;
+    let sd = (sq / n - mean * mean).sqrt();
+    println(f"{(mean - 10).abs() < 0.1} {(sd - 2).abs() < 0.1}");
+
+    // A sample never repeats a position.
+    let nums = [1, 2, 3, 4, 5, 6, 7, 8];
+    let mut picked: Set<i32> = [];
+    for x in r.sample(nums, 8) { picked.insert(x); }
+    println(picked.len);
+
+    // The shared generator: results vary run to run, so only their ranges are printed.
+    let d = random::randint(1, 6);
+    let f = random::random();
+    println(f"{d >= 1 && d <= 6} {f >= 0.0 && f < 1.0} {[1, 2, 3].contains(random::choice([1, 2, 3]))}");
+    random::seed(42);
+    let first = random::getrandbits(64);
+    random::seed(42);
+    println(f"{first == random::getrandbits(64)} {first}");
+    let ys = [1, 2, 3];
+    random::shuffle(ys);
+    println(f"{random::sample(ys, 2).len} {random::choices(ys, k: 5).len} {random::randrange(3) < 3}");
+}

@@ -1,0 +1,8 @@
+// std::math: integer results that do not fit in a u64 panic.
+//! exit: 101
+use std::math;
+
+fn main() {
+    println(math::factorial(20));
+    println(math::factorial(21));
+}

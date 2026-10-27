@@ -54,6 +54,8 @@ final class Natives {
             case "cstruct" -> in.ffi.withPtr(recv, (Values.FnVal) a[0]);
             case "thread", "Thread", "Mutex", "Atomic" -> in.threads.call(owner, name, recv, a, typeEnv, fn);
             case "Type" -> type(name, (TypeVal) recv, a);
+            case "math" -> math(name, a);
+            case "random" -> new Int(Prim.U64, ENTROPY.nextLong());
             // Collections lock themselves per operation (§13.4), but not around a callback.
             case "List" -> name.equals("with_ptr") ? in.ffi.withPtr(recv, (Values.FnVal) a[0])
                     : locked(recv, () -> recv instanceof ArrayVal arr ? array(name, arr, a) : list(name, (ListVal) recv, a));
@@ -384,6 +386,55 @@ final class Natives {
             case "neg" -> Ops.flt(k, -v);
             default -> unknown("float." + name);
         };
+    }
+
+    // ---- std::math, std::random ----
+
+    private static final java.security.SecureRandom ENTROPY = new java.security.SecureRandom();
+
+    private static Object math(String name, Object[] a) {
+        if (name.equals("isqrt")) {
+            return new Int(Prim.U64, unsigned((Int) a[0]).sqrt().longValue());
+        }
+        if (name.equals("factorial") || name.equals("comb") || name.equals("perm")) {
+            var n = unsigned((Int) a[0]);
+            var k = name.equals("factorial") ? n : unsigned((Int) a[1]);
+            if (k.compareTo(n) > 0) return new Int(Prim.U64, 0);
+            // n! / (n-k)!, then / k! for comb (using the smaller of k and n-k).
+            if (name.equals("comb") && k.compareTo(n.subtract(k)) > 0) k = n.subtract(k);
+            var r = BigInteger.ONE;
+            for (var i = BigInteger.ZERO; i.compareTo(k) < 0; i = i.add(BigInteger.ONE)) {
+                r = r.multiply(n.subtract(i));
+                if (name.equals("comb")) r = r.divide(i.add(BigInteger.ONE));
+                if (r.bitLength() > 64) throw new Panic("math::" + name + ": the result does not fit in a u64");
+            }
+            return new Int(Prim.U64, r.longValue());
+        }
+        double x = ((Flt) a[0]).v();
+        return Ops.flt(Prim.F64, switch (name) {
+            case "copysign" -> Math.copySign(x, ((Flt) a[1]).v());
+            case "cbrt" -> Math.cbrt(x);
+            case "expm1" -> Math.expm1(x);
+            case "log2" -> x == Math.scalb(1.0, Math.getExponent(x)) ? Math.getExponent(x) : Math.log(x) / Math.log(2);
+            case "log1p" -> Math.log1p(x);
+            case "asin" -> Math.asin(x);
+            case "acos" -> Math.acos(x);
+            case "atan" -> Math.atan(x);
+            case "atan2" -> Math.atan2(x, ((Flt) a[1]).v());
+            case "hypot" -> Math.hypot(x, ((Flt) a[1]).v());
+            case "sinh" -> Math.sinh(x);
+            case "cosh" -> Math.cosh(x);
+            case "tanh" -> Math.tanh(x);
+            case "asinh" -> x == 0 || Double.isInfinite(x) ? x
+                    : Math.copySign(Math.log(Math.abs(x) + Math.sqrt(x * x + 1)), x);
+            case "acosh" -> Math.log(x + Math.sqrt(x * x - 1));
+            case "atanh" -> 0.5 * Math.log1p(2 * x / (1 - x));
+            default -> throw new IllegalStateException("unknown intrinsic math." + name);
+        });
+    }
+
+    private static BigInteger unsigned(Int x) {
+        return new BigInteger(Long.toUnsignedString(x.v()));
     }
 
     private Object str(String name, String s, Object[] a) {

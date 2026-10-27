@@ -1,0 +1,17 @@
+// std::math and std::random misuse.
+use std::math;
+use std::random;
+use std::random::Random;
+
+fn main() {
+    let x: i32 = math::sqrt(4);
+    let g = math::gcd(1.5, 2);
+    let b = math::log(8, 2);
+    let s = random::entropy();
+    let mut r = Random::new(1);
+    let i = r.below(3);
+    let c = random::sample([1, 2], -1);
+    let k: i32 = random::randint(1, 6);
+    let fixed = Random::new(1);
+    fixed.random();
+}
