@@ -1,0 +1,25 @@
+// Members of str. Lengths and offsets count UTF-8 bytes.
+
+pub get fn len(self) -> usize;
+pub fn truthy(self) -> bool;
+pub fn chars(self) -> Iterator<char>;
+pub fn bytes(self) -> Iterator<u8>;
+pub fn contains(self, s: str) -> bool;
+pub fn starts_with(self, s: str) -> bool;
+pub fn ends_with(self, s: str) -> bool;
+pub fn find(self, s: str) -> usize | null;
+pub fn slice(self, start: usize, end: usize) -> str;
+pub fn upper(self) -> str;
+pub fn lower(self) -> str;
+pub fn trim(self) -> str;
+pub fn split(self, sep: str) -> [str];
+pub fn replace(self, from: str, to: str) -> str;
+pub fn repeat(self, n: usize) -> str;
+pub fn to_cstr(self) -> Ptr<std::c::char>;
+pub unsafe fn from_cstr(p: Ptr<std::c::char>) -> str;
+
+pub fn to_str(self) -> str;
+pub fn eq(self, o: Self) -> bool;
+pub fn cmp(self, o: Self) -> i32;
+pub fn hash(self) -> u64;
+pub fn add(self, o: Self) -> Self;

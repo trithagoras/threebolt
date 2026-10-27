@@ -19,7 +19,8 @@ class AstRoundTripTest {
     @TestFactory
     Stream<DynamicTest> programs() throws IOException {
         var files = new ArrayList<>(ParserAcceptanceTest.examples());
-        files.addAll(threeboltFiles(Path.of("src/main/resources/std")));
+        // std/builtin/*.3b are member lists (primitive members), not modules: see builtinMembers().
+        threeboltFiles(Path.of("src/main/resources/std")).stream().filter(f -> !isBuiltin(f)).forEach(files::add);
         files.addAll(threeboltFiles(Path.of("src/test/resources/printer")));
         // Conformance cases only when they build cleanly: some are literal or syntax errors on purpose.
         threeboltFiles(Path.of("tests/conformance")).stream()
@@ -30,6 +31,17 @@ class AstRoundTripTest {
                 })
                 .forEach(files::add);
         return files.stream().map(f -> DynamicTest.dynamicTest(f.toString(), () -> RoundTrip.module(read(f))));
+    }
+
+    @TestFactory
+    Stream<DynamicTest> builtinMembers() throws IOException {
+        return threeboltFiles(Path.of("src/main/resources/std")).stream().filter(AstRoundTripTest::isBuiltin)
+                .map(f -> DynamicTest.dynamicTest(f.toString(),
+                        () -> RoundTrip.check(read(f), AstParser::memberList, AstPrinter::printMembers)));
+    }
+
+    private static boolean isBuiltin(Path f) {
+        return f.getParent().getFileName().toString().equals("builtin");
     }
 
     @TestFactory

@@ -1,0 +1,15 @@
+// Members of char.
+
+pub fn is_digit(self) -> bool;
+pub fn is_alphabetic(self) -> bool;
+pub fn is_alphanumeric(self) -> bool;
+pub fn is_whitespace(self) -> bool;
+pub fn is_uppercase(self) -> bool;
+pub fn is_lowercase(self) -> bool;
+pub fn to_upper(self) -> char;
+pub fn to_lower(self) -> char;
+
+pub fn to_str(self) -> str;
+pub fn eq(self, o: Self) -> bool;
+pub fn cmp(self, o: Self) -> i32;
+pub fn hash(self) -> u64;

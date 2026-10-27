@@ -1,0 +1,31 @@
+// Members of f32 and f64; `Self` is the float type.
+
+pub fn abs(self) -> Self;
+pub fn min(self, o: Self) -> Self;
+pub fn max(self, o: Self) -> Self;
+pub fn pow(self, exp: Self) -> Self;
+pub fn sqrt(self) -> Self;
+pub fn floor(self) -> Self;
+pub fn ceil(self) -> Self;
+pub fn round(self) -> Self;
+pub fn trunc(self) -> Self;
+pub fn sin(self) -> Self;
+pub fn cos(self) -> Self;
+pub fn tan(self) -> Self;
+pub fn exp(self) -> Self;
+pub fn ln(self) -> Self;
+pub fn log10(self) -> Self;
+pub fn is_nan(self) -> bool;
+pub fn is_infinite(self) -> bool;
+
+pub fn parse(s: str) -> Self | null;
+pub fn to_str(self) -> str;
+pub fn eq(self, o: Self) -> bool;
+pub fn cmp(self, o: Self) -> i32;
+
+pub fn add(self, o: Self) -> Self;
+pub fn sub(self, o: Self) -> Self;
+pub fn mul(self, o: Self) -> Self;
+pub fn div(self, o: Self) -> Self;
+pub fn rem(self, o: Self) -> Self;
+pub fn neg(self) -> Self;
