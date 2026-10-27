@@ -1,0 +1,2 @@
+panic: called abstract method 'Shape::area'
+    at main (abstract_panic.3b:14:16)

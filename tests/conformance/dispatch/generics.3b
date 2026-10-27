@@ -1,0 +1,74 @@
+// §10, §15: reified generics (`typeof(T)`, `x is T`, `x as? T`), inference from arguments and
+// lambdas, explicit type arguments, bounds, generic structs/classes/methods, `nameof`.
+
+pub struct Pair<A, B> {
+    pub let a: A;
+    pub let b: B;
+    pub fn new(a: A, b: B) -> Self => { a, b };
+    pub fn swap(self) -> Pair<B, A> => Pair::new(self.b, self.a);
+    pub fn map_a<C>(self, f: fn(A) -> C) -> Pair<C, B> => Pair::new(f(self.a), self.b);
+}
+
+pub class Stack<T> {
+    let items: [T] = [];
+    pub fn new() -> Self => {};
+    pub fn push(mut self, x: T) -> Self {
+        self.items.push(x);
+        return self;
+    }
+    pub fn pop(mut self) -> T | null => self.items.pop();
+    pub get fn size(self) -> usize => self.items.len;
+    pub fn kind(self) -> str => nameof(T);
+}
+
+fn first<T>(xs: [T]) -> T | null {
+    for x in xs { return x; }
+    return null;
+}
+
+fn type_name<T>() -> str => f"{typeof(T)}";
+
+fn count_of<T>(xs: [i32 | str | bool]) -> i32 {
+    let mut n = 0;
+    for x in xs {
+        if x is T { n += 1; }
+    }
+    return n;
+}
+
+fn try_as<T>(x: i32 | str) -> str {
+    if let v = x as? T { return f"yes {v.type()}"; }
+    return "no";
+}
+
+fn largest<T: Ord>(xs: [T]) -> T {
+    let mut best = xs[0];
+    for x in xs {
+        if x > best { best = x; }
+    }
+    return best;
+}
+
+fn apply<T, R>(x: T, f: fn(T) -> R) -> R => f(x);
+
+fn main() {
+    let p = Pair::new(1, "one");
+    let q = p.swap();
+    let r = p.map_a(n => n * 10);
+    println(f"{q.a} {q.b} {r.a} {r.b}");
+    println(f"{nameof(Pair<i32, str>)} {q.type()} {typeof([Pair<str, i32>])}");
+
+    let s = Stack<str>::new().push("x").push("y");
+    let mut s2 = s;
+    println(f"{s2.pop() ?? "-"} {s.size} {s.kind()}");
+
+    println(f"{first([3, 4]) ?? 0} {first<str>([]) ?? "none"}");
+    println(f"{type_name<i32>()} {type_name<[str]>()} {type_name<i32 | null>()}");
+
+    let mixed: [i32 | str | bool] = [1, "a", true, 2, false, "b", 3];
+    println(f"{count_of<i32>(mixed)} {count_of<str>(mixed)} {count_of<bool>(mixed)} {count_of<i32 | bool>(mixed)}");
+    println(f"{try_as<i32>(5)} {try_as<str>(5)} {try_as<str>("s")}");
+
+    println(f"{largest([3, 9, 2])} {largest(["pear", "apple", "zoo"])} {largest(['a', 'q'])}");
+    println(f"{apply(4, x => x * x)} {apply("hi", s => s.len)} {apply<i32, str>(3, x => f"<{x}>")}");
+}

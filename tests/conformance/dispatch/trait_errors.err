@@ -1,0 +1,12 @@
+trait_errors.3b:8:38: error[E0200]: expected 'i32', found 'str'
+trait_errors.3b:12:13: error[E0403]: 'Sq' is missing 'grow' required by trait 'Shape'
+trait_errors.3b:20:8: error[E0403]: 'grow' does not match the signature required by trait 'Shape'
+trait_errors.3b:21:8: error[E0410]: 'extra' is not a member of trait 'Shape'
+trait_errors.3b:23:6: error[E0404]: 'Shape' is already implemented for 'Circle'
+trait_errors.3b:18:1: note: previous implementation
+trait_errors.3b:29:24: error[E0403]: 'make' does not match the signature required by trait 'Make'
+trait_errors.3b:31:24: error[E0410]: blanket impls over a type parameter are not permitted
+trait_errors.3b:38:11: error[E0202]: 'T' has no method 'area'
+trait_errors.3b:39:15: error[E0202]: no static function 'make' in the bounds of 'T'
+trait_errors.3b:44:5: error[E0301]: 'grow' takes `mut self`, but cannot assign to immutable binding 's'; declare it `let mut`
+trait_errors.3b:45:9: error[E0205]: call to 'side' is ambiguous between 'Left::side()' and 'Right::side()'

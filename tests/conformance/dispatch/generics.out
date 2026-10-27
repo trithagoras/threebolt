@@ -1,0 +1,9 @@
+one 1 10 one
+Pair<i32, str> Pair<str, i32> List<Pair<str, i32>>
+y 1 str
+3 none
+i32 List<str> i32 | null
+3 2 2 5
+yes i32 no yes str
+9 zoo q
+16 2 <3>

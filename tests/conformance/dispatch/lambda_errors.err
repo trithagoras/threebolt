@@ -1,0 +1,6 @@
+lambda_errors.3b:8:13: error[E0209]: cannot infer the type of lambda parameter 'x'; annotate it: `x: T`
+lambda_errors.3b:10:19: error[E0300]: cannot assign to immutable binding 'n'; declare it `let mut`
+lambda_errors.3b:12:28: error[E0108]: 'm' is a method; call it: `m()`, or wrap it in a lambda to use it as a value (§7.8)
+lambda_errors.3b:13:15: error[E0229]: expected a function of 1 parameter(s), this lambda takes 2
+lambda_errors.3b:14:20: error[E0200]: expected 'i32', found 'str'
+lambda_errors.3b:16:34: error[E0212]: `?` would return 'null', which is not assignable to the return type 'i32'

@@ -1,0 +1,78 @@
+// §6.4, §16: user-defined Iterator and Iterable types in `for` loops and with the adapter
+// defaults (map filter enumerate of_type for_each fold any all count to_list first).
+
+pub class Countdown : Iterator<i32> {
+    let n: i32;
+    pub fn new(n: i32) -> Self => { n };
+    pub fn next(mut self) -> i32 | Done {
+        if self.n == 0 { return Done; }
+        self.n -= 1;
+        return self.n + 1;
+    }
+}
+
+// An iterator over a nullable element type: `Done` is distinct from `null`.
+pub struct Maybes : Iterator<i32 | null> {
+    let i: i32 = 0;
+    pub fn next(mut self) -> i32 | null | Done {
+        self.i += 1;
+        if self.i > 4 { return Done; }
+        return null if self.i % 2 == 0 else self.i;
+    }
+}
+
+pub struct Span : Iterable<i32> {
+    let lo: i32;
+    let hi: i32;
+    pub fn iter(self) -> Iterator<i32> => Walk { at: self.lo, hi: self.hi };
+}
+
+struct Walk : Iterator<i32> {
+    let at: i32;
+    let hi: i32;
+    pub fn next(mut self) -> i32 | Done {
+        if self.at >= self.hi { return Done; }
+        self.at += 1;
+        return self.at - 1;
+    }
+}
+
+pub trait Shape { fn area(self) -> i32; }
+pub struct Sq : Shape { pub let s: i32; pub fn area(self) -> i32 => self.s * self.s; }
+pub struct Rect : Shape { pub let w: i32; pub let h: i32; pub fn area(self) -> i32 => self.w * self.h; }
+
+fn main() {
+    for x in Countdown::new(3) { print(f"{x} "); }
+    println("");
+
+    let mut nulls = 0;
+    for m in (Maybes {}) { if m == null { nulls += 1; } }
+    println(f"nulls {nulls} count {(Maybes {}).count()}");
+
+    let span = Span { lo: 2, hi: 6 };
+    for x in span { print(f"{x} "); }
+    println(f"| again: {span.iter().count()}");
+
+    let evens = Countdown::new(10).filter(x => x % 2 == 0).map(x => x * x).to_list();
+    println(f"{evens.len} {evens[0]} {evens[4]}");
+    println(f"{Countdown::new(4).fold(0, (acc, x) => acc + x)}");
+    println(f"{Countdown::new(5).any(x => x == 3)} {Countdown::new(5).all(x => x > 1)}");
+    println(f"{Countdown::new(3).first() ?? -1} {Countdown::new(0).first() ?? -1}");
+
+    for (i, x) in Countdown::new(3).enumerate() { print(f"{i}:{x} "); }
+    println("");
+
+    let words = ["a", "bb", "ccc"];
+    let lens = words.iter().map(w => w.len).to_list();
+    println(f"{lens[2]} {words.iter().map(w => w + "!").fold("", (a, b) => a + b)}");
+
+    let shapes: [Shape] = [Sq { s: 2 }, Rect { w: 2, h: 3 }, Sq { s: 3 }];
+    let squares = shapes.iter().of_type<Sq>().map(s => s.s).to_list();
+    println(f"{squares.len} {squares[1]}");
+    let mut total = 0;
+    shapes.iter().for_each(s => total += s.area());
+    println(f"total {total}");
+
+    let chained = (1..=10).iter().filter(x => x % 3 == 0).map(x => f"<{x}>").to_list();
+    println(f"{chained[0]}{chained[1]}{chained[2]}");
+}

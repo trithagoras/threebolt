@@ -1,0 +1,22 @@
+inheritance_errors.3b:15:12: error[E0401]: 'plain' hides an inherited method
+inheritance_errors.3b:7:12: note: inherited from here
+inheritance_errors.3b:17:12: error[E0401]: 'v' must be declared `override`
+inheritance_errors.3b:8:20: note: inherited from here
+inheritance_errors.3b:22:21: error[E0400]: 'v' overrides nothing
+inheritance_errors.3b:23:21: error[E0400]: 'm' does not match the signature of the method it overrides
+inheritance_errors.3b:9:20: note: overridden method
+inheritance_errors.3b:24:21: error[E0400]: 'todo' does not match the signature of the method it overrides
+inheritance_errors.3b:10:21: note: overridden method
+inheritance_errors.3b:25:21: error[E0400]: 'nothing' overrides nothing
+inheritance_errors.3b:28:7: error[E0402]: 'Concrete' must override abstract 'Base::todo'
+inheritance_errors.3b:10:21: note: declared here
+inheritance_errors.3b:31:21: error[E0407]: abstract method 'f' in non-abstract class 'NotAbstract'
+inheritance_errors.3b:34:21: error[E0405]: 'Named' is already implemented by the base class
+inheritance_errors.3b:39:5: error[E0407]: `virtual` is only allowed in classes
+inheritance_errors.3b:42:12: error[E0405]: a struct can only implement traits
+inheritance_errors.3b:46:13: error[E0403]: 'Two' is missing 'name' required by trait 'Named'
+inheritance_errors.3b:46:20: error[E0405]: the base class must come first in the base list
+inheritance_errors.3b:49:5: error[E0228]: `super` is only valid in an instance method of a subclass
+inheritance_errors.3b:54:13: error[E0219]: an initializer for class 'Concrete' may only appear in its own body; call a constructor function such as `Concrete::new`
+inheritance_errors.3b:58:21: error[E0400]: cannot override non-virtual 'Base::plain'
+inheritance_errors.3b:60:29: error[E0228]: `super` is only valid in an instance method of a subclass

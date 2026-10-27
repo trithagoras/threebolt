@@ -1,0 +1,65 @@
+// §5.5, §8.3–§8.4, §9: boxing a struct into a trait reference copies it; `mut self` calls through
+// the reference mutate the box in place; `as S`, `as? S` and `is S` narrowing copy out of the box;
+// boxes have reference identity; `.type()` reports the concrete type.
+
+pub trait Counter {
+    fn bump(mut self);
+    get fn count(self) -> i32;
+}
+
+pub struct Tick : Counter {
+    let n: i32 = 0;
+    pub fn bump(mut self) { self.n += 1; }
+    pub get fn count(self) -> i32 => self.n;
+}
+
+pub class Big : Counter {
+    let n: i32 = 100;
+    pub fn new() -> Self => {};
+    pub fn bump(mut self) { self.n += 100; }
+    pub get fn count(self) -> i32 => self.n;
+}
+
+fn bump_twice(mut c: Counter) {
+    c.bump();
+    c.bump();
+}
+
+fn main() {
+    let mut t = Tick {};
+    let mut r: Counter = t;               // boxes a copy of `t`
+    r.bump();
+    println(f"{t.count} {r.count}");
+
+    let r2 = r;                           // copies the reference, not the box
+    bump_twice(r2);
+    println(f"{r.count} {r2.count}");
+
+    let copy = r as Tick;                 // copies out of the box
+    let mut copy2 = copy;
+    copy2.bump();
+    println(f"{copy.count} {copy2.count} {r.count}");
+
+    if r is Tick {
+        let mut local = r;                // narrowed: a copy
+        local.bump();
+        println(f"narrowed {local.count} box {r.count}");
+    }
+
+    match r as? Big {
+        null => println("not big"),
+        b => println(f"big {b.count}"),
+    }
+
+    let a: Counter = t;
+    let b: Counter = t;
+    println(f"{a.type()} {r.type()} {a.type() == b.type()}");
+
+    let cs: [Counter] = [Tick {}, Big::new(), t];
+    for mut c in cs { c.bump(); }         // trait refs: elements are references
+    for c in cs { print(f"{c.count} "); }
+    println("");
+
+    t.bump();
+    println(f"{t.count}");
+}

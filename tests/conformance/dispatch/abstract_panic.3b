@@ -1,0 +1,15 @@
+// §4.7: an abstract class instance built inside its own body exists to be spread; calling an
+// `abstract fn` on it panics.
+//! exit: 101
+
+pub abstract class Shape {
+    pub let name: str;
+    pub fn base(name: str) -> Self => { name };
+    pub abstract fn area(self) -> f64;
+}
+
+fn main() {
+    let s = Shape::base("ghost");
+    println(s.name);
+    println(f"{s.area()}");
+}

@@ -1,0 +1,10 @@
+i32 str List<i32> Map<str, List<bool>> (i32, char)
+fn(i32) -> str i32 | null Color "a" | "b"
+Dog Pt List<Pt> Dog
+Dog Pt str Color (i32, str)
+static Animal runtime Dog
+static i32 | str runtime str
+true false
+true true
+true false true
+3 1 2

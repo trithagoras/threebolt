@@ -1,0 +1,68 @@
+// §7.3, §16: operator overloading through traits: arithmetic, unary `-`, `==` (Eq), ordering
+// (Ord), indexing (Index/IndexMut incl. read-modify-write of value elements), bitwise, compound
+// assignment, and Display in f-strings.
+
+pub struct V2 : Add, Sub, Mul, Neg, Display {
+    pub let x: i32;
+    pub let y: i32;
+    pub fn add(self, o: Self) -> Self => { x: self.x + o.x, y: self.y + o.y };
+    pub fn sub(self, o: Self) -> Self => { x: self.x - o.x, y: self.y - o.y };
+    pub fn mul(self, o: Self) -> Self => { x: self.x * o.x, y: self.y * o.y };
+    pub fn neg(self) -> Self => { x: -self.x, y: -self.y };
+    pub fn to_str(self) -> str => f"<{self.x}, {self.y}>";
+}
+
+pub class Money : Eq, Ord, Display {
+    pub let cents: i64;
+    pub fn new(cents: i64) -> Self => { cents };
+    pub fn eq(self, o: Self) -> bool => self.cents == o.cents;
+    pub fn cmp(self, o: Self) -> i32 => -1 if self.cents < o.cents else (1 if self.cents > o.cents else 0);
+    pub fn to_str(self) -> str => f"${self.cents / 100}.{self.cents % 100}";
+}
+
+pub struct Cell { pub let v: i32 = 0; pub fn inc(mut self) { self.v += 1; } }
+
+pub class Grid : Index<(i32, i32), Cell>, IndexMut<(i32, i32), Cell> {
+    let w: i32;
+    let cells: [Cell];
+    pub fn new(w: i32, h: i32) -> Self => { w, cells: [Cell {}; (w * h) as usize] };
+    pub fn index(self, p: (i32, i32)) -> Cell => self.cells[(p.1 * self.w + p.0) as usize];
+    pub fn set(mut self, p: (i32, i32), c: Cell) { self.cells[(p.1 * self.w + p.0) as usize] = c; }
+}
+
+pub struct Bits : BitAnd, BitOr, BitXor, Not, Shl {
+    pub let b: u8;
+    pub fn bitand(self, o: Self) -> Self => { b: self.b & o.b };
+    pub fn bitor(self, o: Self) -> Self => { b: self.b | o.b };
+    pub fn bitxor(self, o: Self) -> Self => { b: self.b ^ o.b };
+    pub fn not(self) -> Self => { b: ~self.b };
+    pub fn shl(self, o: Self) -> Self => { b: self.b << o.b };
+}
+
+fn main() {
+    let a = V2 { x: 1, y: 2 };
+    let b = V2 { x: 10, y: 20 };
+    let mut c = a + b * b - a;
+    c += a;
+    c -= V2 { x: 1, y: 1 };
+    println(f"{a + b} {-a} {c}");
+    println(f"{a == V2 { x: 1, y: 2 }} {a != b}");      // automatic struct Eq
+
+    let m1 = Money::new(150);
+    let m2 = Money::new(150);
+    let m3 = Money::new(99);
+    println(f"{m1 == m2} {m1 != m3} {m3 < m1} {m1 <= m2} {m1 > m3} {m3 >= m1} {m1}");
+
+    let mut g = Grid::new(3, 2);
+    g[(1, 1)].inc();                    // read-modify-write through the indexer
+    g[(1, 1)].inc();
+    g[(2, 0)] = Cell { v: 7 };
+    g[(2, 0)].v += 1;
+    println(f"{g[(1, 1)].v} {g[(2, 0)].v} {g[(0, 0)].v}");
+
+    let x = Bits { b: 0b1100 };
+    let y = Bits { b: 0b1010 };
+    let mut z = x & y;
+    z |= Bits { b: 1 };
+    println(f"{z.b} {(x | y).b} {(x ^ y).b} {(~x).b} {(y << Bits { b: 2 }).b}");
+}

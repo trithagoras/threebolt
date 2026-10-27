@@ -1,0 +1,8 @@
+operator_errors.3b:9:12: error[E0403]: 'add' does not match the signature required by trait 'Add'
+operator_errors.3b:14:9: error[E0207]: operator '+' is not defined for 'P' and 'P'
+operator_errors.3b:15:9: error[E0207]: operator '-' is not defined for 'P'
+operator_errors.3b:16:9: error[E0207]: cannot compare 'C' and 'C' with '<': `Ord` is required
+operator_errors.3b:17:9: error[E0207]: 'P' cannot be indexed: it does not implement `Index`
+operator_errors.3b:20:5: error[E0300]: 'ReadOnly' does not implement `IndexMut`
+operator_errors.3b:21:11: error[E0200]: expected 'i32', found 'str'
+operator_errors.3b:22:9: error[E0207]: cannot compare 'P' with '1'
