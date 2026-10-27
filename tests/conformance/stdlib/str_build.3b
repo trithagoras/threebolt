@@ -1,0 +1,25 @@
+// §16: str::from_chars and join, the ways back from characters and lists to str.
+
+fn main() {
+    let s = "héllo😀";
+    let cs = s.chars().to_list();
+    println(str::from_chars(cs) == s);
+    let mut rev = s.chars().to_list();
+    rev.reverse();
+    println(str::from_chars(rev));
+    println(str::from_chars(s.chars().map(c => c.to_upper())));
+    println(str::from_chars("abc"));
+    let set: Set<char> = ['x', 'y'];
+    println(str::from_chars(set));
+    println(f"[{str::from_chars([] as [char])}]");
+
+    let words = ["a", "b", "c"];
+    println(words.join(", "));
+    println([1, 2, 3].join(""));
+    println(['h', 'i'].join("-"));
+    let opt: [i32 | null] = [1, null];
+    println(opt.join("/"));
+    let arr: [f64; 2] = [0.5, 2.0];
+    println(arr.join(" "));
+    println(f"[{([] as [str]).join(", ")}] [{["solo"].join(", ")}]");
+}

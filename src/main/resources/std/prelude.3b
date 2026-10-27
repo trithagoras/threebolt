@@ -186,6 +186,8 @@ pub class List<T> : Len, Truthy, Iterable<T>, Index<usize, T>, IndexMut<usize, T
     pub fn clear(mut self);
     pub fn reverse(mut self);
     pub fn contains(self, v: T) -> bool;
+    /// The elements' `to_str()` with `sep` between them; `T` must implement `Display`.
+    pub fn join(self, sep: str) -> str;
     pub get fn first(self) -> T | null;
     pub get fn last(self) -> T | null;
     pub fn enumerate(self) -> Iterator<(usize, T)> => self.iter().enumerate();

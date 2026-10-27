@@ -1,0 +1,4 @@
+str_build_errors.3b:9:13: error[E0216]: 'join' needs elements that implement `Display`, not 'P'
+str_build_errors.3b:10:13: error[E0204]: no overload of 'from_chars' accepts arguments of types ([str])
+str_build_errors.3b:11:24: error[E0200]: expected 'str', found 'i32'
+str_build_errors.3b:13:18: error[E0215]: a value of type '[char]' can never be a 'str'

@@ -298,7 +298,7 @@ final class Calls {
 
     /** Fixed-size arrays share the list intrinsics that do not change the length. */
     static final Set<String> ARRAY_METHODS = Set.of("len", "truthy", "iter", "index", "set", "contains",
-            "first", "last", "enumerate", "with_ptr");
+            "first", "last", "enumerate", "with_ptr", "join");
 
     private static Type.Nominal baseOf(Type.Nominal n) {
         var b = n.decl().base;
@@ -797,6 +797,12 @@ final class Calls {
                 var element = ownerEnv.get(((TypeInfo) f.owner).typeParams.getFirst());
                 if (element != null && !TypeSystem.isGeneric(element) && !TypeSystem.isAbi(element, false)) {
                     diag.error(Code.NOT_ABI_TYPE, span, "'with_ptr' needs elements of a C ABI type, not '" + element + "'");
+                }
+            }
+            case "List.join" -> {
+                var element = ownerEnv.get(((TypeInfo) f.owner).typeParams.getFirst());
+                if (element != null && element != Type.ERROR && ts.implementsAs(element, ts.display) == null) {
+                    diag.error(Code.UNSATISFIED_BOUND, span, "'join' needs elements that implement `Display`, not '" + element + "'");
                 }
             }
             case "Atomic.new" -> {

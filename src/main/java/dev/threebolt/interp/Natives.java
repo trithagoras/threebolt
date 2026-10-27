@@ -59,6 +59,7 @@ final class Natives {
             case "random" -> new Int(Prim.U64, ENTROPY.nextLong());
             // Collections lock themselves per operation (§13.4), but not around a callback.
             case "List" -> name.equals("with_ptr") ? in.ffi.withPtr(recv, (Values.FnVal) a[0])
+                    : name.equals("join") ? join(recv, (String) a[0])
                     : locked(recv, () -> recv instanceof ArrayVal arr ? array(name, arr, a) : list(name, (ListVal) recv, a));
             case "Map" -> locked(recv, () -> map(name, (MapVal) recv, a));
             case "Set" -> locked(recv, () -> set(name, (SetVal) recv, a));
@@ -66,8 +67,8 @@ final class Natives {
             case "NativeIter" -> ((IterVal) recv).next.get();
             case "int" -> integer(name, recv, a, fn);
             case "float" -> floating(name, recv, a, fn);
-            case "str" -> name.equals("from_cstr") || name.equals("to_cstr")
-                    ? in.ffi.intrinsic("str", name, recv, a, typeEnv, fn) : str(name, (String) recv, a);
+            case "str" -> name.equals("from_cstr") || name.equals("to_cstr") ? in.ffi.intrinsic("str", name, recv, a, typeEnv, fn)
+                    : name.equals("from_chars") ? fromChars(a[0], fn) : str(name, (String) recv, a);
             case "char" -> character(name, (Char) recv, a);
             case "bool" -> switch (name) {
                 case "to_str" -> recv.toString();
@@ -78,6 +79,29 @@ final class Natives {
             case "enum", "flags" -> enumeration(name, (EnumVal) recv, a);
             default -> unknown(key);
         };
+    }
+
+    /** {@code str::from_chars(cs)}, for either overload: an {@code Iterable<char>} or an {@code Iterator<char>}. */
+    private String fromChars(Object cs, FnInfo fn) {
+        boolean iterator = fn.params.getFirst().type() instanceof Type.Nominal n && n.decl() == in.ts.iterator;
+        var it = iterator ? cs : in.callByName(cs, in.ts.iterable, "iter");
+        var out = new StringBuilder();
+        for (Object c; !in.isDone(c = in.next(it)); ) out.appendCodePoint(((Char) c).cp());
+        return out.toString();
+    }
+
+    /** {@code xs.join(sep)}: `to_str` runs user code, so it is called outside the list's lock. */
+    private String join(Object recv, String sep) {
+        List<Object> items;
+        synchronized (recv) {
+            items = recv instanceof ArrayVal arr ? java.util.Arrays.asList(arr.items) : new ArrayList<>(((ListVal) recv).items);
+        }
+        var out = new StringBuilder();
+        for (int i = 0; i < items.size(); i++) {
+            if (i > 0) out.append(sep);
+            out.append(in.display(items.get(i)));
+        }
+        return out.toString();
     }
 
     private static Object locked(Object collection, Supplier<Object> op) {

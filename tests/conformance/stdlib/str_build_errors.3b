@@ -1,0 +1,14 @@
+// §16: join needs Display elements; from_chars needs chars.
+
+struct P {
+    let x: i32;
+}
+
+fn main() {
+    let ps: [P] = [P { x: 1 }];
+    let a = ps.join(", ");
+    let b = str::from_chars(["ab"]);
+    let c = ["a"].join(1);
+    let d: [char] = "abc".chars().to_list();
+    let e: str = d as str;
+}
