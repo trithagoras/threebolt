@@ -1,0 +1,2 @@
+panic: division by zero
+    at main (div_zero.3b:7:16)

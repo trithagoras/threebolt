@@ -1,0 +1,8 @@
+// §7.3: integer division by zero panics; defers do not run on panic (§6.5).
+//! exit: 101
+
+fn main() {
+    defer println("not printed");
+    let zero = 0;
+    println(f"{10 / zero}");
+}

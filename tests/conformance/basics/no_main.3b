@@ -1,0 +1,3 @@
+// §2.4: the entry module must declare `main`.
+
+fn helper() {}

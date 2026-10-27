@@ -1,0 +1,7 @@
+// §2.4: `main(args: [str])` receives the arguments without the program name.
+//! args: one two three
+
+fn main(args: [str]) {
+    println(f"{args.len} args");
+    for a in args { println(a); }
+}

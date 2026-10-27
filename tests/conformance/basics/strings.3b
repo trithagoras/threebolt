@@ -1,0 +1,21 @@
+// §3.1, §1: str is UTF-8 text; f-strings, escapes, multi-line strings, str methods.
+
+fn main() {
+    let s = "héllo";
+    println(f"{s.len} {s.upper()} {"  pad  ".trim()}|");
+    println(f"{s.contains("ll")} {s.starts_with("hé")} {s.ends_with("x")} {s.find("l") ?? 99}");
+    for c in "a😀b".chars() { print(f"[{c}]"); }
+    println("");
+    let parts = "a,b,,c".split(",");
+    println(f"{parts.len} {parts[0]}{parts[3]}");
+    println("tab\tquote\" brace {} unicode \u{1F600}");
+    println(f"{{literal}} {1 + 1} {"nested {inner}"} {f"{2 * 3}"}");
+    let multi = """line one
+  line "two"
+""";
+    print(multi);
+    println("ab".repeat(3) + "!" + "x".replace("x", "y"));
+    let joined = "abc" + "def";
+    println(f"{joined.slice(1, 4)}");
+    if "" { println("empty is truthy?"); } else { println("empty is falsy"); }
+}
