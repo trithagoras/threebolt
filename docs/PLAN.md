@@ -119,6 +119,10 @@ Built in one go rather than slice by slice, because one checker and one interpre
 
 **Known gaps:** `with_ptr` copies in and out, so inside `f` writes through the pointer are not yet visible when reading `x` directly (spec §14.5 says they are visible during `f`; pending a decision). One lock serializes all static initializers, so an initializer that waits for another thread which needs an uninitialized static deadlocks. A generic function cannot be named with explicit type arguments as a value (`id<i32>` without a call is not §7.5 syntax), so generic functions never convert to `extern fn`. Callbacks invoked on foreign threads work but are undefined behaviour per §14.7.
 
+### After 0.1 phases — stdlib additions
+- `std::math` (`std/math.3b`) and `std::random` (`std/random.3b`), spec §16. Most of both is written in Threebolt; intrinsics (owner `math`/`random` in `Natives`) cover libm calls Java provides, the `u64` combinatorics (via `BigInteger`, panicking past `u64`), and `random`'s private `entropy()` (`SecureRandom`). `Random` (xoshiro256**/splitmix64) is pure Threebolt and was checked against a reference implementation. Tests: conformance `stdlib/`.
+- New std modules must be added to `ModuleLoader.STD_MODULES`.
+
 ## Conventions for the implementing agent
 - The spec is the source of truth; if code and spec disagree, fix one deliberately and record it.
 - Every feature lands with conformance tests in `tests/conformance/` (positive run + at least one compile-error case).
