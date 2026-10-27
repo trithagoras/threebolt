@@ -40,6 +40,8 @@ public final class TypeResolver {
     BiFunction<Expr, Scope, Long> constSize = (e, s) -> null;
     /** While declarations are being resolved, bound checks wait until impls are known. */
     private List<Runnable> deferredBounds = new ArrayList<>();
+    /** Set by the checker when answering a completion request. */
+    Completer completer;
 
     TypeResolver(TypeSystem ts, Names names, Diagnostics diagnostics) {
         this.ts = ts;
@@ -103,10 +105,24 @@ public final class TypeResolver {
     public Type named(TypeExpr.Named n, Scope scope) {
         var path = n.path();
         String first = path.getFirst().text();
+        if (completer != null && completer.at(path.getLast())) {
+            if (path.size() == 1) {
+                completer.types(scope, path.getFirst());
+            } else {
+                completer.typePosition = true;
+                try {
+                    names.resolve(scope.module(), path);
+                } finally {
+                    completer.typePosition = false;
+                }
+            }
+            return Type.ERROR;
+        }
         if (path.size() == 1) {
             var param = scope.params().get(first);
             if (param != null) {
                 noArgs(n);
+                names.symbolIndex.ref(path.getFirst().span(), param, null);
                 return param.type();
             }
             if (first.equals("Self")) {

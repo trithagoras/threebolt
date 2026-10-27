@@ -1,13 +1,13 @@
 {
   "name": "threebolt",
   "displayName": "Threebolt",
-  "description": "Syntax highlighting for the Threebolt language (.3b)",
-  "version": "0.1.0",
+  "description": "Threebolt (.3b) support: syntax highlighting, and a language server for errors, hover, go to definition, references, rename, completion and signature help",
+  "version": "0.3.0",
   "publisher": "threebolt",
   "private": true,
   "license": "UNLICENSED",
   "engines": {
-    "vscode": "^1.80.0"
+    "vscode": "^1.91.0"
   },
   "categories": [
     "Programming Languages"
@@ -32,6 +32,44 @@
         "scopeName": "source.threebolt",
         "path": "./syntaxes/threebolt.tmLanguage.json"
       }
+    ],
+    "configuration": {
+      "title": "Threebolt",
+      "properties": {
+        "threebolt.java.home": {
+          "type": "string",
+          "default": "",
+          "markdownDescription": "JDK (25 or newer) to run the language server with. Empty: `JAVA_HOME`, then `java` on the `PATH`."
+        },
+        "threebolt.server.jar": {
+          "type": "string",
+          "default": "",
+          "markdownDescription": "Language server jar to use instead of the bundled one, e.g. `build/server/threebolt.jar` from `./gradlew serverJar`."
+        },
+        "threebolt.trace.server": {
+          "type": "string",
+          "enum": [
+            "off",
+            "messages",
+            "verbose"
+          ],
+          "default": "off",
+          "description": "Log the messages between VS Code and the language server."
+        }
+      }
+    },
+    "commands": [
+      {
+        "command": "threebolt.restartServer",
+        "title": "Threebolt: Restart Language Server"
+      }
     ]
+  },
+  "main": "./extension.js",
+  "activationEvents": [
+    "onLanguage:threebolt"
+  ],
+  "dependencies": {
+    "vscode-languageclient": "10.1.2"
   }
 }

@@ -83,6 +83,7 @@ public final class Checker {
 
     final Program program;
     final Diagnostics diag;
+    final SymbolIndex index;
     final Declarer decls;
     final TypeSystem ts;
     final TypeResolver types;
@@ -91,14 +92,23 @@ public final class Checker {
     final Calls calls;
     final Patterns patterns;
     final ConstEval consts;
+    /** Answers the index's completion request, if any; else null. */
+    Completer completer;
     /** Lambda depth at which each local was declared (captured-mutable locals are not narrowed). */
     final Map<Local, Integer> localDepth = new HashMap<>();
     Ctx ctx;
 
     public Checker(Program program, Diagnostics diag) {
+        this(program, diag, SymbolIndex.disabled());
+    }
+
+    /** Also records what every name refers to in {@code index}. */
+    public Checker(Program program, Diagnostics diag, SymbolIndex index) {
         this.program = program;
         this.diag = diag;
-        this.decls = new Declarer(program, diag);
+        this.index = index;
+        index.attach(diag);
+        this.decls = new Declarer(program, diag, index);
         this.ts = decls.ts;
         this.types = decls.types;
         this.names = decls.names;
@@ -107,11 +117,17 @@ public final class Checker {
         this.patterns = new Patterns(this);
         this.consts = new ConstEval(this);
         types.constSize = consts::arraySize;
+        if (index.completion != null) {
+            completer = new Completer(this, index.completion);
+            names.completer = completer;
+            types.completer = completer;
+        }
     }
 
     /** Checks the whole program; the result is runnable when there were no errors. */
     public CheckedProgram check() {
         decls.run();
+        index.declarations(program, decls);
         for (TypeInfo t : decls.allTypes) {
             if (t.isEnum()) consts.enumValues(t);
         }
@@ -233,6 +249,7 @@ public final class Checker {
         ctx.scope.locals.put(name, local);
         localDepth.put(local, ctx.depth);
         ctx.narrowed.remove(local);
+        index.decl(SymbolIndex.nameIn(span, name), local);
         return local;
     }
 
@@ -270,6 +287,7 @@ public final class Checker {
     /** Reading a local: narrowed to a struct, a boxed value becomes a copy (§5.5). */
     Typed readLocal(Local local, Span span) {
         var type = typeOf(local);
+        index.ref(span, local, type == Type.UNBOUND ? null : type);
         if (type == Type.UNBOUND) return unbound(local, span);
         Ir.Expr ir = new Ir.Read(new Ir.LocalPlace(local));
         if (type != local.type && TypeSystem.isStruct(type)) ir = new Ir.Unbox(ir);
@@ -667,11 +685,15 @@ public final class Checker {
                 var local = lookupLocal(name);
                 if (local != null) {
                     var type = typeOf(local);
+                    index.ref(p.span(), local, type == Type.UNBOUND ? null : type);
                     if (type == Type.UNBOUND) type = unbound(local, p.span()).type();
                     yield new PlaceInfo(new Ir.LocalPlace(local), type, local.isMutable(),
                             "cannot assign to immutable binding '" + name + "'; declare it `let mut`", local);
                 }
-                if (names.lookup(ctx.module, name) instanceof Names.StaticEntity(StaticInfo s)) yield staticPlace(s);
+                if (names.lookup(ctx.module, name) instanceof Names.StaticEntity(StaticInfo s)) {
+                    index.ref(p.span(), s, null);
+                    yield staticPlace(s);
+                }
                 yield null;
             }
             case Expr.Path p -> {

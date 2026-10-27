@@ -292,6 +292,10 @@ final class Exprs {
         var first = segs.getFirst();
         String firstName = first.name().text();
         var scope = c.ctx.typeScope;
+        if (segs.size() == 1 && c.completer != null && c.completer.at(first.name())) {
+            c.completer.names(first.name());
+            return new ErrorTarget();
+        }
         if (segs.size() == 1) {
             var local = c.lookupLocal(firstName);
             if (local != null) {
@@ -310,6 +314,7 @@ final class Exprs {
         boolean argsGiven;
         if (firstName.equals("Self") || scope.params().containsKey(firstName)) {
             qualifier = firstName.equals("Self") ? scope.self() : scope.params().get(firstName).type();
+            if (!firstName.equals("Self")) c.index.ref(first.name().span(), scope.params().get(firstName), null);
             if (qualifier == null) {
                 diag.error(Code.UNRESOLVED_NAME, first.span(), "`Self` is only valid inside a type or trait");
                 return new ErrorTarget();
@@ -353,6 +358,10 @@ final class Exprs {
             }
         }
         if (qualifier == Type.ERROR) return new ErrorTarget();
+        if (c.completer != null && c.completer.at(segs.getLast().name())) {
+            c.completer.statics(qualifier, qualifierDecl, argsGiven, segs.getLast());
+            return new ErrorTarget();
+        }
         return member(qualifier, qualifierDecl, argsGiven, segs.getLast(), forCall);
     }
 
@@ -402,6 +411,12 @@ final class Exprs {
 
     /** {@code Type::name}: an enum member, a static, a static function, or (traits) a method. */
     private Target member(Type owner, TypeInfo decl, boolean argsGiven, Expr.PathSegment seg, boolean forCall) {
+        var target = memberTarget(owner, decl, argsGiven, seg, forCall);
+        if (target instanceof FnTarget f) c.index.ref(seg.name().span(), f.candidates().getFirst().fn(), null);
+        return target;
+    }
+
+    Target memberTarget(Type owner, TypeInfo decl, boolean argsGiven, Expr.PathSegment seg, boolean forCall) {
         String name = seg.name().text();
         if (owner instanceof Type.Param param) {
             var cands = new ArrayList<Calls.Candidate>();
@@ -429,6 +444,7 @@ final class Exprs {
             var values = c.consts.enumValues(decl);
             if (values.containsKey(name)) {
                 noTypeArgs(seg);
+                c.index.ref(seg.name().span(), new SymbolIndex.EnumMember(decl, name), null);
                 return new ValueTarget(new Typed(new Ir.Lit(new Values.EnumVal(decl, values.get(name))), owner));
             }
         }
@@ -439,6 +455,7 @@ final class Exprs {
         for (TypeInfo t = decl; t != null; t = t.baseDecl()) {
             var s = t.statics.get(name);
             if (s != null) {
+                c.index.ref(seg.name().span(), s, null);
                 checkAccess(t, s.ast.visibility(), "static '" + name + "'", seg.span());
                 return new StaticTarget(s);
             }
@@ -565,6 +582,10 @@ final class Exprs {
             return error();
         }
         var r = recv(m.receiver());
+        if (c.completer != null && c.completer.at(m.name())) {
+            c.completer.members(r.value().type(), m.name());
+            return error();
+        }
         var field = field(r, m.name());
         if (field != null) return new Typed(readIr(field), field.type());
         if (TypeSystem.expand(r.value().type()) instanceof Type.Tuple && m.name().text().chars().allMatch(Character::isDigit)) {
@@ -601,6 +622,7 @@ final class Exprs {
             if (!f.owner().isStruct()) checkAccess(f.owner(), f.visibility, "field '" + text + "'", name.span());
             var base = n.decl() == f.owner() ? n : TypeSystem.baseInstance(n, f.owner());
             var type = TypeSystem.subst(f.type, TypeSystem.bind(f.owner().typeParams, base.args()));
+            c.index.ref(name.span(), f, type);
             return new PlaceInfo(new Ir.FieldPlace(basePlace, baseExpr, f.slot, text), type, mutable, why, null);
         }
         return null;
@@ -629,6 +651,7 @@ final class Exprs {
         var g = getters.getFirst();
         c.calls.checkMethodAccess(g.fn(), m.name().span());
         var ret = TypeSystem.subst(g.fn().ret, g.env());
+        c.index.ref(m.name().span(), g.fn(), null);
         return new Typed(new Ir.Call(g.fn(), g.kind(), r.value().ir(), null, List.of(), new int[0], List.of(), null,
                 null, m.span()), ret);
     }
@@ -1435,6 +1458,7 @@ final class Exprs {
                 case Expr.FieldInit fi -> {
                     String name = fi.name().text();
                     var field = decl.field(name);
+                    c.index.ref(fi.name().span(), field, null);
                     if (field == null) {
                         diag.error(Code.BAD_FIELD, fi.name().span(), "'" + decl.name() + "' has no field '" + name + "'");
                         expr(fi.value(), null);

@@ -25,6 +25,7 @@ Hobbyist general-purpose language (`.3b`): statically typed, GC-managed, Rust-fl
 ./gradlew run --args="parse examples/arena/main.3b"
 ./gradlew run --args="ast examples/arena/main.3b"     # also: print, check
 ./gradlew test -PupdateGolden                     # rewrite lexer goldens and conformance .err files
+./gradlew vscodeServer                            # build the language server jar into editors/vscode/server/
 ```
 
 - Requires a JDK ≥ 25 (bytecode targets 25 via `--release 25`). If `java` isn't on PATH, use `JAVA_HOME=/opt/homebrew/opt/openjdk/libexec/openjdk.jdk/Contents/Home`.
@@ -43,12 +44,15 @@ src/main/resources/std/    std modules in Threebolt (bodyless fns are interprete
 src/test/java/…            JUnit 5 unit tests
 tests/conformance/         .3b programs + expected output / expected diagnostics (see its README)
 examples/                  sample Threebolt programs (must keep parsing as the grammar evolves)
-editors/vscode/            VS Code syntax highlighting (TextMate grammar; keep in step with ThreeboltLexer.g4)
+src/main/java/…/lsp/       language server (`threebolt lsp`, LSP4J) over types.SymbolIndex; completion via types.Completer hooks
+editors/vscode/            VS Code extension: TextMate grammar (keep in step with ThreeboltLexer.g4) + LSP client
 ```
 
 ## Conventions
 
-- Java: records + sealed interfaces for the AST, `var` where the type is obvious, no frameworks. Keep the interpreter obviously correct before fast.
+- Java: records + sealed interfaces for the AST, `var` where the type is obvious. Dependencies: ANTLR runtime and LSP4J (language server only). Keep the interpreter obviously correct before fast.
 - Every feature lands with tests: unit tests for the component plus a conformance program (and at least one compile-error case where the spec defines an error).
 - `examples/` and the spec's code snippets are informal test inputs — if one stops parsing, either the grammar or the snippet is wrong; fix it deliberately.
+- Language server: completion and signature help check a copy of the file with `Completion.PLACEHOLDER` at the cursor; the checker's hooks (`Completer`) list what fits. A new name-resolution path in the checker should call the completer where it meets the placeholder.
+- The VS Code extension bundles the server jar: after server changes, bump `editors/vscode/package.json`'s version and reinstall (see editors/vscode/README.md).
 - Small, focused commits.

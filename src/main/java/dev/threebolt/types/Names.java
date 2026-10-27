@@ -41,12 +41,16 @@ public final class Names {
 
     private final Program program;
     private final Diagnostics diagnostics;
+    final SymbolIndex symbolIndex;
+    /** Set by the checker when answering a completion request. */
+    Completer completer;
     /** Semantic info for each declaration item. */
     final Map<Item, Object> infos = new HashMap<>();
 
-    Names(Program program, Diagnostics diagnostics) {
+    Names(Program program, Diagnostics diagnostics, SymbolIndex index) {
         this.program = program;
         this.diagnostics = diagnostics;
+        this.symbolIndex = index;
     }
 
     public Object info(Item item) {
@@ -66,6 +70,7 @@ public final class Names {
             return fullyQualified(from, path);
         }
         var entity = entity(symbols);
+        record(first, entity);
         return continueFrom(from, entity, path, 1);
     }
 
@@ -84,7 +89,16 @@ public final class Names {
         for (int k = path.size(); k >= 1; k--) {
             var mp = new ModulePath(path.subList(0, k).stream().map(Name::text).toList());
             var m = program.module(mp);
-            if (m != null) return continueFrom(from, new ModuleEntity(m), path, k);
+            if (m != null) {
+                record(path.get(k - 1), new ModuleEntity(m));
+                return continueFrom(from, new ModuleEntity(m), path, k);
+            }
+        }
+        if (completer != null && path.size() > 1 && completer.at(path.getLast())) {
+            // `std::|`: a path prefix that is not a module itself.
+            completer.modulePrefix(new ModulePath(path.subList(0, path.size() - 1).stream().map(Name::text).toList()),
+                    path.getLast());
+            return null;
         }
         Name first = path.getFirst();
         diagnostics.error(Code.UNRESOLVED_NAME, first.span(), "cannot find '" + first.text() + "' in this scope");
@@ -94,12 +108,17 @@ public final class Names {
     private Resolved continueFrom(Module from, Entity entity, List<Name> path, int index) {
         while (entity instanceof ModuleEntity(Module m) && index < path.size()) {
             Name seg = path.get(index);
+            if (completer != null && completer.at(seg)) {
+                completer.moduleItems(m, from, seg);
+                return null;
+            }
             var items = m.scope().items(seg.text());
             if (items.isEmpty()) {
                 // A submodule: a::b where a/b.3b exists.
                 var sub = program.module(m.path().child(seg.text()));
                 if (sub != null) {
                     entity = new ModuleEntity(sub);
+                    record(seg, entity);
                     index++;
                     continue;
                 }
@@ -120,12 +139,25 @@ public final class Names {
                 items = pub;
             }
             entity = entity(items);
+            record(seg, entity);
             index++;
         }
         return new Resolved(entity, index);
     }
 
-    private Entity entity(List<? extends Symbol> symbols) {
+    private void record(Name name, Entity entity) {
+        Object target = switch (entity) {
+            case ModuleEntity(Module m) -> m;
+            case TypeEntity(TypeInfo t) -> t;
+            case FnEntity(List<FnInfo> fns) -> fns.getFirst();
+            case ConstEntity(ConstInfo c) -> c;
+            case StaticEntity(StaticInfo s) -> s;
+            case PrimEntity p -> null;
+        };
+        symbolIndex.ref(name.span(), target, null);
+    }
+
+    Entity entity(List<? extends Symbol> symbols) {
         var first = symbols.getFirst();
         if (first instanceof Symbol.ModuleRef r) return new ModuleEntity(r.module());
         var fns = new ArrayList<FnInfo>();

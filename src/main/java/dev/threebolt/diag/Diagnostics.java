@@ -29,6 +29,11 @@ public final class Diagnostics {
         }
     }
 
+    /** Inside {@link #muted}: what is reported now is discarded. */
+    public boolean isMuted() {
+        return muted > 0;
+    }
+
     /** How many errors were dropped while muted, ever; compare before and after. */
     public int dropped() {
         return dropped;
