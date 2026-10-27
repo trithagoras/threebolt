@@ -6,7 +6,8 @@
 // unsynchronized (§4.2), so threads that need reproducible or independent streams should each
 // make their own `Random`.
 //
-// Ranges given by two bounds are checked: an empty range, an empty list or a sample larger than
+// The integer functions work for every integer type: `randint(1, 6)` is an `i32`, and
+// `let b: u8 = random::randint(0, 255);` a `u8` (§10). Ranges given by two bounds are checked: an empty range, an empty list or a sample larger than
 // its population panics.
 
 pub class Random {
@@ -66,27 +67,31 @@ pub class Random {
     pub fn uniform(mut self, a: f64, b: f64) -> f64 => a + (b - a) * self.random();
 
     /// An integer in `a..=b`.
-    pub fn randint(mut self, a: i64, b: i64) -> i64 {
+    pub fn randint<T: Integer>(mut self, a: T, b: T) -> T {
         if a > b { panic(f"randint: empty range {a}..={b}"); }
+        // Two's complement in u64: the distance is exact for every integer type.
         let span = (b as u64).wrapping_sub(a as u64).wrapping_add(1);
-        if span == 0 { return self.next_u64() as i64; } // the whole i64 range
-        return (a as u64).wrapping_add(self.below(span)) as i64;
+        if span == 0 { return self.next_u64() as T; } // the whole 64-bit range
+        return (a as u64).wrapping_add(self.below(span)) as T;
     }
 
     /// An integer in `0..stop`.
-    pub fn randrange(mut self, stop: i64) -> i64 => self.randrange(0, stop);
+    pub fn randrange<T: Integer>(mut self, stop: T) -> T => self.randrange(T::zero(), stop);
 
     /// An integer from `start`, `start + step`, ... that is before `stop`.
-    pub fn randrange(mut self, start: i64, stop: i64, step: i64 = 1) -> i64 {
+    pub fn randrange<T: Integer>(mut self, start: T, stop: T, step: T = 1) -> T {
         if step == 0 { panic("randrange: step is zero"); }
-        let mut n: i64 = 0;
-        if step > 0 {
-            n = (stop - start + step - 1) / step;
-        } else {
-            n = (stop - start + step + 1) / step;
+        if (step > 0 && start >= stop) || (step < 0 && start <= stop) {
+            panic(f"randrange: empty range ({start}, {stop}, step {step})");
         }
-        if n <= 0 { panic(f"randrange: empty range ({start}, {stop}, step {step})"); }
-        return start + step * (self.below(n as u64) as i64);
+        // As in randint, distances in u64 cannot overflow.
+        let s = step as u64;
+        if step > 0 {
+            let n = ((stop as u64).wrapping_sub(start as u64) - 1) / s + 1;
+            return (start as u64).wrapping_add(s.wrapping_mul(self.below(n))) as T;
+        }
+        let n = ((start as u64).wrapping_sub(stop as u64) - 1) / s.wrapping_neg() + 1;
+        return (start as u64).wrapping_sub(s.wrapping_neg().wrapping_mul(self.below(n))) as T;
     }
 
     /// `true` with probability `p`.
@@ -202,9 +207,9 @@ pub fn seed(seed: u64) => DEFAULT.seed(seed);
 pub fn getrandbits(k: u32) -> u64 => DEFAULT.getrandbits(k);
 pub fn random() -> f64 => DEFAULT.random();
 pub fn uniform(a: f64, b: f64) -> f64 => DEFAULT.uniform(a, b);
-pub fn randint(a: i64, b: i64) -> i64 => DEFAULT.randint(a, b);
-pub fn randrange(stop: i64) -> i64 => DEFAULT.randrange(stop);
-pub fn randrange(start: i64, stop: i64, step: i64 = 1) -> i64 => DEFAULT.randrange(start, stop, step: step);
+pub fn randint<T: Integer>(a: T, b: T) -> T => DEFAULT.randint(a, b);
+pub fn randrange<T: Integer>(stop: T) -> T => DEFAULT.randrange(stop);
+pub fn randrange<T: Integer>(start: T, stop: T, step: T = 1) -> T => DEFAULT.randrange(start, stop, step: step);
 pub fn chance(p: f64) -> bool => DEFAULT.chance(p);
 pub fn gauss(mu: f64, sigma: f64) -> f64 => DEFAULT.gauss(mu, sigma);
 pub fn expovariate(lambd: f64) -> f64 => DEFAULT.expovariate(lambd);

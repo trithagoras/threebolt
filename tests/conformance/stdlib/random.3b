@@ -26,6 +26,16 @@ fn main() {
     println(f"{r.randrange(10)} {r.randrange(0, 100, step: 5)} {r.randrange(10, 0, step: -3)}");
     println(f"{r.randint(i64::MIN, i64::MAX) is i64} {r.randint(5, 5)} {r.randrange(-3, -2)}");
 
+    // Any integer type; the expected type picks it when the bounds are literals (§10).
+    let byte: u8 = r.randint(250, 255);
+    let tiny: i8 = r.randrange(10, -10, step: -7);
+    let wide = r.randint(0_u64, u64::MAX);
+    let full = r.randint(i8::MIN, i8::MAX);
+    println(f"{byte.type()} {byte >= 250} {tiny} {wide.type()} {full.type()} {r.randrange(3_u16).type()}");
+    let mut all_bytes: Set<u8> = [];
+    for _ in 0..3000 { all_bytes.insert(r.randint(0, 255)); }
+    println(all_bytes.len);
+
     let xs = ["a", "b", "c", "d", "e"];
     println(r.choice(xs));
     r.shuffle(xs);
