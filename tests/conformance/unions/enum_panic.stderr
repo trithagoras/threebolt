@@ -1,0 +1,2 @@
+panic: 7 is not a value of enum 'Color'
+    at main (enum_panic.3b:8:13)

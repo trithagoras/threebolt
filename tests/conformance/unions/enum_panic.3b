@@ -1,0 +1,10 @@
+// §4.11: `n as Enum` panics when n is not a declared value.
+//! exit: 101
+
+enum Color { Red, Green }
+
+fn main() {
+    let n = 7;
+    let c = n as Color;
+    println(f"{c}");
+}

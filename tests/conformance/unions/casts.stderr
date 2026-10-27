@@ -1,0 +1,2 @@
+panic: cannot cast a value of type 'str' to 'i32'
+    at main (casts.3b:16:13)
