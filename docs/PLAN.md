@@ -63,19 +63,43 @@ Each phase ends with green tests. Work in **vertical slices** after Phase 3: eac
 - Tests: `AstBuilderTest`, `AstPrinterTest`, `AstRoundTripTest` (examples, std, conformance, spec snippets, `src/test/resources/printer/tricky.3b`), `ModuleLoaderTest`, `ConformanceTest` (`tests/conformance`, see its README; `.err` files, `-PupdateGolden`).
 - Left for Phase 4: the `main` signature check (§2.4, confirmed as specified); resolving names inside bodies, including fully-qualified paths without a `use` (decided: spec §2.2). Modules named only by such paths must also be loaded, so the loader has to discover them from paths in types and bodies, not just from `use` items.
 
-### Phase 4 — Slice: "hello, arithmetic"
-Front-end carry-over from Phase 3: body/local name resolution, fully-qualified paths (§2.2) and loading the modules they name, the §2.4 `main` check.
-`fn main`, `println`, `let`/`let mut`, shadowing, primitives & numeric literal typing/widening (§3.6), operators (§7.3), checked overflow (§13.2), `if`/`while`/`loop`/`for` over ranges, `str` + f-strings (`Display` for primitives), functions, named-only optional params, overloads (§4.4), `const`, `static`, panics + exit codes.
+### Phases 4–7 ✅ — status (branch `phase-4-7-interpreter`)
 
-### Phase 5 — Slice: types & values
-Structs (value semantics, in-place `mut self`, read-modify-write indexers §5.3), tuples, classes, initializers/spread/`init` fields (§4.7), mutability checking (§5), getters, visibility, `[T]` / `Map` / `Set` + literals, `Truthy`/`Len`.
+Built in one go rather than slice by slice, because one checker and one interpreter serve every slice. Committed in focused chunks on 2026-10-27 (each commit builds and passes its tests); not yet pushed or merged.
 
-### Phase 6 — Slice: unions, narrowing, errors
-Union types & assignability (§3.4–3.5), literal types, `null`, `is`/`as`/`as?`, narrowing (§9), `if let`/`while let`, `match` + patterns + exhaustiveness (§7.11, §11), `Error`/`Err`/`?`/`??`, must-use, `defer`, enums & `@flags`.
+**Architecture (new packages):**
+- `types/`: `Type` (sealed; `Prim` enum; unions normalized by `TypeSystem.union`; `AliasRef` only for recursive aliases), `TypeInfo`/`FnInfo`/`FieldInfo`/`StaticInfo`/`ConstInfo`/`ImplInfo`/`TypeParamInfo` (mutable semantic info), `TypeSystem` (assignability §3.5, `implementsAs` incl. bounds/supertraits/base classes/auto struct-tuple-union Eq+Hash, impl table, subst, unify, `name()` for `nameof`), `Names` (module paths, fully-qualified paths), `TypeResolver`, `Declarer` (collect → signatures → bases/layout → impls → decl checks: overrides, hiding, abstract, trait conformance, overload conflicts, getters, `main`), `Checker` (contexts, statements, flow-sensitive narrowing, places/mutability, coercion), `Exprs`, `Calls` (method lookup, overloads with muted speculative typing, inference incl. deferred lambdas, UFCS `Trait::m(x)`), `Patterns` (patterns, match, exhaustiveness), `ConstEval` (consts, enum values, array sizes — checks then evaluates IR).
+- `ir/`: `Ir` (typed, resolved program: places, `Call` with `CallKind` DIRECT/VIRTUAL/TRAIT/TRAIT_STATIC, `Coerce` for widening/boxing, `Unbox`, `Hole` for compound assignment), `Local`.
+- `interp/`: `Interpreter` (tree walker; `store()` implements in-place `mut self` and read-modify-write through indexers; reified generics via per-frame type env + owner bindings from the receiver's runtime type; defers per block; panics carry a trace), `Values` (runtime values; structs/tuples/arrays copied on place reads), `Ops` (checked arithmetic, casts, float display, parsing), `Natives` (intrinsics), `Ffi` (minimal FFM: extern calls with scalar/`Ptr` args incl. variadics and `@link`, `Ptr` basics, `c::alloc/free`, `to_cstr/from_cstr`), `Panic`.
+- `Driver` (check + run on a 1 GiB-stack thread), CLI `threebolt run <file> [args]`; `check` now type-checks.
+- std: `prelude.3b` (Iterator adapters `map filter enumerate of_type for_each fold any all count to_list first` written **in Threebolt** with private `MapIter`/`FilterIter`/`EnumerateIter`/`OfTypeIter`; `NativeIter` for interpreter-backed iterators; `List`, `Range` (struct with start/end/inclusive), `Type`, `Ptr`, `Err`), `collections.3b` (Map/Set), `process.3b` (`exit`). Bodyless std functions are intrinsics keyed `Owner.name`. `std/builtin/{int,float,str,char,bool,enum,flags}.3b` are member lists (not modules) attached to primitives/enums by the declarer; `AstRoundTripTest.builtinMembers` round-trips them.
+- Loader: discovers modules named by fully-qualified paths (§2.2) syntactically (paths whose first segment is not an item/import/prelude/primitive/type-param name).
+- Conformance runner: cases without errors are run; stdout/stderr compared with `.out`/`.stderr`; `//! exit: N` and `//! args: a b` directives. Documented in `tests/conformance/README.md`.
 
-### Phase 7 — Slice: OOP & traits
-Inheritance, `virtual`/`override`/`abstract`/`super`, no-hiding rule, traits (default bodies, supertraits, static fns), `impl` blocks + global uniqueness, trait references & boxing (§5.5), generics (reified, bounds, inference §10), a diagnostic hint when §7.5 type arguments resolve to values ("parsed as generic arguments; write `(a < b)` to compare" — kept `f<T>()` over turbofish on that basis), operator-overloading traits, `Iterator`/`Iterable` + adapters with the `Done` sentinel, lambdas/closures, `typeof`/`nameof`/`.type()`.
-- Milestone: spec §18 canonical example and `examples/arena` run.
+**Done and verified (all tests green, 2026-10-27):** conformance cases with reviewed goldens in `tests/conformance/basics/` (Phase 4), `values/` (Phase 5), `unions/` (Phase 6), `dispatch/` (Phase 7: inheritance, traits, boxing, generics, operators, iterators, lambdas, reflection, each with an errors case) and `programs/` (spec §18 verbatim, with and without an argument; `arena/` = `examples/arena` with a fixed-seed LCG `dice.3b` instead of libc). Unit tests: `types.TypeSystemTest` (unions, widening, assignability, trait lookup, `nameof`), `interp.OpsTest` (overflow, shifts, casts, float display, parsing).
+
+**Phase 7 fixes made while writing the cases:**
+- Lambdas capture a snapshot of the visible cells (`Env.snapshot`): still by reference, but a later binding of the same local (the next loop iteration, a `let` in a loop body) no longer leaks into earlier closures. Before, `for i in 0..3 { fs.push(() => i); }` gave `2 2 2`.
+- Bodyless trait members and abstract methods get their default arguments checked and evaluated (calls through a trait reference crashed the interpreter).
+- §7.5 hint: a local given type arguments (`f(a < b, c > (d))` reads `a<b, c>(d)`), or a local used as a type argument, reports "parsed as generic arguments; to compare, parenthesize". `Checker.typeArg` is used for every explicit type argument.
+- Less cascading: no "must override abstract" for a class's own abstract methods or after a failed `override`; a lambda of the wrong arity reports only that.
+- Dead code removed (`Exprs` stubs and `&& false`, `Values.fill/debugFields`, unused imports).
+
+**Language additions after the Phase 7 review (spec changelog 2026-10-27, "slicing…" and "patterns after `is`"):**
+- Slicing `xs[a..b]`, `xs[a..]`, `xs[..b]`, `xs[..]` on lists and arrays (`Expr.Slice` for open-ended forms, `Ir.Slice`; closed ranges stay `Expr.Index` and the checker picks slice vs `Index`). A range index is not a receiver place.
+- `print`/`println`/`eprintln` take any `Display`.
+- `x is pattern`: `isTarget` in the grammar, chosen by `isPatternAhead()`. Bindings are conditional `Local`s (`isConditional`) whose unnarrowed flow state is `Type.UNBOUND`; the condition's `whenTrue` binds them, so all the flow rules (`&&`, `!`, merges, diverging `if`) apply unchanged. Reading one elsewhere is E0231.
+- Fixed: `match` on a literal-typed scrutinee (`match 5 { 1..=9 => … }`); "cannot infer type argument" no longer follows an argument that already failed to type.
+
+**Known gaps/rough edges:** an `[]` element inside a collection literal gets no type from its siblings (`[[1], []]` needs an annotation); statics are not thread-safe (Phase 8); recursive aliases are only lightly supported (`AliasRef`); runtime `coerce` picks the first widening member of a union; a missing `IndexMut` on assignment reports E0300 (a mutability code).
+
+**Decisions made while implementing:** confirmed by the user on 2026-10-27 and written into the spec (see its changelog entry "checker and interpreter (0.1 Phases 4–7)"). Implementation-only choices, not in the spec:
+- Error recovery: a module with syntax errors is skipped by the checker; the checker runs even after loader errors.
+- Diagnostic codes: E00xx syntax, E01xx modules/names (E0107–E0110 added: names, `main`), E02xx types/expressions, E03xx mutability, E04xx declarations; see `diag/Code.java`. Never renumber them.
+- std intrinsics: bodyless std functions are keyed `Owner.name`; `std/builtin/*.3b` member lists attach to primitives/enums.
+
+**Phase 8 head start:** `interp/Ffi.java` already does extern calls (scalar, `Ptr`, enum args/returns; variadics with C promotions; `@link` via `System.mapLibraryName`), `Ptr` null/from_addr/is_null/addr/offset/cast/read/write for primitive `T`, `c::alloc`/`c::free` (libc malloc/free), `str::to_cstr`/`from_cstr`, and the `unsafe` context check (E0227). Still missing: `@c struct` layouts, `[T; N]` in C structs, callbacks/upcalls and the `extern fn` conversion (§14.7), `with_ptr` pinning, ABI-type checking of extern signatures at declaration, threads/Mutex/Atomic.
+
 
 ### Phase 8 — C interop & threads
 `extern "C"`, `@link`, `@c struct`, `Ptr<T>`, `c::*` aliases, `with_ptr` pinning, `unsafe` checking, callbacks — all via FFM (`Linker.nativeLinker()`, `MemorySegment`, `Arena`, upcall stubs). Then `Thread`, `Mutex`, `Atomic` on Java threads (no GIL needed — JVM is thread-safe; interpreter state must be).

@@ -1,0 +1,47 @@
+// Compile errors of the unions/narrowing/errors slice.
+
+struct E : Error { pub fn message(self) -> str => "e"; }
+enum Color { Red, Green, Blue }
+
+fn fallible() -> i32 | E => 1;
+
+fn union_access(v: i32 | str) -> i32 {
+    return v.len;
+}
+
+fn not_exhaustive(c: Color, b: bool, v: i32 | str) {
+    match c { Color::Red => {}, Color::Green => {} }
+    match b { true => {} }
+    match v { n is i32 => {} }
+}
+
+fn must_use() {
+    fallible();
+}
+
+fn propagate_wrong() -> i32 {
+    let x = fallible()?;
+    return x;
+}
+
+fn propagate_nothing() -> i32 | null {
+    let x = 5?;
+    return x;
+}
+
+fn if_let_needs_null() {
+    if let x = 5 { }
+}
+
+fn impossible() {
+    let s = "x";
+    let n = s as i32;
+    _ = s is Color;
+}
+
+fn deferred() -> i32 {
+    defer { return 1; }
+    return 2;
+}
+
+fn main() {}

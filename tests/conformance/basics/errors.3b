@@ -1,0 +1,48 @@
+// Compile errors of the basics slice: one (or two) diagnostics per function.
+
+fn types() {
+    let a: i32 = "text";
+    let b: u8 = 256;
+    let c: i8 = -129;
+    let d = 1 + "x";
+    let e = 1_u8 + 1_i8;
+}
+
+fn names() {
+    let x = undefined_thing;
+    nope();
+}
+
+fn mutability() {
+    let x = 1;
+    x = 2;
+    let list = [1, 2];
+    list.push(3);
+}
+
+fn returns() -> i32 {
+    if true { return 1; }
+}
+
+fn describe(x: i32) -> str => "i32";
+fn describe(x: i64) -> str => "i64";
+fn opt(a: i32, b: i32 = 0) -> i32 => a + b;
+
+fn calls() {
+    let small: i16 = 1;
+    _ = describe(small);
+    _ = opt();
+    _ = opt(1, 2);
+    _ = opt(1, c: 2);
+    _ = opt(a: 1);
+}
+
+fn loops() {
+    break;
+}
+
+fn conditions() {
+    if 1 { }
+}
+
+fn main() {}

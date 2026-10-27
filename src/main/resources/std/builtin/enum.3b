@@ -1,0 +1,6 @@
+// Members of every enum (spec §4.11); `Self` is the enum.
+
+pub fn to_str(self) -> str;
+pub fn eq(self, o: Self) -> bool;
+pub fn cmp(self, o: Self) -> i32;
+pub fn hash(self) -> u64;

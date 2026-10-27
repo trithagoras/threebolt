@@ -1,0 +1,20 @@
+// config.3b — literal union types, narrowing, error values.
+
+pub type Mode = "quick" | "full";
+
+pub struct BadRounds : Error {
+    let input: str;
+    pub fn message(self) -> str => f"expected 'quick', 'full' or a number, got '{self.input}'";
+}
+
+fn rounds_for(mode: Mode) -> i32 => match mode {
+    "quick" => 3,
+    "full" => 10,                       // exhaustive: no `_` needed
+};
+
+pub fn parse_rounds(arg: str) -> i32 | BadRounds {
+    if arg is Mode {                    // narrows `arg` from str to Mode
+        return rounds_for(arg);
+    }
+    return i32::parse(arg) ?? BadRounds { input: arg };
+}

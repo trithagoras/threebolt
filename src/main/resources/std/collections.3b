@@ -1,4 +1,26 @@
-// std::collections (spec §16). Map and Set are also in the prelude.
+// std::collections (spec §16). Map and Set are also in the prelude. Iteration follows insertion
+// order.
 
-pub class Map<K: Hash + Eq, V> {}
-pub class Set<T: Hash + Eq> {}
+pub class Map<K: Hash + Eq, V> : Len, Truthy, Iterable<(K, V)>, Index<K, V>, IndexMut<K, V> {
+    pub get fn len(self) -> usize;
+    pub fn truthy(self) -> bool;
+    pub fn iter(self) -> Iterator<(K, V)>;
+    pub fn index(self, k: K) -> V;
+    pub fn set(mut self, k: K, v: V);
+    pub fn get(self, k: K) -> V | null;
+    pub fn contains_key(self, k: K) -> bool;
+    pub fn remove(mut self, k: K) -> V | null;
+    pub fn clear(mut self);
+    pub get fn keys(self) -> Iterator<K>;
+    pub get fn values(self) -> Iterator<V>;
+}
+
+pub class Set<T: Hash + Eq> : Len, Truthy, Iterable<T> {
+    pub get fn len(self) -> usize;
+    pub fn truthy(self) -> bool;
+    pub fn iter(self) -> Iterator<T>;
+    pub fn insert(mut self, v: T) -> bool;
+    pub fn contains(self, v: T) -> bool;
+    pub fn remove(mut self, v: T) -> bool;
+    pub fn clear(mut self);
+}

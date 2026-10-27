@@ -1,0 +1,3 @@
+panic: integer overflow (i32)
+    at add (overflow.3b:4:34)
+    at main (overflow.3b:8:13)

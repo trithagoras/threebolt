@@ -1,0 +1,19 @@
+// dice.3b — like examples/arena/dice.3b, but a fixed-seed LCG so the fight is reproducible.
+
+static let mut STATE: u32 = 0;
+
+/// Seeds the RNG; without `value:` the seed is fixed.
+pub fn seed(value: u32 | null = null) {
+    STATE = value ?? 314;
+}
+
+pub struct Dice {
+    let sides: i32;
+
+    pub fn new(sides: i32) -> Self => { sides };
+
+    pub fn roll(self) -> i32 {
+        STATE = STATE.wrapping_mul(1664525).wrapping_add(1013904223);
+        return ((STATE >> 16) % self.sides as u32) as i32 + 1;
+    }
+}

@@ -1,0 +1,80 @@
+// §7.8, §7.10: lambdas capture by reference (shared, live), are reference values, infer parameter
+// types from the expected `fn` type, may have block bodies, and `?` inside a lambda propagates
+// out of the lambda only. Named functions are `fn` values.
+
+fn twice(f: fn(i32) -> i32, x: i32) -> i32 => f(f(x));
+fn sq(x: i32) -> i32 => x * x;
+
+fn counter() -> fn() -> i32 {
+    let mut n = 0;
+    return () => {
+        n += 1;
+        return n;
+    };
+}
+
+fn parse_all(xs: [str]) -> [i32 | Err] {
+    let parse = (s: str) => {
+        let n = i32::parse(s) ?? error(f"bad number '{s}'");
+        let v = n?;                      // returns the Err from the lambda, not from parse_all
+        return v * 2;
+    };
+    let mut out: [i32 | Err] = [];
+    for s in xs { out.push(parse(s)); }
+    return out;
+}
+
+struct P { pub let x: i32; }
+
+fn arity(f: fn(i32) -> i32) -> str => "one";
+fn arity(f: fn(i32, i32) -> i32) -> str => "two";
+
+fn main() {
+    println(f"{twice(x => x + 3, 1)} {twice(sq, 3)} {twice((x: i32) => x * 10, 2)}");
+
+    let mut total = 0;
+    let add = (k: i32) => total += k;    // captures `total` by reference
+    add(5);
+    add(6);
+    total += 100;
+    add(1);
+    println(f"{total}");
+
+    let c1 = counter();
+    let c2 = counter();
+    println(f"{c1()} {c1()} {c1()} {c2()}");
+
+    let alias = c1;                      // lambdas are references: same counter
+    println(f"{alias()} {c1()}");
+
+    let mut fs: [fn() -> i32] = [];
+    for i in 0..3 { fs.push(() => i * 10); }
+    let mut k = 0;
+    while k < 2 {
+        let j = k + 1;                   // a new binding on each pass
+        fs.push(() => j);
+        k += 1;
+    }
+    println(f"{fs[0]()} {fs[1]()} {fs[2]()} {fs[3]()} {fs[4]()}");
+
+    let mut p = P { x: 1 };
+    let read = () => p.x;
+    p = P { x: 42 };                     // the capture sees later assignments
+    println(f"{read()}");
+
+    for r in parse_all(["4", "x", "21"]) {
+        match r {
+            n is i32 => print(f"{n} "),
+            e is Err => print(f"[{e.message()}] "),
+        }
+    }
+    println("");
+
+    let pick: fn(i32, i32) -> i32 = (a, b) => a if a > b else b;
+    let classify = (n: i32) => {
+        if n < 0 { return "neg"; }
+        return "non-neg";
+    };
+    println(f"{pick(3, 9)} {classify(-1)} {classify(0)}");
+    println(f"{arity((a, b) => a + b)} {arity(a => a)}");   // overloads by lambda arity
+}

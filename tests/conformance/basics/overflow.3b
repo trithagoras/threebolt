@@ -1,0 +1,10 @@
+// §13.2: checked mode panics on overflow (exit 101, message and trace on stderr).
+//! exit: 101
+
+fn add(a: i32, b: i32) -> i32 => a + b;
+
+fn main() {
+    println("before");
+    let x = add(2_147_483_647, 1);
+    println(f"unreachable {x}");
+}

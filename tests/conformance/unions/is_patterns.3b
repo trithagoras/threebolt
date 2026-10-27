@@ -1,0 +1,63 @@
+// §7.3, §9: `x is pattern` tests a refutable pattern; its bindings are in scope where the test
+// holds (then-blocks, `&&`, conditional expressions, after a diverging `if !(...)`, match guards).
+
+struct Point { pub let x: i32; pub let y: i32; }
+
+fn describe(xs: [i32]) -> str {
+    if xs is [] { return "empty"; }
+    if xs is [only] { return f"one: {only}"; }
+    if xs is [first, ..rest] && first > 100 { return f"big head {first}, {rest.len} more"; }
+    if xs is [_, _] || xs is [_, _, _] { return "two or three"; }
+    return "many";
+}
+
+fn head(xs: [str] | null) -> str {
+    if !(xs is [h, ..]) { return "(none)"; }
+    return h;
+}
+
+fn any<T>(xs: [T], pred: fn(T) -> bool) -> bool
+    => match xs {
+        [] => false,
+        [x, ..] => true if pred(x) else any(xs[1..], pred),
+    };
+
+fn main() {
+    let cases: [[i32]] = [[], [7], [200, 1, 2], [1, 2], [1, 2, 3, 4]];
+    for xs in cases { println(describe(xs)); }
+    println(f"{head(["x", "y"])} {head([])} {head(null)}");
+
+    let p = Point { x: 0, y: 5 };
+    if (p is Point { x: 0, y }) { println(f"on the y axis at {y}"); }
+    let on = p is Point { x: 1, .. };
+    let n = 7;
+    println(f"{on} {n is 1..=9} {n is -5..0} {'q' is 'a'..='z'}");
+
+    let t = (1, "a");
+    println(f"{t is (1, _)} {t is (2, _)} {t is (is i32, is str)}");
+
+    let opt: [i32] | null = [5, 6];
+    if opt is [x, ..] { println(f"first {x} of {opt.len}"); }      // `opt` narrowed to [i32]
+
+    let mut ys = [1, 2, 3];
+    let mut total = 0;
+    while ys is [y, ..rest] {
+        total += y;
+        ys = rest;
+    }
+    println(f"total {total}");
+
+    let ls: [[i32]] = [[1, 2], [], [3]];
+    let firsts = ls.iter().map(l => l[0] if l is [_, ..] else -1).to_list();
+    let k = match ls.len {
+        n if ls is [_, second, ..] => (second.len + n) as i32,
+        _ => 0,
+    };
+    let mut fs: [fn() -> i32] = [];
+    if ls is [[a, ..], ..] { fs.push(() => a * 10); }
+    println(f"{firsts[0]} {firsts[1]} {firsts[2]} {k} {fs[0]()}");
+
+    let v: [[i32]] | str = [[1]];
+    println(f"{v is List<[i32]>} {v is str}");
+    println(any([1, 2, 3], x => x > 2));
+}

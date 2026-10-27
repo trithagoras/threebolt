@@ -80,6 +80,32 @@ class ParserTest {
         assertEquals("(comparisonExpr x is (type A | B))", expr("x is A | B"));
     }
 
+    @Test
+    void isTakesAPatternAfterBracketsBracesAndRanges() {
+        assertEquals("(comparisonExpr x is (listPattern [ ]))", expr("x is []"));
+        assertEquals("(comparisonExpr x is (listPattern [ a , (listPatternElem .. r) ]))", expr("x is [a, ..r]"));
+        assertEquals("(comparisonExpr x is (listPattern [ str ]))", expr("x is [str]"), "never the list type");
+        assertEquals("(comparisonExpr x is (tuplePattern ( 1 , _ )))", expr("x is (1, _)"));
+        assertEquals("(comparisonExpr x is (structPattern P { x , .. }))", expr("x is P { x, .. }"));
+        assertEquals("(comparisonExpr x is (literalOrRangePattern 1 ..= 9))", expr("x is 1..=9"));
+        assertEquals("(comparisonExpr x is (literalOrRangePattern (literalPattern - 1) .. 0))", expr("x is -1..0"));
+    }
+
+    @Test
+    void isTakesATypeOtherwise() {
+        assertEquals("(comparisonExpr x is (typePath List (typeArgs < str >)))", expr("x is List<str>"));
+        assertEquals("(comparisonExpr x is \"a\")", expr("x is \"a\""));
+        assertEquals("(comparisonExpr x is null)", expr("x is null"));
+    }
+
+    @Test
+    void isStructPatternInAHeadNeedsParentheses() {
+        // §6.3: unparenthesized, `P` is a type and `{` opens the block.
+        assertEquals("(ifStmt if (comparisonExpr x is P) (block { }))", stmts("if x is P {}"));
+        assertEquals("(ifStmt if (parenExpr ( (comparisonExpr x is (structPattern P { .. })) )) (block { }))",
+                stmts("if (x is P { .. }) {}"));
+    }
+
     // ---- `>` assembly: `>>`, `>=`, `>>=` (§17.2) ----
 
     @Test

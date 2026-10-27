@@ -1,0 +1,30 @@
+// Compile errors for generics (§7.5, §10).
+
+struct Plain { let x: i32; }
+struct Box<T> { pub let v: T; }
+
+fn largest<T: Ord>(xs: [T]) -> T => xs[0];
+fn make<T>() -> [T] => [];
+fn pick<A, B>(a: A, b: B) -> A => a;
+fn both(x: bool, y: bool) -> bool => x && y;
+fn id<T>(x: T) -> T => x;
+
+fn unbounded<T>(a: T, b: T) -> bool {
+    _ = a + b;
+    return a < b;
+}
+
+fn main() {
+    _ = largest([Plain { x: 1 }]);          // Plain does not implement Ord
+    _ = make();                             // T cannot be inferred
+    _ = pick<i32>(1, 2);                    // wrong number of type arguments
+    _ = pick<str, i32>(1, 2);               // explicit argument mismatch
+    let b: Box<i32, str> = Box { v: 1 };
+    let w: Box = Box { v: 1 };
+
+    let a = 1;
+    let b = 2;
+    let c = 3;
+    _ = both(a < b, c > (a));               // §7.5: parsed as `both(a<b, c>(a))`
+    _ = id<b>(a);                           // a local as a type argument
+}

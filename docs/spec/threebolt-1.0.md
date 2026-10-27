@@ -73,7 +73,7 @@ use std::collections::Map as Dict;
 - Trait methods are callable on any implementing type without importing the trait (impls are global, §8.5).
 
 ### 2.3 Visibility
-- Items and members are **private by default** (visible within the declaring module; for members, within the declaring type).
+- Items and members are **private by default** (visible within the declaring module; for members, within the declaring type, including every `impl` block for that type, §4.10).
 - `pub`: visible everywhere it can be imported/accessed.
 - `prot`: class members only; visible to the declaring class and its subclasses.
 - Struct fields are always public; writing `pub` on them is permitted and redundant.
@@ -82,7 +82,7 @@ use std::collections::Map as Dict;
 ### 2.4 Entry point
 - The entry module MUST declare `fn main()` or `fn main(args: [str])`, return type `()` or `() | E` where every non-`()` member implements `Error`.
 - `args` excludes the program name.
-- Returning an error: its `message()` is written to stderr, exit code 1. Normal return: exit code 0. `std::process::exit(code: i32)` terminates immediately; pending `defer`s do not run.
+- Returning an error: its `message()` (just the message, followed by a newline) is written to stderr, exit code 1. Normal return: exit code 0. `std::process::exit(code: i32)` terminates immediately; pending `defer`s do not run.
 
 ---
 
@@ -124,7 +124,7 @@ use std::collections::Map as Dict;
 - Type aliases are transparent: `type Result<T> = T | Err;` — `Result<Entity>` *is* `Entity | Err`.
 - A union value carries its runtime type; there is no user-visible wrapper.
 - Literal members are subsumed by their base type: `"a" | str` ≡ `str`.
-- Methods, fields and getters cannot be accessed on a union-typed value; narrow first (§9). Unions participate in conditions (§6.6), `==` (§7.3), and `Hash` (when every member implements `Hash`) — nothing else.
+- Methods, fields and getters cannot be accessed on a union-typed value; narrow first (§9). Exception: a union whose members are all literals of one base type (`"left" | "right"`) behaves as that base type for member access and trait implementations (`d.len`, f-string `Display`). Unions participate in conditions (§6.6), `==` (§7.3), and `Hash` (when every member implements `Hash`) — nothing else.
 - Recursive aliases are permitted when recursion passes through a nominal or collection type: `type Json = null | bool | f64 | str | [Json] | Map<str, Json>;`
 
 ### 3.5 Assignability (`S` to `T`)
@@ -141,9 +141,10 @@ use std::collections::Map as Dict;
 Generic types are **invariant**: `[Dog]` is not assignable to `[Animal]`. `fn` types are invariant in parameters and return.
 
 ### 3.6 Numeric conversions
-- Implicit (lossless) widening: signed→wider signed, unsigned→wider unsigned, unsigned→strictly wider signed, `i8..i32`/`u8..u32`→`f64`, `i8 i16 u8 u16`→`f32`, `f32`→`f64`. `isize`/`usize` widen only to themselves and `i64`/`u64` respectively (platform independence).
+- Implicit (lossless) widening: signed→wider signed, unsigned→wider unsigned, unsigned→strictly wider signed, `i8..i32`/`u8..u32`→`f64`, `i8 i16 u8 u16`→`f32`, `f32`→`f64`. `isize`/`usize` widen only to themselves and `i64`/`u64` respectively, and nothing widens implicitly to `isize`/`usize` (platform independence).
 - Everything else requires `as` (§7.9).
 - Integer literals adopt the expected type if it is an integer or float type and the value fits (error if not). Float literals adopt an expected float type. With no expected type: integer → `i32`, float → `f64`.
+- Against a union expected type, an unsuffixed integer literal takes: an equal literal member if there is one; else `i32` if it is a member and the value fits; else the first integer or float member (in declaration order) that the value fits. `let w: i64 | str = 5;` stores an `i64`.
 - Inference widens literal types: `let d = "left";` has type `str`; `let d: Direction = "left";` has type `Direction`.
 
 ---
@@ -191,7 +192,7 @@ fn log(msg: str) { println(msg); }   // return type ()
   1. Viable candidates: positional argument count equals required parameter count; every named argument matches an optional parameter name; generic arguments inferable (§10).
   2. Rank by positional arguments: exact type match beats widening/upcast/boxing.
   3. Among equals, prefer the candidate requiring fewer defaulted parameters to be filled.
-  4. Remaining tie ⇒ error. Overloads differing only in return type ⇒ error at declaration.
+  4. Remaining tie ⇒ error. Overloads differing only in return type ⇒ error at declaration. Widenings are not ranked against each other: an `i16` argument with `i32` and `i64` overloads is ambiguous.
 - Overloads differing only in optional parameters, such that a call with no named arguments is ambiguous, are an error at declaration.
 
 ### 4.5 Structs
@@ -206,6 +207,7 @@ pub struct Vec2 {
 }
 pub struct Done;            // unit struct
 ```
+- A unit struct's name is also its value: `Done` ≡ `Done {}`.
 - Value type. **Fields** (structs and classes): `let name: T [= default];`, optionally prefixed by visibility (`pub let id: u64;`). Fields carry no `mut`: every field is writable iff the path to it is mutable (§5.1). There are no init-only/readonly fields in 1.0; for "readable outside, not writable", use a private field plus a `pub get fn` (§4.8).
 - No inheritance. May implement traits (`struct P : Component, Updatable`). No `virtual`/`abstract`/`override`/`prot`.
 - A method without a `self` parameter is static (`Vec2::zero()`).
@@ -276,7 +278,8 @@ pub trait Default { fn default() -> Self; }            // static requirement
 impl Describe for Vec2 { fn describe(self) -> str => f"({self.x}, {self.y})"; }
 impl<T: Display> Display for [T] { ... }
 ```
-- `struct S : T` / `class C : T` with methods in the body ≡ a separate `impl T for S { ... }`; both may be mixed for different traits but each (trait, type) pair is implemented exactly once program-wide.
+- `struct S : T` / `class C : T` with methods in the body ≡ a separate `impl T for S { ... }`; both may be mixed for different traits but each (trait, type) pair is implemented exactly once program-wide. Listing `T` in the base list is itself that pair's implementation, even when its members come from defaults, so a separate `impl T for S` is then a duplicate.
+- A base list also implements the supertraits of each listed trait from the body's methods, unless they are implemented elsewhere: `struct Position : Component { pub fn default() -> Self => {}; }` implements `Default` (§18).
 - `impl` may appear in any module, for any trait and any type (no orphan rule). Two impls of the same (trait, type-constructor) pair anywhere in the program ⇒ error.
 - Generic impls are allowed for a generic type constructor (`impl<T: Eq> Eq for [T]`). Blanket impls over a bare type parameter (`impl<T: X> Y for T`) are not permitted in 1.0.
 - `impl` blocks contain only implementations of that trait's members.
@@ -311,6 +314,7 @@ A **place** is a local binding, parameter, `self`, a field access on a place or 
 ### 5.2 What `mut` permits
 - **Assignment** (`=`, compound) requires a mutable place.
 - **Calling a `mut self` method** requires the receiver expression to be a mutable place **or a temporary** (non-place, e.g. a call result — enables builder chaining). Receivers reached through a reference-typed immutable binding are not mutable: `let e = Entity::new(); e.add(c);` ⇒ error.
+- Index assignment follows §5.1: `let xs = [1]; xs[0] = 2;` is permitted (`xs` refers to a list, a reference type), while `xs.push(3)` is not (`push` takes `mut self`).
 - Mutability is **shallow** and expresses intent, not a guarantee: `let a = Entity::new(); let mut b = a; b.add(c);` is legal and mutates the object `a` refers to.
 - Inside a `mut self` method, `self` is a mutable place; inside a `self` method it is not (so neither fields of `self` nor `mut self` methods on `self` are usable mutably; fields holding references may still have non-`mut` methods called).
 
@@ -322,7 +326,7 @@ A **place** is a local binding, parameter, `self`, a field access on a place or 
 - `for mut x in xs` over value-type elements binds copies; mutations do not affect `xs`.
 
 ### 5.4 Classes (references)
-- Assignment copies the reference. Identity is preserved; `==` is reference equality unless `Eq` is implemented.
+- Assignment copies the reference. Identity is preserved; `==` is reference equality unless `Eq` is implemented. This includes `[T]`, `Map` and `Set`, which do not implement `Eq`: `[1] == [1]` is `false`.
 
 ### 5.5 Boxing
 - Converting a struct value to a trait type (§3.5 rule 5) copies it into a GC-allocated box. The trait reference refers to the box.
@@ -350,7 +354,7 @@ if cond { ... } else if cond2 { ... } else { ... }
 if let x = expr { ... } else { ... }
 if let mut x = expr { ... }
 ```
-- `cond` follows §6.6. No parentheses required; a struct/class initializer (`Name { ... }` or `{ ... }`) may not appear directly in a condition, `while` head, `for` iterable, or `match` scrutinee unless parenthesized. Collection literals are allowed (`for x in [1, 2].iter() { ... }`).
+- `cond` follows §6.6. No parentheses required; a struct/class initializer (`Name { ... }` or `{ ... }`) may not appear directly in a condition, `while` head, `for` iterable, or `match` scrutinee unless parenthesized. The same holds for a struct pattern after `is` (§7.3): `if (p is Point { x: 0, .. }) { ... }`; unparenthesized, `if p is Point { ... }` is a type test followed by the block. Collection literals are allowed (`for x in [1, 2].iter() { ... }`).
 - `if let x = e`: evaluates `e` (type `T | null`); if non-null, binds `x: T` (narrowed) in the then-block. Never consults `Truthy`. `e`'s type must include `null` ⇒ else error.
 
 ### 6.4 Loops
@@ -364,6 +368,8 @@ for (k, v) in map { ... }
 for i in 0..n { ... }
 ```
 - `for p in e`: `e` must implement `Iterable<T>` (calls `e.iter()`) or `Iterator<T>`; loops until `next()` returns `Done`. `p` is an irrefutable pattern.
+- Each iteration binds `p` afresh, as each execution of a `let` creates a new binding; closures created in different iterations capture different variables (§7.8): `for i in 0..3 { fs.push(() => i); }` captures `0`, `1`, `2`.
+- Iterating a `[T]` walks it live by index: elements pushed during the loop are visited. `Map` and `Set` iterate in insertion order.
 - `break;` / `continue;` affect the innermost loop. Loops are not expressions.
 
 ### 6.5 `defer`
@@ -412,12 +418,16 @@ Bitwise binds tighter than comparison (no C precedence trap).
 
 ### 7.3 Operators
 - Arithmetic `+ - * / %` on same-typed numerics after widening. Integer `/` and `%` by zero panic. Overflow per §13.2. `+` also concatenates `str + str`.
-- Bitwise `& | ^ ~ << >>` on integers and `@flags` enums. Shift amount ≥ bit width panics in checked mode.
+- Bitwise `& | ^ ~ << >>` on integers and `@flags` enums. The shift amount may be any integer type; the result has the left operand's type. A shift amount ≥ bit width (or negative) panics in checked mode.
 - `==`/`!=`: any two types where one is assignable to the other. Requires `Eq` (structs: automatic field-wise; classes: reference identity unless `Eq` implemented; unions: compare runtime type, then value). Comparison with `null` is always permitted on types containing `null`.
 - `< > <= >=`: requires `Ord`. Built-in for numerics, `char`, `str` (byte-lexicographic), enums.
 - `&& || !`: short-circuit, operands per §6.6, result `bool`.
 - `a ?? b`: if `a` is `null`, evaluates `b`. Type: `(A minus null) | B`. Only null is defaulted (errors are not).
 - `x is T`: runtime test, `bool`. `T` may be any type including traits, literal types and unions (true if any member matches). Narrows (§9).
+- `x is pattern`: `true` if `x` matches the refutable pattern (§11); its bindings are in scope where the test is known to be true: the then-block of an `if`/`while`, the right operand of `&&`, the `a` of `a if c else b`, and the code after an `if !(x is p) { ... }` whose block diverges (§9). Guards are not allowed (`&&` instead).
+  - What follows `is` is decided syntactically: `[` or `(` starts a pattern (`xs is []`, `xs is [first, ..rest]`, `t is (0, _)`); so do `Name { ... }` (a struct pattern, subject to §6.3) and a literal followed by `..`/`..=` (`n is 1..=9`). Anything else is a type, as before (`x is i32`, `x is Foo<T>`, `x is i32 | null`, `x is "a"`, `x is null`).
+  - So a list or tuple **type** cannot be written after `is` with brackets: write `x is List<str>` (`[str]` is `List<str>`), or a pattern of type tests `t is (is i32, is str)`. A name that denotes a type where a pattern expects a binding (`xs is [str]`, `x is (i32 | str)`) is an error.
+  - Or-patterns are allowed inside brackets (`xs is [1 | 2, ..]`); at the top level, `|` after a type extends the union and after a pattern is a bitwise or.
 - Ranges `a..b` (half-open), `a..=b` (inclusive): integer or `char` operands; type `Range<T>` (implements `Iterable<T>`).
 - **Overloadable** via traits (§16): `+ - * / %` unary `-`, `== !=` (`Eq`), `< > <= >=` (`Ord`), `[]` (`Index`, `IndexMut`), `& | ^ ~ << >>`. Compound assignment uses the binary operator. **Not** overloadable: `&& || ! ?? ? is as as? ..`, assignment.
 
@@ -432,9 +442,14 @@ Bitwise binds tighter than comparison (no C precedence trap).
 ### 7.6 Indexing
 `c[i]` calls `Index::index`; as an assignment target, `IndexMut::set`. `[T]` panics on out-of-range indices; `Map[k]` panics on missing keys (use `.get(k) -> V | null`).
 
+**Slicing:** on `[T]` and `[T; N]`, a range inside the brackets selects elements: `xs[a..b]`, `xs[a..=b]`, `xs[a..]` (to the end), `xs[..b]`, `xs[..=b]` (from the start), `xs[..]` (all).
+- Bounds are `usize`; the result is a new `[T]` holding copies of the elements (like `..rest` in a pattern, §11). It is not a place: `xs[1..] = ys` and `xs[1..].push(v)` do not change `xs`, and the first is an error.
+- Panics unless `start <= end <= len` (with `end` one past an inclusive bound).
+- Slicing is built in, not provided through `Index`. Open-ended ranges (`a..`, `..b`, `..`) exist only inside index brackets. On other types a bracketed range is an ordinary `Range` index (`c[a..b]` calls `Index` with a `Range`).
+
 ### 7.7 Literals
 - Tuple `(a, b)`; access `.0`, `.1` (a plain decimal: no suffix, `_` or leading zeros).
-- Collection `[a, b, c]`, repeat `[v; n]`, map `[k: v, k2: v2]`, empty map `[:]`. **Target-typed:** `[...]` builds `[T]`, `Set<T>`, or `[T; N]` according to the expected type (default `[T]`); `[]` is valid for any expected collection type, error without one. `[k: v]` builds `Map<K, V>`.
+- Collection `[a, b, c]`, repeat `[v; n]`, map `[k: v, k2: v2]`, empty map `[:]`. **Target-typed:** `[...]` builds `[T]`, `Set<T>`, or `[T; N]` according to the expected type (default `[T]`); `[]` is valid for any expected collection type (`Map` included), error without one. `[k: v]` builds `Map<K, V>`. `[v; n]` builds `[T; N]` when the expected type is an array (`n` then must equal `N`), else a `[T]` of `n` copies (`n: usize`, evaluated at runtime).
 - Initializers per §4.7.
 
 ### 7.8 Lambdas
@@ -447,7 +462,7 @@ x => { let y = x * 2; return y; }
 () => work()
 ```
 - Parameter types inferred from the expected `fn` type; else must be annotated. Return type inferred from body.
-- Captures enclosing variables **by reference** (shared, live; mutating a captured `let mut` is visible outside). Lambdas are reference-type values of `fn(...) -> R` type.
+- Captures enclosing variables **by reference** (shared, live; mutating a captured `let mut` is visible outside). A capture refers to the binding in scope when the lambda is created; a later binding of the same name (shadowing, the next loop iteration, §6.4) is a different variable. Lambdas are reference-type values of `fn(...) -> R` type.
 - `?` inside a lambda propagates out of the lambda, not the enclosing function.
 - A named function may be used as a `fn` value by name. Methods may not (use a lambda).
 
@@ -455,9 +470,10 @@ x => { let y = x * 2; return y; }
 - `x as T`:
   - numeric → numeric: truncation/wrap for integers, IEEE conversion for floats, float→int truncates toward zero and saturates (NaN → 0). Never panics.
   - integer ↔ enum: §4.11.
+  - `char` → integer: the scalar value, wrapped like an integer cast. Integer → `char`: panics if the value is not a Unicode scalar value. `bool` → integer: `0`/`1`.
   - downcast/trait/union narrowing: checked at runtime, **panics** on failure. Struct from box yields a copy.
   - upcast: always succeeds (redundant but permitted).
-- `x as? T`: same checks for non-numeric conversions, yielding `T | null` instead of panicking. If `T` already contains `null`, a null `x` is indistinguishable from failure.
+- `x as? T`: same checks for non-numeric conversions, yielding `T | null` instead of panicking (integer → `char` yields `null` for a non-scalar value). It is also accepted on numeric casts, which never yield `null`. If `T` already contains `null`, a null `x` is indistinguishable from failure.
 - A cast that can never succeed statically ⇒ error.
 
 ### 7.10 `?` propagation
@@ -504,14 +520,14 @@ A call to a `virtual`/`abstract`/`override` method through a class reference sel
 Receiver mutability rules (§5.2) apply to the static type at the call site regardless of dispatch kind.
 
 ### 8.5 Method lookup
-For `x.m(...)`: inherent methods of `x`'s static type (and base classes), then methods of all traits it implements (program-wide). Same name from two traits with identical signatures and no inherent method ⇒ ambiguity error; disambiguate with `Trait::m(x, ...)`.
+For `x.m(...)`: inherent methods of `x`'s static type (and base classes), then methods of all traits it implements (program-wide). Same name from two traits with identical signatures and no inherent method ⇒ ambiguity error; disambiguate with `Trait::m(x, ...)`, which calls `Trait`'s member `m` with receiver `x`.
 
 ---
 
 ## 9. Narrowing
 
 - Applies to: locals, parameters, and `self`. Not to fields (always potentially mutable through aliases), statics, indexers, or getter results — bind first: `if let p = self.parent { p.x }`.
-- Narrowing sources: `x is T` (true branch → `x: T` if `T` is a member or subtype of `x`'s type, else narrowed to `T` itself; false branch removes `T`'s members from a union), `x == null` / `x != null`, `x == literal` (literal unions), truthy test (§6.6), `if let`, match arms, `&&`/`||` composition, `!`.
+- Narrowing sources: `x is pattern` (bindings as §7.3; in the true branch `x` also narrows to the types the pattern can match, e.g. `[T]` for a list pattern on `[T] | null`), `x is T` (true branch → `x: T` if `T` is a member or subtype of `x`'s type, else narrowed to `T` itself; false branch removes `T`'s members from a union), `x == null` / `x != null`, `x == literal` (literal unions), truthy test (§6.6), `if let`, match arms, `&&`/`||` composition, `!`.
 - **Flow sensitivity:** narrowing persists after an `if` whose branch diverges (`return`, `break`, `continue`, panic): `if x == null { return; } x.use();`.
 - Assignment to a narrowed `let mut` local resets its type to the assigned value's type.
 - Inside a lambda, captured `let mut` variables are not narrowed.
@@ -524,7 +540,7 @@ For `x.m(...)`: inherent methods of `x`'s static type (and base classes), then m
 - Generic parameters on functions, methods, structs, classes, traits, aliases: `<T, U: Bound + Bound2>`.
 - **Reified:** `typeof(T)`, `x is T`, `x as T` work for type parameters at runtime.
 - **Invariant** type arguments.
-- **Inference:** type arguments are inferred from argument types (unification against parameter types, including lambda parameter/return types where determinable). Expected-type (return-position) inference is not performed. Uninferable ⇒ explicit type arguments required.
+- **Inference:** type arguments are inferred from argument types (unification against parameter types, including lambda parameter/return types where determinable). This includes the type arguments of a generic type in a static call: `Pair::new(1, "a")` is `Pair<i32, str>::new(1, "a")`. Expected-type (return-position) inference is not performed. Uninferable ⇒ explicit type arguments required.
 - A bound `T: Trait` permits calling `Trait`'s instance members on `T` values and its static functions via `T::f()`.
 - Unbounded `T` permits only: assignment, passing, `== null` / `!= null`, `is`, `as`, `as?`, `.type()`.
 
@@ -546,6 +562,7 @@ For `x.m(...)`: inherent methods of `x`'s static type (and base classes), then m
 | `Enum::Member` | enum value |
 | `pattern if guard` | (arms only) pattern + bool/Truthy guard |
 
+- Patterns appear in `match` arms, `let`, `for`, and after `is` (§7.3).
 - `let` and `for` require irrefutable patterns (tuples, struct destructure, bindings, `_`).
 
 ---
@@ -553,7 +570,7 @@ For `x.m(...)`: inherent methods of `x`'s static type (and base classes), then m
 ## 12. Errors
 
 - `trait Error { fn message(self) -> str; }`.
-- stdlib `pub class Err : Error` with `error(msg: str) -> Err` prelude function. User errors: any struct or class implementing `Error` (or subclassing `Err`).
+- stdlib `pub class Err : Error, Display` with `pub fn new(msg: str) -> Self`, `pub virtual fn message(self) -> str` (subclasses may override it) and `to_str` = `message()`; prelude function `error(msg: str) -> Err` ≡ `Err::new(msg)`. User errors: any struct or class implementing `Error` (or subclassing `Err`).
 - Fallible functions return unions: `fn load(p: str) -> File | NotFound | Err`.
 - Propagation `?` (§7.10); must-use (§6.1); default `??` handles only null.
 - No exceptions: no `try`/`catch`/`throw`.
@@ -564,7 +581,7 @@ For `x.m(...)`: inherent methods of `x`'s static type (and base classes), then m
 
 ### 13.1 Panic
 - `panic(msg: str) -> !` (diverges). Causes: explicit `panic`, failed `as`, index out of range, missing map key via `[]`, integer divide/modulo by zero, checked-mode overflow, abstract method on abstract instance, static init cycle, `unsafe` misuse detected by the runtime.
-- Effect: message + stack trace to stderr, process exits with code 101. Not catchable. `defer`s do not run. A panic on any thread terminates the process.
+- Effect: message + stack trace to stderr, process exits with code 101. Format: `panic: <message>`, then one `    at <function> (<file>:<line>:<col>)` line per active call, innermost first. Not catchable. `defer`s do not run. A panic on any thread terminates the process.
 
 ### 13.2 Integer overflow
 - Overflow of `+ - *` (and unary `-`, `<<` out-of-range shifts) is a program bug. In **checked mode** (default for debug builds and for interpreters unless configured) it panics. In **release mode** it wraps (two's complement).
@@ -644,7 +661,7 @@ C layout (declaration order, C alignment). Fields must be ABI types. Otherwise a
 
 Implicitly imported names:
 
-**Functions:** `print(s: str)`, `println(s: str)`, `eprintln(s: str)`, `panic(msg: str) -> !`, `error(msg: str) -> Err`, `len<T: Len>(x: T) -> usize`.
+**Functions:** `print<T: Display>(x: T)`, `println<T: Display>(x: T)`, `eprintln<T: Display>(x: T)` (write `x.to_str()`; `println` and `eprintln` add a newline), `panic(msg: str) -> !`, `error(msg: str) -> Err`, `len<T: Len>(x: T) -> usize`.
 
 **Types:** `Err`, `Done`, `Type`, `List<T>` (`[T]`), `Map<K: Hash + Eq, V>`, `Set<T: Hash + Eq>`, `Range<T>`, `Ptr<T>`, module alias `c`.
 
@@ -672,6 +689,16 @@ Implicitly imported names:
 
 **Numeric methods:** `min max abs pow sqrt` (floats), `wrapping_* checked_* saturating_*`, `T::parse(s: str) -> T | null`, `T::MIN`, `T::MAX`.
 
+**Primitive trait impls:** every primitive implements `Display` and `Eq`; all but `bool` implement `Ord`; all but floats implement `Hash`. Numeric types implement `Add Sub Mul Div Rem`, signed ones (and floats) `Neg`; integers implement `BitAnd BitOr BitXor Not Shl Shr`. `str` also implements `Len`, `Truthy` and `Add` (concatenation).
+
+**`Display` formats:** integers in decimal; `bool` as `true`/`false`; `char` as itself. Floats print the shortest digits that round-trip, never with an exponent, and integral values without a fraction: `1`, `0.5`, `0.30000000000000004`, `1000000000000000000000`, `-0`, `inf`, `-inf`, `NaN`.
+
+**Copies out of collections:** reading an element of a collection (indexing, iteration, `get`, `pop`, …) yields a copy when the element type is a value type (§5.3).
+
+**`str` and `char` members:** `str` lengths and offsets are UTF-8 byte counts (`len`, `find`, `slice`); `slice` panics if an offset is not on a character boundary. Besides the members above, the 1.0 stdlib provides `str`: `chars bytes contains starts_with ends_with find slice upper lower trim split replace repeat`; `char`: `is_digit is_alphabetic is_alphanumeric is_whitespace is_uppercase is_lowercase to_upper to_lower`; floats: `floor ceil round trunc sin cos tan exp ln log10 is_nan is_infinite` and constants `EPSILON INFINITY NEG_INFINITY NAN`; `[T]`: `clear reverse contains`, getter `last`; `Map`: `clear`; `Set`: `insert contains remove clear`. The stdlib sources are the full reference.
+
+**Keyword-named members:** a standard library declaration may name a member with a keyword followed by `_` (`fn null_()`); it is called by the keyword (`Ptr<T>::null()`). User code cannot do this.
+
 ---
 
 ## 17. Grammar notes (for the ANTLR4 grammar)
@@ -680,7 +707,7 @@ Implicitly imported names:
 2. `>>` token splitting inside type-argument lists.
 3. Statement-initial `{` is always a block (§6.1).
 4. No bare initializer in `if`/`while`/`for`/`match` heads (§6.3); collection literals are fine.
-5. In type context `|` is union; in expression context bitwise or. Types appear only after `:`, `->`, `as`, `as?`, `is`, in `<...>`, in `type` aliases, and in pattern `is`.
+5. In type context `|` is union; in expression context bitwise or. Types appear only after `:`, `->`, `as`, `as?`, `is` (unless a pattern follows, §17 note 18), in `<...>`, in `type` aliases, and in pattern `is`.
 6. `as?` is one token; `x as T?` is `(x as T)?`.
 7. Lambda detection: `ident =>`, `mut ident =>`, `( params ) =>` where params are identifiers with optional `mut`/`: Type`. `(a, b)` not followed by `=>` is a tuple.
 8. Conditional expression `a if c else b` only in expression position; statement-initial `if` is the statement.
@@ -692,6 +719,8 @@ Implicitly imported names:
 14. A match guard is an expression at `??` precedence or tighter (no lambda, `unsafe =>` or conditional without parentheses), so the arm's `=>` is never taken as a lambda.
 15. The §6.3 head restriction applies to any initializer not enclosed in `()`, `[]` or `{}`: `if p == Point { x: 0 }.norm() {` is an error; write `if p == (Point { x: 0 }).norm() {`.
 16. The assembled operators `>=`, `>>`, `>>=` may not contain whitespace (`a > = b` is an error).
+17. Inside index brackets, a range may omit either bound or both (`xs[1..]`, `xs[..n]`, `xs[..]`, §7.6); `..=` requires an upper bound.
+18. After `is`, a pattern follows iff the next tokens are `[`, `(`, a path followed by `{` (where initializers are allowed, §6.3), or a literal (optionally negated) followed by `..`/`..=`; otherwise a type follows (§7.3).
 
 ---
 
@@ -821,3 +850,31 @@ fn main(args: [str]) -> () | Err {
 - §3.1 The primitive-name rule exempts the standard library (`c::char`).
 - §7.7 Tuple indices are plain decimals (`t.01`, `t.0_u8` are errors).
 - §2.2 Fully-qualified paths (`std::process::exit(1)`) work without a `use`; modules they name are part of the program (§2.1).
+
+### 2026-10-27 — checker and interpreter (0.1 Phases 4–7)
+Semantics the spec left open, decided while implementing:
+- §2.3 `impl` blocks for a type may access its private members.
+- §2.4 `main`'s error result prints only `message()` to stderr.
+- §3.4 A union of literals of one base type behaves as the base type for member access and trait impls.
+- §3.6 Nothing widens implicitly to `isize`/`usize`. Rules for an unsuffixed integer literal against a union expected type.
+- §4.4 Widenings are not ranked against each other (all-widening ties are ambiguous).
+- §4.5 A unit struct's name is its value.
+- §4.10 A base-list trait is that pair's implementation even with no methods in the body; a base list also implements the listed traits' supertraits from the body's methods.
+- §5.2 Index assignment through an immutable binding of a reference-typed container is permitted.
+- §5.4 `[T]`, `Map`, `Set` compare by identity.
+- §6.4, §7.8 Each loop iteration is a fresh binding; captures refer to the binding in scope at lambda creation. Lists iterate live; maps and sets in insertion order.
+- §7.3 Shift amounts may be any integer type.
+- §7.7 `[v; n]` without an expected array type builds a `[T]`; `[]` works for an expected `Map`.
+- §7.9 `char` ↔ integer and `bool` → integer casts; `as?` on numeric casts.
+- §8.5, §10 `Trait::m(x)` semantics; static calls infer a generic type's arguments.
+- §12 The `Err` class API.
+- §13.1 Panic message and trace format.
+- §16 Primitive trait impls, `Display` formats (floats), value copies out of collections, `str` byte offsets, additional `str`/`char`/float/collection members, std keyword-named members.
+
+### 2026-10-27 — slicing, printing any `Display`
+- §7.6 Slicing `[T]` and `[T; N]` with a range in index brackets, including open-ended ranges (`xs[1..]`); the result is a copy. §17 note 17.
+- §16 `print`, `println` and `eprintln` take any `Display` value (`println(true)`).
+
+### 2026-10-27 — patterns after `is`
+- §7.3 `x is pattern` tests a refutable pattern and binds its names where the test holds (`if xs is [first, ..rest]`). What follows `is` is chosen syntactically (§17 note 18): `[`, `(`, `Name {` and literal ranges start patterns, anything else is a type. List and tuple *types* after `is` are written `List<T>` or `(is A, is B)`.
+- §6.3 Struct patterns after `is` are subject to the head restriction. §9 pattern tests narrow. §11 lists where patterns appear.

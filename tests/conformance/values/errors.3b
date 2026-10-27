@@ -1,0 +1,36 @@
+// Compile errors of the types-and-values slice.
+
+struct P {
+    let x: i32;
+    let y: i32 = 0;
+    pub fn bump(mut self) { self.x += 1; }
+    pub fn peek(self) -> i32 {
+        self.x = 1;
+        return self.x;
+    }
+}
+
+class C {
+    let secret: i32 = 0;
+    pub let open: i32 = 0;
+    pub fn new() -> Self => {};
+    fn hidden(self) {}
+    pub get fn twice(self) -> i32 => self.open * 2;
+}
+
+fn main() {
+    let p = P { y: 1 };
+    let q = P { x: 1, z: 2 };
+    let r = P { x: 1 };
+    r.bump();
+    r.x = 2;
+    let c = C::new();
+    _ = c.secret;
+    c.hidden();
+    let d = C { };
+    c.twice = 3;
+    let t = (1, 2);
+    _ = t.5;
+    let e = [];
+    let m = [:];
+}

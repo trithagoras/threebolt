@@ -1,0 +1,13 @@
+4 3 4 3 4
+4 3 true 3 2
+sum 12
+0:9 1:1 2:2 
+empty list is falsy
+3 32 -1 true
+ann=32 bob=25 cat=40 
+ann cat 
+3 false true true
+5 7 0 3
+2 x
+3 20 60
+6 true false 2

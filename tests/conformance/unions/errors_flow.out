@@ -1,0 +1,16 @@
+  (leaving twice(a))
+ok: 2
+  (leaving twice(b))
+error: no key 'b'
+3 -1
+boom
+boom
+v = 5
+block body
+defer 2
+defer 1
+iteration 0
+end of iteration 0
+end of iteration 1
+iteration 2
+end of iteration 2

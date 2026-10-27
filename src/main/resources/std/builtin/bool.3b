@@ -1,0 +1,5 @@
+// Members of bool.
+
+pub fn to_str(self) -> str;
+pub fn eq(self, o: Self) -> bool;
+pub fn hash(self) -> u64;

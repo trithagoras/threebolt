@@ -1,0 +1,2 @@
+bad_main.3b:3:4: error[E0110]: `main` takes no parameters or `args: [str]`
+bad_main.3b:3:4: error[E0110]: `main` must return `()` or `() | E` where every `E` implements `Error`

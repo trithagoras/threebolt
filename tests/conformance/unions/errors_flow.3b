@@ -1,0 +1,56 @@
+// §12, §7.10, §6.5: errors are values; `?` propagates null and errors (running defers); `??`
+// defaults only null; must-use.
+
+struct NotFound : Error {
+    let key: str;
+    pub fn message(self) -> str => f"no key '{self.key}'";
+}
+
+fn lookup(key: str) -> i32 | NotFound {
+    if key == "a" { return 1; }
+    return NotFound { key };
+}
+
+fn twice(key: str) -> i32 | NotFound {
+    defer println(f"  (leaving twice({key}))");
+    let v = lookup(key)?;
+    return v * 2;
+}
+
+fn parse_sum(a: str, b: str) -> i32 | null {
+    return i32::parse(a)? + i32::parse(b)?;
+}
+
+fn report(r: i32 | NotFound) {
+    match r {
+        e is NotFound => println(f"error: {e.message()}"),
+        v => println(f"ok: {v}"),
+    }
+}
+
+fn main() -> () | Err {
+    report(twice("a"));
+    report(twice("b"));
+    println(f"{parse_sum("1", "2") ?? -1} {parse_sum("1", "x") ?? -1}");
+    _ = lookup("zzz");
+    let e = error("boom");
+    println(e.message());
+    println(f"{e}");
+    let r: i32 | Err = 5;
+    let v = r?;
+    println(f"v = {v}");
+    {
+        defer println("defer 1");
+        defer println("defer 2");
+        println("block body");
+    }
+    for i in 0..3 {
+        defer println(f"end of iteration {i}");
+        if i == 1 { continue; }
+        println(f"iteration {i}");
+    }
+    let failing: () | Err = error("final failure");
+    failing?;
+    println("not reached");
+}
+//! exit: 1

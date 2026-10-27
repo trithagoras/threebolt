@@ -1,0 +1,23 @@
+// Compile errors for overloadable operators (§7.3, §7.6).
+
+struct P { let x: i32; }
+class C { pub fn new() -> Self => {}; }
+struct ReadOnly : Index<i32, i32> { pub fn index(self, i: i32) -> i32 => i; }
+
+struct Wrong : Add {
+    let v: i32;
+    pub fn add(self, o: i32) -> Self => { v: self.v + o };   // RHS must be `Self`
+}
+
+fn main() {
+    let p = P { x: 1 };
+    _ = p + p;                            // P does not implement Add
+    _ = -p;                               // nor Neg
+    _ = C::new() < C::new();              // C does not implement Ord
+    _ = p[0];                             // P does not implement Index
+    let mut r = ReadOnly {};
+    _ = r[1];
+    r[1] = 2;                             // ReadOnly does not implement IndexMut
+    _ = r["a"];                           // wrong index type
+    _ = p == 1;                           // unrelated types
+}

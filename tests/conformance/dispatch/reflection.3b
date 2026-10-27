@@ -1,0 +1,33 @@
+// §15: `typeof(T)`, `x.type()`, `nameof(T)`, and the `Type` API (name, is_subtype_of, Eq, Hash,
+// Display).
+
+pub trait Shape {}
+pub class Animal { pub fn new() -> Self => {}; }
+pub class Dog : Animal, Shape { pub fn new() -> Self => { ..Animal::new() }; }
+pub struct Pt : Shape { let x: i32 = 0; }
+pub enum Color { Red, Green }
+
+fn describe<T>(x: T) -> str => f"static {typeof(T)} runtime {x.type()}";
+
+fn main() {
+    println(f"{typeof(i32)} {typeof(str)} {typeof([i32])} {typeof(Map<str, [bool]>)} {typeof((i32, char))}");
+    println(f"{typeof(fn(i32) -> str)} {typeof(i32 | null)} {typeof(Color)} {typeof("a" | "b")}");
+    println(f"{nameof(Dog)} {nameof(Pt)} {nameof([Pt])} {typeof(Dog).name}");
+
+    let a: Animal = Dog::new();
+    let s: Shape = Pt {};
+    let u: i32 | str = "x";
+    println(f"{a.type()} {s.type()} {u.type()} {Color::Green.type()} {(1, "a").type()}");
+    println(describe(a));
+    println(describe<i32 | str>(u));
+
+    println(f"{typeof(Dog).is_subtype_of(typeof(Animal))} {typeof(Animal).is_subtype_of(typeof(Dog))}");
+    println(f"{typeof(Pt).is_subtype_of(typeof(Shape))} {typeof(i32).is_subtype_of(typeof(i32 | str))}");
+    println(f"{a.type() == typeof(Dog)} {a.type() == typeof(Animal)} {typeof([i32]) == typeof([i32])}");
+
+    let mut seen: Map<Type, i32> = [:];
+    for t in [typeof(i32), typeof(str), typeof(i32), 5.type()] {
+        seen[t] = (seen.get(t) ?? 0) + 1;
+    }
+    println(f"{seen[typeof(i32)]} {seen[typeof(str)]} {seen.len}");
+}

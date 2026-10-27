@@ -1,0 +1,8 @@
+// §2.4: std::process::exit terminates immediately; pending defers do not run.
+//! exit: 3
+
+fn main() {
+    defer println("not printed");
+    println("leaving");
+    std::process::exit(3);
+}

@@ -1,0 +1,61 @@
+// Compile errors for classes and inheritance (§4.5–§4.7).
+
+trait Named { fn name(self) -> str; }
+
+abstract class Base : Named {
+    pub fn new() -> Self => {};
+    pub fn plain(self) -> i32 => 1;
+    pub virtual fn v(self, x: i32) -> i32 => x;
+    pub virtual fn m(mut self) {}
+    pub abstract fn todo(self) -> str;
+    pub fn name(self) -> str => "base";
+}
+
+class Hides : Base {
+    pub fn plain(self) -> i32 => 2;                 // hiding a non-virtual method
+    pub fn plain(self, x: i32) -> i32 => x;         // ok: an overload
+    pub fn v(self, x: i32) -> i32 => x;             // missing `override`
+    pub override fn todo(self) -> str => "";
+}
+
+class BadOverrides : Base {
+    pub override fn v(self, x: i64) -> i32 => 0;    // parameter types differ
+    pub override fn m(self) {}                      // receiver differs
+    pub override fn todo(self) -> i32 => 0;         // return type differs
+    pub override fn nothing(self) {}                // nothing to override
+}
+
+class Concrete : Base {}                            // `todo` not overridden
+
+class NotAbstract {
+    pub abstract fn f(self);
+}
+
+class Again : Base, Named {                         // Named is already implemented by Base
+    pub override fn todo(self) -> str => "";
+}
+
+struct S {
+    pub virtual fn f(self) {}
+}
+
+struct T : S {}
+
+class First {}
+class Second {}
+class Two : Named, First {}
+
+fn free() {
+    super.plain();
+}
+
+fn main() {
+    let b = Base::new();
+    let c = Concrete { };
+}
+
+class NonVirtual : Base {
+    pub override fn plain(self) -> i32 => 3;        // `plain` is not virtual
+    pub override fn todo(self) -> str => "";
+    pub fn make() -> i32 => super.plain();          // no `super` in a static function
+}

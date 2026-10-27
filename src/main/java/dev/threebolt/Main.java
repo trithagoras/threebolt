@@ -11,27 +11,29 @@ import dev.threebolt.parse.Parsing;
 import dev.threebolt.parse.TokenDump;
 import dev.threebolt.parse.TreeDump;
 import dev.threebolt.parser.ThreeboltLexer;
-import dev.threebolt.resolve.ModuleLoader;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.List;
 import org.antlr.v4.runtime.CharStreams;
 
 public final class Main {
     private Main() {}
 
     private static final String USAGE = """
-            usage: threebolt <command> <file.3b>
-              check   load the program (entry file + modules reachable through `use`) and report errors
+            usage: threebolt <command> <file.3b> [args...]
+              run     check the program and run its `main` with the remaining arguments
+              check   load and type-check the program (entry file + the modules it reaches)
               tokens  dump the token stream
               parse   dump the parse tree
               ast     dump the AST
               print   pretty-print the AST as source""";
 
     public static void main(String[] args) throws IOException {
-        if (args.length != 2) usage();
+        if (args.length < 2 || (args.length > 2 && !args[0].equals("run"))) usage();
         Path file = Path.of(args[1]);
         int status = switch (args[0]) {
+            case "run" -> run(file, List.of(args).subList(2, args.length));
             case "check" -> check(file);
             case "tokens" -> dumpTokens(file);
             case "parse" -> dumpTree(file);
@@ -50,8 +52,15 @@ public final class Main {
 
     private static int check(Path file) {
         var diagnostics = new Diagnostics();
-        new ModuleLoader(diagnostics).load(file);
+        Driver.check(file, diagnostics);
         return report(diagnostics);
+    }
+
+    private static int run(Path file, List<String> args) {
+        var diagnostics = new Diagnostics();
+        var program = Driver.check(file, diagnostics);
+        if (program == null) return report(diagnostics);
+        return Driver.run(program, args, System.out, System.err);
     }
 
     private static int dumpTokens(Path file) throws IOException {

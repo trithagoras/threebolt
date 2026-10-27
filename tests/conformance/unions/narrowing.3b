@@ -1,0 +1,64 @@
+// §3.4–§3.5, §9: unions, null, `is`, `==` null and literal narrowing, truthy tests,
+// flow-sensitive narrowing after diverging branches, `if let`, `while let`, `??`.
+
+type Shape = Circle | Square;
+struct Circle { let r: f64; }
+struct Square { let side: f64; }
+
+fn area(s: Shape) -> f64 {
+    if s is Circle {
+        return 3.0 * s.r * s.r;
+    }
+    return s.side * s.side;                 // narrowed to Square
+}
+
+fn describe(v: i32 | str | null) -> str {
+    if v == null { return "nothing"; }
+    if v is i32 { return f"number {v + 1}"; }
+    return f"text {v.upper()}";
+}
+
+fn first_word(s: str | null) -> str {
+    if !s { return "(none)"; }              // truthy: null and "" are false
+    return s.split(" ")[0];
+}
+
+type Dir = "left" | "right";
+
+fn flip(d: Dir) -> Dir => "right" if d == "left" else "left";
+
+fn countdown(start: i32) -> [i32] {
+    let mut out: [i32] = [];
+    let mut n: i32 | null = start;
+    while let k = n {
+        out.push(k);
+        n = k - 1 if k > 1 else null;
+    }
+    return out;
+}
+
+fn main() {
+    println(f"{area(Circle { r: 1.0 })} {area(Square { side: 2.0 })}");
+    println(f"{describe(null)} / {describe(41)} / {describe("hi")}");
+    println(f"{first_word(null)} {first_word("")} {first_word("hello world")}");
+    println(f"{flip("left")}");
+    let mut d: Dir = "left";
+    d = flip(d);
+    println(d);
+    println(f"{countdown(3).len}");
+
+    let maybe: i32 | null = null;
+    println(f"{maybe ?? 7}");
+    if let x = i32::parse("12") {
+        println(f"parsed {x * 2}");
+    }
+    let mut v: i32 | str = 5;
+    v = "now text";                          // assignment re-narrows
+    println(f"{v.len}");
+    let mixed: [i32 | str] = [1, "two", 3];
+    let mut ints = 0;
+    for m in mixed { if m is i32 { ints += m; } }
+    println(f"{ints} {mixed[1] is str} {mixed[0] == 1} {mixed[1] == "two"}");
+    let wide: i64 | str = 5;                 // the literal adopts i64
+    println(f"{wide is i64}");
+}

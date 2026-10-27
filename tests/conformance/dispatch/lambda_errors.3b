@@ -1,0 +1,17 @@
+// Compile errors for lambdas (§7.8, §7.10).
+
+struct S { pub fn m(self) -> i32 => 1; }
+
+fn takes(f: fn(i32) -> i32) -> i32 => f(1);
+
+fn main() {
+    let f = x => x + 1;                       // no expected type: annotate `x`
+    let n = 5;
+    let g = () => n += 1;                     // `n` is immutable
+    let s = S {};
+    let h: fn() -> i32 = s.m;                 // methods are not `fn` values
+    _ = takes((a, b) => a);                   // wrong arity
+    _ = takes(x => "str");                    // wrong return type
+    let p = (s: str) => i32::parse(s)?;       // ok: the lambda returns `i32 | null`
+    let q: fn(str) -> i32 = s => i32::parse(s)?;   // `null` is not assignable to `i32`
+}

@@ -364,7 +364,13 @@ public final class AstBuilder {
 
     private Expr comparison(ComparisonExprContext ctx) {
         var left = range(ctx.rangeExpr(0));
-        if (ctx.IS() != null) return new Expr.Is(left, type(ctx.type()), span(ctx));
+        if (ctx.IS() != null) {
+            return switch (ctx.isTarget()) {
+                case PatternIsTargetContext c -> new Expr.IsPattern(left, patternAtom(c.patternAtom()), span(ctx));
+                case TypeIsTargetContext c -> new Expr.Is(left, type(c.type()), span(ctx));
+                default -> throw unexpected(ctx.isTarget());
+            };
+        }
         if (ctx.compareOp() == null) return left;
         var op = ctx.compareOp();
         var binOp = switch (op.getStart().getType()) {
@@ -446,6 +452,14 @@ public final class AstBuilder {
                 case MemberOpContext c -> new Expr.Member(e, memberName(c.memberName()), typeArgs(c.typeArgs()), span);
                 case CallOpContext c -> new Expr.Call(e, map(c.callArgs().arg(), this::arg), span);
                 case IndexOpContext c -> new Expr.Index(e, expr(c.nested().expr()), span);
+                case SliceOpContext c -> {
+                    var b = c.sliceBounds();
+                    var bound = b.bitOrExpr() == null ? null : bitOr(b.bitOrExpr());
+                    int first = b.getStart().getType();
+                    boolean lowGiven = first != DOTDOT && first != DOTDOT_EQ;
+                    yield new Expr.Slice(e, lowGiven ? bound : null, lowGiven ? null : bound,
+                            b.DOTDOT_EQ() != null, span);
+                }
                 case PropagateOpContext c -> new Expr.Propagate(e, span);
                 default -> throw unexpected(op);
             };

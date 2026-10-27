@@ -5,8 +5,10 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import dev.threebolt.diag.Diagnostic;
 import dev.threebolt.diag.Diagnostics;
-import dev.threebolt.resolve.ModuleLoader;
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.io.PrintStream;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -16,9 +18,10 @@ import org.junit.jupiter.api.DynamicTest;
 import org.junit.jupiter.api.TestFactory;
 
 /**
- * Runs tests/conformance (see its README): each case is loaded as a program and its diagnostics
- * are compared with the case's `.err` file (none expected without one). `-PupdateGolden`
- * rewrites the `.err` files instead.
+ * Runs tests/conformance (see its README): each case is checked, and its diagnostics compared
+ * with the case's `.err` file (none expected without one). A case without errors is then run and
+ * its stdout, stderr and exit code compared with `.out`, `.stderr` and the `//! exit:` directive.
+ * `-PupdateGolden` rewrites the `.err`, `.out` and `.stderr` files instead.
  */
 class ConformanceTest {
     private static final Path ROOT = Path.of("tests/conformance");
@@ -51,18 +54,45 @@ class ConformanceTest {
 
     private static void run(Path entry) throws IOException {
         var diagnostics = new Diagnostics();
-        new ModuleLoader(diagnostics).load(entry);
+        var program = Driver.check(entry, diagnostics);
         var actual = new StringBuilder();
         for (Diagnostic d : diagnostics.sorted()) actual.append(d.header()).append('\n');
+        golden(sibling(entry, ".err"), actual.toString());
+        if (program == null) return;
 
+        String source = Files.readString(entry);
+        var out = new ByteArrayOutputStream();
+        var err = new ByteArrayOutputStream();
+        int code;
+        try (var o = new PrintStream(out, true, StandardCharsets.UTF_8);
+             var e = new PrintStream(err, true, StandardCharsets.UTF_8)) {
+            code = Driver.run(program, directive(source, "args").map(a -> List.of(a.split(" +"))).orElse(List.of()), o, e);
+        }
+        golden(sibling(entry, ".out"), out.toString(StandardCharsets.UTF_8));
+        golden(sibling(entry, ".stderr"), err.toString(StandardCharsets.UTF_8));
+        int expected = directive(source, "exit").map(Integer::parseInt).orElse(0);
+        assertEquals(expected, code, "exit code (set it with `//! exit: N`)");
+    }
+
+    /** {@code //! name: value} on a line of its own. */
+    private static java.util.Optional<String> directive(String source, String name) {
+        return source.lines().map(String::strip).filter(l -> l.startsWith("//! " + name + ":"))
+                .map(l -> l.substring(("//! " + name + ":").length()).strip()).findFirst();
+    }
+
+    private static Path sibling(Path entry, String extension) {
         String name = entry.getFileName().toString();
-        Path expectedFile = entry.resolveSibling(name.substring(0, name.length() - ".3b".length()) + ".err");
+        return entry.resolveSibling(name.substring(0, name.length() - ".3b".length()) + extension);
+    }
+
+    /** Compares {@code actual} with {@code file} (absent = empty), or rewrites it with -PupdateGolden. */
+    private static void golden(Path file, String actual) throws IOException {
         if (UPDATE) {
-            if (actual.isEmpty()) Files.deleteIfExists(expectedFile);
-            else Files.writeString(expectedFile, actual);
+            if (actual.isEmpty()) Files.deleteIfExists(file);
+            else Files.writeString(file, actual);
             return;
         }
-        String expected = Files.exists(expectedFile) ? Files.readString(expectedFile) : "";
-        assertEquals(expected, actual.toString());
+        String expected = Files.exists(file) ? Files.readString(file) : "";
+        assertEquals(expected, actual, file.getFileName().toString());
     }
 }

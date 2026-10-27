@@ -1,0 +1,22 @@
+// §4.11: enums with values, casts, Display, ordering; @flags enums with bit operators.
+
+enum Level { Low, Mid = 5, High }
+enum Signal : u8 { Int = 2, Kill = 9 }
+
+@flags
+enum Perm : u8 { None = 0, Read, Write, Exec }
+
+fn main() {
+    println(f"{Level::Low} {Level::Mid as i32} {Level::High as i32} {Signal::Kill as u8}");
+    println(f"{Level::Low < Level::High} {Level::Mid == Level::Mid}");
+    let l = 6 as Level;
+    println(f"{l} {(7 as? Level) == null} {(5 as? Level) ?? Level::Low}");
+    let mut p = Perm::Read | Perm::Write;
+    println(f"{p} {p.has(Perm::Write)} {p.has(Perm::Exec)} {Perm::None}");
+    p |= Perm::Exec;
+    p &= ~Perm::Read;
+    println(f"{p} {p as u8} {64 as Perm} {(Perm::Read | 64 as Perm)}");
+    let kinds: Map<Level, str> = [Level::Low: "low", Level::High: "high"];
+    println(f"{kinds[Level::High]}");
+    println(f"{l.type()} {nameof(Perm)}");
+}

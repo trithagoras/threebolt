@@ -1,0 +1,7 @@
+// §2.4: returning an error from main writes its message to stderr; exit code 1.
+//! exit: 1
+
+fn main() -> () | Err {
+    println("working");
+    return error("something broke");
+}

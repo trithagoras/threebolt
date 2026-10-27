@@ -1,0 +1,69 @@
+// §4.6–§4.7, §8.2: inheritance, virtual/abstract/override, `super`, spreads of base fields,
+// static functions not inherited, overloads across a hierarchy.
+
+pub abstract class Animal {
+    pub let name: str;
+    prot let legs: i32 = 4;
+
+    prot fn new(name: str) -> Self => { name };
+    pub abstract fn speak(self) -> str;
+    pub virtual fn walk(self) -> str => f"{self.name} walks on {self.legs} legs";
+    pub fn describe(self) -> str => f"{self.name} says {self.speak()}";
+    pub fn feed(self, food: str) -> str => f"{self.name} eats {food}";
+}
+
+pub class Dog : Animal {
+    let _breed: str;
+    pub fn new(name: str, breed: str = "mutt") -> Self => { ..Animal::new(name), _breed: breed };
+    pub override fn speak(self) -> str => "woof";
+    pub override fn walk(self) -> str => super.walk() + " happily";
+    pub fn feed(self, amount: i32) -> str => f"{self.name} eats {amount} biscuits";
+    pub get fn breed(self) -> str => self._breed;
+}
+
+pub class Puppy : Dog {
+    pub fn new(name: str) -> Self => { ..Dog::new(name, breed: "beagle") };
+    pub override fn speak(self) -> str => "yip";
+    pub override fn walk(self) -> str => super.walk() + " and trips";
+}
+
+pub class Bird : Animal {
+    pub fn new(name: str) -> Self => { ..Animal::new(name), legs: 2 };
+    pub override fn speak(self) -> str => "tweet";
+}
+
+pub class Counter {
+    pub let n: i32 = 0;
+    pub fn new() -> Self => {};
+    pub virtual fn bump(mut self) { self.n += 1; }
+}
+
+pub class Double : Counter {
+    pub fn new() -> Self => { ..Counter::new() };
+    pub override fn bump(mut self) {
+        super.bump();
+        super.bump();
+    }
+}
+
+fn main() {
+    let animals: [Animal] = [Dog::new("rex"), Puppy::new("bit"), Bird::new("tweety")];
+    for a in animals {
+        println(a.describe());          // non-virtual describe calls virtual speak
+        println(a.walk());
+    }
+
+    let d = Dog::new("fido", breed: "lab");
+    println(f"{d.breed} {d.feed("meat")} / {d.feed(3)}");
+
+    let a: Animal = Puppy::new("pip");
+    println(f"{a.speak()} {a is Dog} {a is Puppy} {a is Bird}");
+    if a is Dog {
+        println(f"a dog of breed {a.breed}");
+    }
+
+    let mut c: Counter = Double::new();
+    c.bump();
+    c.bump();
+    println(f"{c.n}");
+}

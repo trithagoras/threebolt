@@ -1,0 +1,19 @@
+// §7.9: `as` checks at runtime and panics on failure; `as?` yields null instead.
+
+trait Named { fn name(self) -> str; }
+class Animal : Named { pub fn name(self) -> str => "animal"; pub fn new() -> Self => {}; }
+struct Rock : Named { pub fn name(self) -> str => "rock"; }
+
+fn main() {
+    let things: [Named] = [Animal::new(), Rock {}];
+    for t in things {
+        let a = t as? Animal;
+        let r = t as? Rock;
+        println(f"{t.name()} {a != null} {r != null} {t is Rock}");
+    }
+    let u: i32 | str = "x";
+    println(f"{(u as? i32) ?? -1} {u as str}");
+    let n = u as i32;
+    println("unreachable");
+}
+//! exit: 101

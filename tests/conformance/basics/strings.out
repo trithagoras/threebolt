@@ -1,0 +1,11 @@
+6 HÉLLO pad|
+true true false 3
+[a][😀][b]
+4 ac
+tab	quote" brace {} unicode 😀
+{literal} 2 nested {inner} 6
+line one
+  line "two"
+ababab!y
+bcd
+empty is falsy

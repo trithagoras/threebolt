@@ -1,0 +1,37 @@
+// §4.3–§4.4: expression bodies, named-only optional parameters, overloads, recursion,
+// functions as values.
+
+fn sq(x: f64) -> f64 => x * x;
+
+fn greet(name: str, greeting: str = "hello", punct: str = "!") -> str => f"{greeting}, {name}{punct}";
+
+fn describe(x: i32) -> str => f"int {x}";
+fn describe(x: str) -> str => f"str {x}";
+fn describe(x: i64) -> str => f"long {x}";
+fn describe(x: i32, y: i32) -> str => f"pair {x} {y}";
+
+fn fib(n: u64) -> u64 => n if n < 2 else fib(n - 1) + fib(n - 2);
+
+fn apply(f: fn(i32) -> i32, x: i32) -> i32 => f(x);
+
+fn double(x: i32) -> i32 => x * 2;
+
+fn counter_from(start: i32, step: i32 = start + 1) -> str => f"{start} by {step}";
+
+fn main() {
+    println(f"{sq(1.5)}");
+    println(greet("bolt"));
+    println(greet("bolt", punct: "?", greeting: "hi"));
+    println(describe(1));
+    println(describe("one"));
+    println(describe(1_i64));
+    println(describe(1, 2));
+    let small: i32 = 4;
+    println(describe(small));
+    println(f"{fib(20)}");
+    println(f"{apply(double, 21)}");
+    let f = double;
+    println(f"{f(5)}");
+    println(counter_from(3));
+    println(counter_from(3, step: 7));
+}

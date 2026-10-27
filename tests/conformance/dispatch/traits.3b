@@ -1,0 +1,96 @@
+// §4.9–§4.10, §8.3, §8.5: traits with default bodies, supertraits, static requirements via
+// `T::f()`, impl blocks (for structs, classes and primitives), trait references with dynamic
+// dispatch, and `Trait::m(x)` disambiguation.
+
+pub trait Describe {
+    fn describe(self) -> str;
+    fn shout(self) -> str => self.describe().upper() + "!";
+}
+
+pub trait Named { get fn name(self) -> str; }
+pub trait Greeter : Named + Describe {
+    fn greet(self) -> str => f"hello from {self.name}";
+}
+
+pub trait Zero { fn zero() -> Self; }
+pub trait Tally { fn tally(mut self); get fn total(self) -> i32; }
+
+pub struct Point : Describe, Zero {
+    let x: i32;
+    let y: i32;
+    pub fn describe(self) -> str => f"({self.x}, {self.y})";
+    pub fn zero() -> Self => { x: 0, y: 0 };
+}
+
+pub class Robot : Greeter {
+    let id: i32;
+    pub fn new(id: i32) -> Self => { id };
+    pub get fn name(self) -> str => f"robot-{self.id}";
+    pub virtual fn describe(self) -> str => "a robot";
+    pub fn shout(self) -> str => "BEEP";          // replaces the default body
+}
+
+pub class Android : Robot {
+    pub fn new(id: i32) -> Self => { ..Robot::new(id) };
+    pub override fn describe(self) -> str => "an android";
+}
+
+impl Describe for i32 { fn describe(self) -> str => f"the number {self}"; }
+impl Zero for i32 { fn zero() -> Self => 0; }
+
+pub struct Clicks { let n: i32 = 0; }
+impl Tally for Clicks {
+    fn tally(mut self) { self.n += 1; }
+    get fn total(self) -> i32 => self.n;
+}
+
+pub trait Left { fn side(self) -> str; }
+pub trait Right { fn side(self) -> str; }
+pub struct Both;
+impl Left for Both { fn side(self) -> str => "left"; }
+impl Right for Both { fn side(self) -> str => "right"; }
+
+// Calls use the defaults of the statically resolved declaration (§4.3).
+pub trait Hello { fn hi(self, who: str = "world") -> str; }
+pub struct Polite : Hello { pub fn hi(self, who: str = "there") -> str => f"hi {who}"; }
+
+fn zeros<T: Zero>() -> (T, T) => (T::zero(), T::zero());
+
+fn all_described(xs: [Describe]) -> str {
+    let mut out = "";
+    for x in xs { out += x.describe() + "; "; }
+    return out;
+}
+
+fn introduce<G: Greeter>(g: G) -> str => f"{g.greet()} / {g.describe()}";
+
+fn main() {
+    let p = Point { x: 1, y: 2 };
+    println(f"{p.describe()} {p.shout()} {5.describe()} {7.shout()}");
+
+    let r = Robot::new(1);
+    let a: Robot = Android::new(2);
+    println(f"{r.greet()} {r.shout()} {a.describe()} {a.shout()}");
+    println(introduce(a));
+
+    let ds: [Describe] = [p, 3, r, a];
+    println(all_described(ds));
+
+    let g: Greeter = Android::new(3);   // supertrait members through a trait reference
+    println(f"{g.name} {g.describe()} {g.greet()}");
+
+    let (z1, z2) = zeros<Point>();
+    let (n1, n2) = zeros<i32>();
+    println(f"{z1.describe()} {z2.describe()} {n1} {n2}");
+
+    let b = Both;
+    println(f"{Left::side(b)} {Right::side(b)}");
+
+    let h: Hello = Polite {};
+    println(f"{h.hi()} / {(Polite {}).hi()} / {h.hi(who: "you")}");
+
+    let mut c = Clicks {};
+    c.tally();
+    c.tally();
+    println(f"{c.total}");
+}

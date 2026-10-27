@@ -1,0 +1,11 @@
+// Compile errors for `x is pattern` (§7.3).
+
+fn main() {
+    let xs = [1, 2];
+    if xs is [a, ..] { println(a); } else { println(a); }   // not bound in the else branch
+    println(a);                                             // nor after the `if`
+    _ = (xs is [b]) || b > 0;                               // nor where the test failed
+    _ = xs is [str];                                        // a type where a binding belongs
+    let n = 3;
+    _ = n is [m];                                           // a list pattern cannot match i32
+}

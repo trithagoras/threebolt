@@ -1,0 +1,61 @@
+// §7.11, §11: match with literals, ranges, or-patterns, guards, bindings with `is`, tuples,
+// lists, struct patterns, enums; exhaustiveness over bool, literal unions, enums and union members.
+
+enum Color { Red, Green, Blue }
+struct Point { let x: i32; let y: i32; }
+type Mode = "quick" | "full";
+
+fn size(n: i32) -> str => match n {
+    0 => "zero",
+    1 | 2 => "small",
+    3..=9 => "medium",
+    n if n < 0 => "negative",
+    _ => "big",
+};
+
+fn color(c: Color) -> str => match c {
+    Color::Red => "r",
+    Color::Green => "g",
+    Color::Blue => "b",
+};
+
+fn yes(b: bool) -> i32 => match b { true => 1, false => 0 };
+
+fn mode(m: Mode) -> i32 => match m { "quick" => 3, "full" => 10 };
+
+fn kind(v: i32 | str | null) -> str => match v {
+    null => "null",
+    n is i32 => f"int {n}",
+    s is str => f"str {s}",
+};
+
+fn where_(p: Point) -> str => match p {
+    Point { x: 0, y: 0 } => "origin",
+    Point { x: 0, .. } => "on y axis",
+    Point { x, y } if x == y => "diagonal",
+    Point { x, y } => f"({x}, {y})",
+};
+
+fn list(xs: [i32]) -> str => match xs {
+    [] => "empty",
+    [only] => f"one {only}",
+    [first, ..rest, last] => f"{first}..{last} with {rest.len} between",
+};
+
+fn main() {
+    println(f"{size(0)} {size(2)} {size(5)} {size(-4)} {size(50)}");
+    println(f"{color(Color::Green)} {yes(true)} {mode("full")}");
+    println(f"{kind(null)} {kind(4)} {kind("s")}");
+    println(f"{where_(Point { x: 0, y: 0 })} {where_(Point { x: 0, y: 3 })} {where_(Point { x: 2, y: 2 })} {where_(Point { x: 1, y: 2 })}");
+    println(f"{list([])} {list([7])} {list([1, 2, 3, 4])}");
+    let pair = (1, "a");
+    match pair {
+        (1, s) => println(f"one and {s}"),
+        _ => println("other"),
+    }
+    let ch = 'q';
+    let k = match ch { 'a'..='m' => 1, 'n'..='z' => 2, _ => 3 };
+    println(f"{k}");
+    let lit = match 5 { 1..=9 => "digit", _ => "other" };   // a literal scrutinee matches as i32
+    println(lit);
+}

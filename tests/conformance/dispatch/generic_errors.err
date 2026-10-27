@@ -1,0 +1,11 @@
+generic_errors.3b:13:9: error[E0207]: operator '+' is not defined for 'T' and 'T'
+generic_errors.3b:14:12: error[E0207]: cannot compare 'T' and 'T' with '<': `Ord` is required
+generic_errors.3b:18:9: error[E0216]: 'Plain' does not implement 'Ord' (required by 'T')
+generic_errors.3b:19:9: error[E0209]: cannot infer type argument 'T' of 'make'; give it explicitly: `make<...>(...)`
+generic_errors.3b:20:9: error[E0230]: 'pick' takes 2 type argument(s), found 1
+generic_errors.3b:21:24: error[E0200]: expected 'str', found 'i32'
+generic_errors.3b:22:12: error[E0230]: 'Box' takes 1 type argument, got 2
+generic_errors.3b:23:12: error[E0230]: 'Box' takes 1 type argument, got 0
+generic_errors.3b:28:9: error[E0203]: 'both' takes 2 positional arguments, found 1
+generic_errors.3b:28:14: error[E0230]: local 'a' takes no type arguments: this `<...>` was parsed as generic arguments (§7.5); to compare, parenthesize: `(a < b)`
+generic_errors.3b:29:12: error[E0107]: 'b' is a local, not a type: this `<...>` was parsed as generic arguments (§7.5); to compare, parenthesize: `(a < b)`

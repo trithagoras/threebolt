@@ -1,0 +1,46 @@
+// Compile errors for traits and impls (§4.9–§4.10, §8.3, §8.5, §10).
+
+trait Shape {
+    fn area(self) -> f64;
+    fn grow(mut self);
+}
+trait Make { fn make() -> Self; }
+trait Defaults { fn f(self, x: i32 = "one"); }   // a bodyless member's default is checked
+trait Left { fn side(self) -> str; }
+trait Right { fn side(self) -> str; }
+
+struct Sq : Shape {                       // missing `grow`
+    let s: f64;
+    pub fn area(self) -> f64 => self.s * self.s;
+}
+
+struct Circle { let r: f64; }
+impl Shape for Circle {
+    fn area(self) -> f64 => self.r;
+    fn grow(self) {}                      // receiver must be `mut self`
+    fn extra(self) {}                     // not a member of Shape
+}
+impl Shape for Circle {                   // second impl of the same pair
+    fn area(self) -> f64 => 0.0;
+    fn grow(mut self) {}
+}
+
+struct Tri;
+impl Make for Tri { fn make() -> i32 => 0; }   // must return Self
+
+impl<T: Make> Left for T { fn side(self) -> str => "?"; }   // blanket impl
+
+struct Both;
+impl Left for Both { fn side(self) -> str => "l"; }
+impl Right for Both { fn side(self) -> str => "r"; }
+
+fn unbounded<T>(x: T) -> T {
+    _ = x.area();
+    return T::make();
+}
+
+fn main() {
+    let s: Shape = Circle { r: 1.0 };
+    s.grow();                             // immutable binding
+    _ = Both.side();                      // ambiguous between Left and Right
+}

@@ -1,0 +1,17 @@
+errors.3b:4:18: error[E0200]: expected 'i32', found 'str'
+errors.3b:5:17: error[E0201]: literal 256 does not fit in 'u8' (range 0..255)
+errors.3b:6:17: error[E0201]: literal -129 does not fit in 'i8' (range -128..127)
+errors.3b:7:13: error[E0200]: expected 'i32', found 'str'
+errors.3b:8:13: error[E0207]: mismatched operand types 'u8' and 'i8' for '+'; convert one with `as`
+errors.3b:12:13: error[E0107]: cannot find 'undefined_thing' in this scope
+errors.3b:13:5: error[E0107]: cannot find 'nope' in this scope
+errors.3b:18:5: error[E0300]: cannot assign to immutable binding 'x'; declare it `let mut`
+errors.3b:20:5: error[E0301]: 'push' takes `mut self`, but cannot assign to immutable binding 'list'; declare it `let mut`
+errors.3b:25:1: error[E0210]: missing `return`: this function returns 'i32'
+errors.3b:33:9: error[E0205]: call to 'describe' is ambiguous between 'describe(i32)' and 'describe(i64)'
+errors.3b:34:9: error[E0203]: 'opt' takes 1 positional argument, found 0 (optional parameters are named-only)
+errors.3b:35:9: error[E0203]: 'opt' takes 1 positional argument, found 2 (optional parameters are named-only)
+errors.3b:36:16: error[E0203]: 'opt' has no parameter named 'c'
+errors.3b:37:13: error[E0203]: required parameter 'a' is positional-only: pass it without its name
+errors.3b:41:5: error[E0222]: `break` outside of a loop
+errors.3b:45:8: error[E0208]: a condition must be `bool` or implement `Truthy`, found '1'

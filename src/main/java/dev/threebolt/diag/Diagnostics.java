@@ -3,13 +3,39 @@ package dev.threebolt.diag;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
+import java.util.function.Supplier;
 
 /** Collects the diagnostics of one compilation; every stage keeps going after an error. */
 public final class Diagnostics {
     private final List<Diagnostic> all = new ArrayList<>();
+    private int muted;
+    private int dropped;
 
     public void add(Diagnostic d) {
-        all.add(d);
+        if (muted > 0) dropped++;
+        else all.add(d);
+    }
+
+    /**
+     * Runs {@code work} with diagnostics discarded (speculative checking, e.g. typing overload
+     * arguments); {@link #dropped} tells whether it reported anything.
+     */
+    public <T> T muted(Supplier<T> work) {
+        muted++;
+        try {
+            return work.get();
+        } finally {
+            muted--;
+        }
+    }
+
+    /** How many errors were dropped while muted, ever; compare before and after. */
+    public int dropped() {
+        return dropped;
+    }
+
+    public int count() {
+        return all.size();
     }
 
     public void error(Code code, Span span, String message) {

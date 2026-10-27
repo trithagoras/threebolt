@@ -1,0 +1,20 @@
+// §7.7: tuples are values; destructuring with irrefutable patterns.
+
+fn divmod(a: i32, b: i32) -> (i32, i32) => (a / b, a % b);
+
+fn main() {
+    let t = (1, "two", 3.0);
+    println(f"{t.0} {t.1} {t.2}");
+    let (q, r) = divmod(17, 5);
+    println(f"{q} {r}");
+    let mut pair = (10, 20);
+    pair.0 += 5;
+    let copy = pair;
+    pair.1 = 0;
+    println(f"{pair.0} {pair.1} {copy.1}");
+    let nested = ((1, 2), 3);
+    println(f"{nested.0.1}");
+    let (mut a, _) = pair;
+    a += 1;
+    println(f"{a} {pair == (15, 0)} {() == ()}");
+}

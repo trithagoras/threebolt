@@ -1,14 +1,13 @@
 // std::prelude: implicitly imported into every module (spec §16). The loader also adds `Map` and
 // `Set` from std::collections and the module alias `c` for std::c.
 //
-// Functions without a body are intrinsics provided by the interpreter. This file declares the
-// prelude's names; members are filled in as their phases land (docs/PLAN.md).
+// Functions without a body are intrinsics provided by the interpreter.
 
-pub fn print(s: str);
-pub fn println(s: str);
-pub fn eprintln(s: str);
+pub fn print<T: Display>(x: T);
+pub fn println<T: Display>(x: T);
+pub fn eprintln<T: Display>(x: T);
 pub fn panic(msg: str) -> !;
-pub fn error(msg: str) -> Err;
+pub fn error(msg: str) -> Err => Err::new(msg);
 pub fn len<T: Len>(x: T) -> usize => x.len;
 
 pub trait Truthy { fn truthy(self) -> bool; }
@@ -36,17 +35,171 @@ pub trait Shr { fn shr(self, o: Self) -> Self; }
 pub trait Index<I, V> { fn index(self, i: I) -> V; }
 pub trait IndexMut<I, V> : Index<I, V> { fn set(mut self, i: I, v: V); }
 
-// The default adapters (map, filter, ...) land with Phase 7.
-pub trait Iterator<T> { fn next(mut self) -> T | Done; }
+/// `next` returns the `Done` sentinel at the end, so iterators over nullable elements work.
+pub trait Iterator<T> {
+    fn next(mut self) -> T | Done;
+
+    fn map<U>(self, f: fn(T) -> U) -> Iterator<U> => MapIter::new(self, f);
+    fn filter(self, f: fn(T) -> bool) -> Iterator<T> => FilterIter::new(self, f);
+    fn enumerate(self) -> Iterator<(usize, T)> => EnumerateIter::new(self);
+    fn of_type<U>(self) -> Iterator<U> => OfTypeIter<T, U>::new(self);
+
+    fn for_each(self, f: fn(T)) {
+        for x in self { f(x); }
+    }
+
+    fn fold<A>(self, init: A, f: fn(A, T) -> A) -> A {
+        let mut acc = init;
+        for x in self { acc = f(acc, x); }
+        return acc;
+    }
+
+    fn any(self, f: fn(T) -> bool) -> bool {
+        for x in self { if f(x) { return true; } }
+        return false;
+    }
+
+    fn all(self, f: fn(T) -> bool) -> bool {
+        for x in self { if !f(x) { return false; } }
+        return true;
+    }
+
+    fn count(self) -> usize {
+        let mut n: usize = 0;
+        for _ in self { n += 1; }
+        return n;
+    }
+
+    fn to_list(self) -> [T] {
+        let mut out: [T] = [];
+        for x in self { out.push(x); }
+        return out;
+    }
+
+    fn first(self) -> T | null {
+        for x in self { return x; }
+        return null;
+    }
+}
+
 pub trait Iterable<T> { fn iter(self) -> Iterator<T>; }
 
-pub class Err : Error {
+pub class Err : Error, Display {
     let msg: str;
-    pub fn message(self) -> str => self.msg;
+    pub fn new(msg: str) -> Self => { msg };
+    pub virtual fn message(self) -> str => self.msg;
+    pub fn to_str(self) -> str => self.message();
 }
 
 pub struct Done;
-pub class Type {}
-pub class List<T> {}
-pub struct Range<T> {}
-pub struct Ptr<T> {}
+
+/// A runtime type descriptor (§15).
+pub class Type : Display, Eq, Hash {
+    pub get fn name(self) -> str;
+    pub fn is_subtype_of(self, other: Type) -> bool;
+    pub fn to_str(self) -> str;
+    pub fn eq(self, o: Self) -> bool;
+    pub fn hash(self) -> u64;
+}
+
+/// `[T]`: a growable list (reference type).
+pub class List<T> : Len, Truthy, Iterable<T>, Index<usize, T>, IndexMut<usize, T> {
+    pub get fn len(self) -> usize;
+    pub fn truthy(self) -> bool;
+    pub fn iter(self) -> Iterator<T>;
+    pub fn index(self, i: usize) -> T;
+    pub fn set(mut self, i: usize, v: T);
+    pub fn push(mut self, v: T);
+    pub fn pop(mut self) -> T | null;
+    pub fn insert(mut self, i: usize, v: T);
+    pub fn remove(mut self, i: usize) -> T;
+    pub fn clear(mut self);
+    pub fn reverse(mut self);
+    pub fn contains(self, v: T) -> bool;
+    pub get fn first(self) -> T | null;
+    pub get fn last(self) -> T | null;
+    pub fn enumerate(self) -> Iterator<(usize, T)> => self.iter().enumerate();
+}
+
+/// `a..b` and `a..=b` over integers or chars.
+pub struct Range<T> : Iterable<T> {
+    pub let start: T;
+    pub let end: T;
+    pub let inclusive: bool;
+    pub fn iter(self) -> Iterator<T>;
+    pub fn contains(self, x: T) -> bool;
+}
+
+/// A raw pointer (§14.4).
+pub struct Ptr<T> {
+    pub fn null_() -> Self;   // `Ptr<T>::null()`: a trailing `_` lets std declare a keyword-named member
+    pub unsafe fn from_addr(a: usize) -> Self;
+    pub fn is_null(self) -> bool;
+    pub fn addr(self) -> usize;
+    pub unsafe fn read(self) -> T;
+    pub unsafe fn write(self, v: T);
+    pub unsafe fn offset(self, n: isize) -> Self;
+    pub unsafe fn cast<U>(self) -> Ptr<U>;
+}
+
+// Iterators backed by the interpreter (lists, maps, ranges, strings).
+class NativeIter<T> : Iterator<T> {
+    pub fn next(mut self) -> T | Done;
+}
+
+class MapIter<T, U> : Iterator<U> {
+    let inner: Iterator<T>;
+    let f: fn(T) -> U;
+
+    pub fn new(inner: Iterator<T>, f: fn(T) -> U) -> Self => { inner, f };
+
+    pub fn next(mut self) -> U | Done {
+        let v = self.inner.next();
+        if v is Done { return Done; }
+        return self.f(v);
+    }
+}
+
+class FilterIter<T> : Iterator<T> {
+    let inner: Iterator<T>;
+    let f: fn(T) -> bool;
+
+    pub fn new(inner: Iterator<T>, f: fn(T) -> bool) -> Self => { inner, f };
+
+    pub fn next(mut self) -> T | Done {
+        loop {
+            let v = self.inner.next();
+            if v is Done { return Done; }
+            if self.f(v) { return v; }
+        }
+    }
+}
+
+class EnumerateIter<T> : Iterator<(usize, T)> {
+    let inner: Iterator<T>;
+    let i: usize = 0;
+
+    pub fn new(inner: Iterator<T>) -> Self => { inner };
+
+    pub fn next(mut self) -> (usize, T) | Done {
+        let v = self.inner.next();
+        if v is Done { return Done; }
+        let i = self.i;
+        self.i += 1;
+        return (i, v);
+    }
+}
+
+class OfTypeIter<T, U> : Iterator<U> {
+    let inner: Iterator<T>;
+
+    pub fn new(inner: Iterator<T>) -> Self => { inner };
+
+    pub fn next(mut self) -> U | Done {
+        loop {
+            let v = self.inner.next();
+            if v is Done { return Done; }
+            if v is U { return v; }
+        }
+    }
+}

@@ -1,0 +1,11 @@
+errors.3b:9:14: error[E0214]: cannot access 'len' on a value of union type 'i32 | str'; narrow it first (§9)
+errors.3b:13:11: error[E0213]: match is not exhaustive: `Color::Blue` is not covered; add an arm or `_ =>`
+errors.3b:14:11: error[E0213]: match is not exhaustive: `false` is not covered; add an arm or `_ =>`
+errors.3b:15:11: error[E0213]: match is not exhaustive: a value of type 'str' is not covered; add an arm or `_ =>`
+errors.3b:19:5: error[E0211]: this value of type 'i32 | E' may be an error; handle it, propagate it with `?`, or discard it with `_ = ...;`
+errors.3b:23:13: error[E0212]: `?` would return 'E', which is not assignable to the return type 'i32'
+errors.3b:28:13: error[E0212]: `?` needs a value that may be null or an error, found '5'
+errors.3b:33:16: error[E0208]: `if let` needs a value that may be null, found '5'
+errors.3b:38:13: error[E0215]: a value of type 'str' can never be a 'i32'
+errors.3b:39:9: error[E0215]: a value of type 'str' is never a 'Color'
+errors.3b:43:13: error[E0223]: `return` cannot leave a deferred block

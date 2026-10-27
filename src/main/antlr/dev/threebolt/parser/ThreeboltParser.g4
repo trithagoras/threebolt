@@ -8,6 +8,7 @@
 // Two pieces of parser state steer prediction through semantic predicates:
 //  - `typeArgsAhead()` (§7.5): in expressions, `<` after a name starts type arguments iff they
 //    parse as `typeArgs` and are followed by `(` or `::`.
+//  - `isPatternAhead()` (§17.18): whether a pattern or a type follows `is`.
 //  - `structOk()` (§6.3): initializers (`Name {...}`, `{...}`) are not allowed directly in an
 //    `if`/`while`/`for`/`match` head. `noStructExpr` pushes "forbidden"; every bracketing
 //    construct pushes "allowed" again.
@@ -32,6 +33,26 @@ options { tokenVocab = ThreeboltLexer; }
     protected boolean adjacent() {
         Token prev = _input.LT(-1), next = _input.LT(1);
         return prev != null && prev.getStopIndex() + 1 == next.getStartIndex();
+    }
+
+    /**
+     * §17.18: whether a pattern rather than a type follows `is`: `[`, `(`, a path followed by `{`
+     * (only where initializers are allowed, §6.3), or an optionally negated literal followed by
+     * `..`/`..=`.
+     */
+    protected boolean isPatternAhead() {
+        int t = _input.LA(1);
+        if (t == LBRACKET || t == LPAREN) return true;
+        int i = 1;
+        if (t == MINUS) t = _input.LA(++i);
+        if (t == INT_LITERAL || t == FLOAT_LITERAL || t == STRING_LITERAL || t == TRIPLE_STRING_LITERAL
+                || t == CHAR_LITERAL || t == TRUE || t == FALSE || t == NULL) {
+            int next = _input.LA(i + 1);
+            return next == DOTDOT || next == DOTDOT_EQ;
+        }
+        if (t != IDENTIFIER || i != 1 || !structOk()) return false;
+        while (_input.LA(i + 1) == COLON_COLON && _input.LA(i + 2) == IDENTIFIER) i += 2;
+        return _input.LA(i + 1) == LBRACE;
     }
 
     /** `get` directly before `fn` (§4.8). */
@@ -277,7 +298,13 @@ andExpr : andExpr AND_AND comparisonExpr | comparisonExpr ;
 // not separate alternatives: choosing between alternatives that share the `rangeExpr` prefix
 // would happen before `typeArgsAhead()` can be evaluated and resolve `f(a < b, c > (d))` as
 // comparisons.
-comparisonExpr : rangeExpr (compareOp rangeExpr | IS type)? ;
+comparisonExpr : rangeExpr (compareOp rangeExpr | IS isTarget)? ;
+
+// §7.3, §17.18: after `is`, a pattern or a type, chosen by `isPatternAhead()`.
+isTarget
+    : {isPatternAhead()}? patternAtom                  # patternIsTarget
+    | type                                             # typeIsTarget
+    ;
 
 compareOp
     : EQ_EQ | NOT_EQ | LT | LE
@@ -312,8 +339,19 @@ postfixOp
     : DOT memberName ({typeArgsAhead()}? typeArgs)?    # memberOp
     | callArgs                                          # callOp
     | LBRACKET nested RBRACKET                          # indexOp
+    | LBRACKET sliceBounds RBRACKET                     # sliceOp
     | QUESTION                                          # propagateOp
     ;
+
+// Open-ended ranges exist only inside index brackets (§7.6, §17.17); `xs[a..b]` is an `indexOp`
+// whose index is an ordinary range.
+sliceBounds
+    @init { pushStruct(true); }
+    : bitOrExpr DOTDOT
+    | (DOTDOT | DOTDOT_EQ) bitOrExpr
+    | DOTDOT
+    ;
+    finally { popStruct(); }
 
 // Any keyword is a member name after `.`; integers are tuple fields (`t.0.1`).
 memberName : IDENTIFIER | INT_LITERAL | keyword ;

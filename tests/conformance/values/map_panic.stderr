@@ -1,0 +1,2 @@
+panic: key not found in map: "k"
+    at main (map_panic.3b:7:16)

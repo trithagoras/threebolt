@@ -1,0 +1,1 @@
+no_main.3b:1:1: error[E0110]: the entry module must declare `fn main()`

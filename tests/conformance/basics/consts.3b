@@ -1,0 +1,27 @@
+// §4.2: consts are compile-time; statics initialize lazily on first access, exactly once.
+
+const LIMIT: i32 = 10 * 4 + 2;
+const NAME: str = "bolt";
+const MASK: u8 = 1 << 3 | 1;
+
+static let START: i32 = announce("START", 1);
+static let mut COUNTER: u64 = 0;
+
+fn announce(name: str, v: i32) -> i32 {
+    println(f"init {name}");
+    return v;
+}
+
+fn bump() -> u64 {
+    COUNTER += 1;
+    return COUNTER;
+}
+
+fn main() {
+    println(f"{LIMIT} {NAME} {MASK}");
+    println("before START");
+    println(f"{START + START}");
+    bump();
+    bump();
+    println(f"counter {bump()}");
+}
