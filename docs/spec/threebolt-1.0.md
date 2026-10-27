@@ -466,7 +466,10 @@ x => x + 1
 mut c => c.update()
 x => { let y = x * 2; return y; }
 () => work()
+((i, c)) => c if i > 0 else '_'
+(acc, Point { x, y }) => acc + x * y
 ```
+- Inside the parentheses each parameter is an irrefutable pattern (§11), optionally annotated: `((a, b): (i32, i32)) => a + b`. The number of parameters is the number of patterns, so `(a, b) => …` takes two arguments while `((a, b)) => …` takes one tuple and destructures it. A plain name is a binding pattern; an unparenthesized parameter can only be a name (`x`, `mut x`).
 - Parameter types inferred from the expected `fn` type; else must be annotated. Return type inferred from body.
 - Captures enclosing variables **by reference** (shared, live; mutating a captured `let mut` is visible outside). A capture refers to the binding in scope when the lambda is created; a later binding of the same name (shadowing, the next loop iteration, §6.4) is a different variable. Lambdas are reference-type values of `fn(...) -> R` type.
 - `?` inside a lambda propagates out of the lambda, not the enclosing function.
@@ -584,8 +587,8 @@ Prelude traits for code generic over numbers, after Haskell's numeric classes:
 | `Enum::Member` | enum value |
 | `pattern if guard` | (arms only) pattern + bool/Truthy guard |
 
-- Patterns appear in `match` arms, `let`, `for`, and after `is` (§7.3).
-- `let` and `for` require irrefutable patterns (tuples, struct destructure, bindings, `_`).
+- Patterns appear in `match` arms, `let`, `for`, lambda parameters (§7.8), and after `is` (§7.3).
+- `let`, `for` and lambda parameters require irrefutable patterns (tuples, struct destructure, bindings, `_`).
 
 ---
 
@@ -741,7 +744,7 @@ Implicitly imported names:
 4. No bare initializer in `if`/`while`/`for`/`match` heads (§6.3); collection literals are fine.
 5. In type context `|` is union; in expression context bitwise or. Types appear only after `:`, `->`, `as`, `as?`, `is` (unless a pattern follows, §17 note 18), in `<...>`, in `type` aliases, and in pattern `is`.
 6. `as?` is one token; `x as T?` is `(x as T)?`.
-7. Lambda detection: `ident =>`, `mut ident =>`, `( params ) =>` where params are identifiers with optional `mut`/`: Type`. `(a, b)` not followed by `=>` is a tuple.
+7. Lambda detection: `ident =>`, `mut ident =>`, `( params ) =>` where each param is a pattern with an optional `: Type`. `(a, b)` not followed by `=>` is a tuple.
 8. Conditional expression `a if c else b` only in expression position; statement-initial `if` is the statement.
 9. Comparison operators are non-associative: `a < b < c` is a syntax error.
 10. F-string lexer modes (§1).
@@ -957,3 +960,6 @@ Semantics the spec left open, decided while implementing:
 
 ### 2026-10-27 — `str::from_chars` and `join`
 - §16 `str::from_chars(cs: Iterable<char> | Iterator<char> overloads) -> str` (the way back from `chars()`, since `as` only narrows) and `[T].join(sep: str) -> str` for `T: Display`.
+
+### 2026-10-27 — destructuring lambda parameters
+- §7.8, §11, §17 Lambda parameters inside parentheses are irrefutable patterns: `((i, c)) => …` takes one tuple and binds its elements, `(acc, Point { x, y }) => …` destructures its second argument. Parameter count is unchanged by destructuring (`(a, b) =>` is still two parameters), so there is no implicit tuple splatting.

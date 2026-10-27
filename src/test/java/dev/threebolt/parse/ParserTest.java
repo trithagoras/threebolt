@@ -174,6 +174,14 @@ class ParserTest {
     }
 
     @Test
+    void lambdaPatternParams() {
+        // Each parenthesized parameter is a pattern; `((a, b))` is one tuple parameter (§7.8).
+        assertEquals("(lambda (lambdaParams ( (tuplePattern ( a , b )) )) => a)", expr("((a, b)) => a"));
+        assertEquals("(lambda (lambdaParams ( acc , (lambdaParam (structPattern P { x }) : P) )) => x)",
+                expr("(acc, P { x }: P) => x"));
+    }
+
+    @Test
     void lambdaBodies() {
         assertEquals("(lambda x => (block { (returnStmt return x ;) }))", expr("x => { return x; }"));
         assertEquals("(lambda x => (assignOrExpr (postfixExpr self (memberOp . y)) = x))", expr("x => self.y = x"));

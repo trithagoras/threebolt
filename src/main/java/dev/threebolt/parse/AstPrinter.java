@@ -701,7 +701,8 @@ public final class AstPrinter {
 
     private void lambda(Expr.Lambda l, boolean typeFollows) {
         var params = l.params();
-        if (params.size() == 1 && params.getFirst().type() == null) {
+        if (params.size() == 1 && params.getFirst().type() == null
+                && params.getFirst().pattern() instanceof Pattern.Binding b && b.isType() == null) {
             lambdaParam(params.getFirst());
         } else {
             out.append('(');
@@ -720,8 +721,7 @@ public final class AstPrinter {
     }
 
     private void lambdaParam(Expr.LambdaParam p) {
-        if (p.isMutable()) out.append("mut ");
-        out.append(p.name().text());
+        pattern(p.pattern());
         if (p.type() != null) {
             out.append(": ");
             type(p.type());

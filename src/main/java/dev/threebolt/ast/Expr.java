@@ -94,8 +94,8 @@ public sealed interface Expr extends Body {
 
     record Lambda(List<LambdaParam> params, Body body, Span span) implements Expr {}
 
-    /** {@code type} is null when not annotated. */
-    record LambdaParam(boolean isMutable, Name name, TypeExpr type, Span span) implements Node {}
+    /** A plain parameter is a {@link Pattern.Binding}; {@code type} is null when not annotated. */
+    record LambdaParam(Pattern pattern, TypeExpr type, Span span) implements Node {}
 
     /** {@code unsafe => operand}. */
     record Unsafe(Expr operand, Span span) implements Expr {}

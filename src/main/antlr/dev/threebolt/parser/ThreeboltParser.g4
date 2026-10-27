@@ -283,7 +283,8 @@ lambdaParams
     | LPAREN (lambdaParam (COMMA lambdaParam)* COMMA?)? RPAREN
     ;
 
-lambdaParam : MUT? IDENTIFIER (COLON type)? ;
+// Each parenthesized parameter is a pattern (§7.8); the checker requires it to be irrefutable.
+lambdaParam : patternAtom (COLON type)? ;
 
 // In a lambda body `{` starts a block (§7.1).
 lambdaBody : block | {_input.LA(1) != LBRACE}? assignOrExpr ;

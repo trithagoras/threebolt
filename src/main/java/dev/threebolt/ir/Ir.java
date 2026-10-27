@@ -76,8 +76,11 @@ public final class Ir {
     /** A named function used as a value (§7.8). */
     public record FnRef(FnInfo fn, List<Type> typeArgs, Type type) implements Expr {}
 
-    /** {@code body} is a statement (block or assignment) or {@code value} an expression; the other is null. */
-    public record Lambda(List<Local> params, Stmt body, Expr value, Type.Fn type) implements Expr {}
+    /**
+     * {@code body} is a statement (block or assignment) or {@code value} an expression; the other is
+     * null. Each parameter is an irrefutable pattern binding its argument.
+     */
+    public record Lambda(List<Pat> params, Stmt body, Expr value, Type.Fn type) implements Expr {}
 
     public enum UnOp { NEG, BIT_NOT }
 

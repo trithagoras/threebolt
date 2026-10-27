@@ -520,9 +520,8 @@ public final class Interpreter {
         if (fn.fn != null) return invoke(fn.fn, null, args, fn.typeArgs, null, null, null);
         if (fn.lambda == null) return ffi.callPointer(fn, args);
         var lambda = fn.lambda;
-        var env = new Env(fn.env);
-        for (int i = 0; i < lambda.params().size(); i++) env.define(lambda.params().get(i), args[i]);
-        var frame = new Frame("<lambda>", env, fn.typeEnv);
+        var frame = new Frame("<lambda>", new Env(fn.env), fn.typeEnv);
+        for (int i = 0; i < lambda.params().size(); i++) bind(lambda.params().get(i), args[i], frame);
         return runBody(frame, () -> {
             if (lambda.value() != null) return eval(lambda.value(), frame);
             exec(lambda.body(), frame);

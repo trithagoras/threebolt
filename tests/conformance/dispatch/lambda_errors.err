@@ -4,3 +4,7 @@ lambda_errors.3b:12:28: error[E0108]: 'm' is a method; call it: `m()`, or wrap i
 lambda_errors.3b:13:15: error[E0229]: expected a function of 1 parameter(s), this lambda takes 2
 lambda_errors.3b:14:20: error[E0200]: expected 'i32', found 'str'
 lambda_errors.3b:16:34: error[E0212]: `?` would return 'null', which is not assignable to the return type 'i32'
+lambda_errors.3b:23:15: error[E0229]: expected a function of 1 parameter(s), this lambda takes 2
+lambda_errors.3b:24:16: error[E0226]: a 3-tuple pattern cannot match '(i32, str)'
+lambda_errors.3b:25:14: error[E0224]: this pattern does not match every 'i32 | null'; `let`, `for` and lambda parameters need irrefutable patterns
+lambda_errors.3b:26:14: error[E0209]: cannot infer the type of this lambda parameter; annotate it

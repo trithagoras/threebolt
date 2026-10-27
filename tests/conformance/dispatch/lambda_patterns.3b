@@ -1,0 +1,28 @@
+// Destructuring lambda parameters (§7.8, §11).
+
+struct Point { pub let x: i32; pub let y: i32; }
+
+fn apply2(f: fn(i32, i32) -> i32) -> i32 => f(3, 4);
+fn apply_pair(f: fn((i32, i32)) -> i32) -> i32 => f((3, 4));
+
+fn main() {
+    // One tuple parameter, destructured; `(a, b) =>` would be two parameters.
+    let word = "hello";
+    let masked = str::from_chars(word.iter().enumerate().map(((i, c)) => c if i % 2 == 0 else '_'));
+    println(masked);
+    println(f"{apply2((a, b) => a * b)} {apply_pair(((a, b)) => a - b)}");
+
+    // Mixed with plain parameters, nested, wildcards, struct patterns and annotations.
+    let pts = [Point { x: 1, y: 2 }, Point { x: 3, y: 4 }];
+    let dot = pts.iter().fold(0, (acc, Point { x, y }) => acc + x * y);
+    let sum3: fn((i32, (i32, i32))) -> i32 = ((a, (b, c))) => a + b + c;
+    let second = ((_, b): (str, i32)) => b;
+    let swap = ((mut a, b): (i32, i32)) => { a += 10; return (b, a); };
+    let (s0, s1) = swap((1, 2));
+    println(f"{dot} {sum3((1, (2, 3)))} {second(("x", 7))} {s0} {s1}");
+
+    // Bindings are fresh per call, and captured like any parameter.
+    let ps: [(i32, i32)] = [(1, 2), (3, 4)];
+    let makers = ps.iter().map(((a, b)) => () => a + b).to_list();
+    println(f"{makers[0]()} {makers[1]()}");
+}

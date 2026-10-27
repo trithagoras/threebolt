@@ -30,7 +30,7 @@ final class Patterns {
         this.diag = c.diag;
     }
 
-    /** A `let`/`for` pattern: must match every value of {@code type} (§11). */
+    /** A `let`/`for`/lambda-parameter pattern: must match every value of {@code type} (§11). */
     Ir.Pat irrefutable(Pattern p, Type type) {
         int before = diag.count() + diag.dropped();
         var pat = pattern(p, type, new LinkedHashMap<>(), null);
@@ -38,7 +38,7 @@ final class Patterns {
         boolean reported = diag.count() + diag.dropped() > before;
         if (type != Type.ERROR && !reported && !covers(pat, type)) {
             diag.error(Code.REFUTABLE_PATTERN, p.span(), "this pattern does not match every '" + type
-                    + "'; `let` and `for` need irrefutable patterns");
+                    + "'; `let`, `for` and lambda parameters need irrefutable patterns");
         }
         return pat;
     }

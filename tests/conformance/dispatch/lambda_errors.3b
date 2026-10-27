@@ -15,3 +15,13 @@ fn main() {
     let p = (s: str) => i32::parse(s)?;       // ok: the lambda returns `i32 | null`
     let q: fn(str) -> i32 = s => i32::parse(s)?;   // `null` is not assignable to `i32`
 }
+
+fn pairs(f: fn((i32, str)) -> i32) -> i32 => f((1, "a"));
+fn opt(f: fn(i32 | null) -> i32) -> i32 => f(null);
+
+fn patterns() {
+    _ = pairs((a, b) => a);                   // two parameters, not a destructured tuple
+    _ = pairs(((a, b, c)) => a);              // tuple arity mismatch
+    _ = opt((n is i32) => n);                 // refutable parameter pattern
+    let f = ((a, b)) => a;                    // no expected type: annotate the pattern
+}

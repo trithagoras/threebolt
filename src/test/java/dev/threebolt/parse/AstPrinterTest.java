@@ -78,6 +78,13 @@ class AstPrinterTest {
     }
 
     @Test
+    void lambdaPatternParams() {
+        assertEquals("((a, b)) => a", expr("((a, b)) => a"));
+        assertEquals("x => x", expr("((x)) => x"));
+        assertEquals("(acc, P { x, y: (_, mut z) }: P) => z", expr("(acc, P { x, y: (_, mut z) }: P) => z"));
+    }
+
+    @Test
     void bracesAfterArrowsInLambdasAndArms() {
         assertEquals("x => ({ a: 1 })", expr("x => ({ a: 1 })"));
         assertEquals("match x {\n    _ => ({ a }),\n}", expr("match x { _ => ({ a }) }"));

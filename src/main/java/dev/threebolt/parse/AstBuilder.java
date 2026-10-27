@@ -338,8 +338,9 @@ public final class AstBuilder {
     private Expr lambda(LambdaContext ctx) {
         var p = ctx.lambdaParams();
         List<Expr.LambdaParam> params = p.LPAREN() == null
-                ? List.of(new Expr.LambdaParam(p.MUT() != null, name(p.IDENTIFIER()), null, span(p)))
-                : map(p.lambdaParam(), lp -> new Expr.LambdaParam(lp.MUT() != null, name(lp.IDENTIFIER()),
+                ? List.of(new Expr.LambdaParam(new Pattern.Binding(p.MUT() != null, name(p.IDENTIFIER()), null, span(p)),
+                        null, span(p)))
+                : map(p.lambdaParam(), lp -> new Expr.LambdaParam(patternAtom(lp.patternAtom()),
                         lp.type() == null ? null : type(lp.type()), span(lp)));
         var b = ctx.lambdaBody();
         Body body = b.block() != null ? block(b.block()) : assignOrExpr(b.assignOrExpr());

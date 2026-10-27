@@ -3,6 +3,7 @@ package dev.threebolt.types;
 import dev.threebolt.ast.Expr;
 import dev.threebolt.ast.Expr.BinaryOp;
 import dev.threebolt.ast.Name;
+import dev.threebolt.ast.Pattern;
 import dev.threebolt.ast.Stmt;
 import dev.threebolt.ast.TypeExpr;
 import dev.threebolt.ast.Visibility;
@@ -1295,9 +1296,12 @@ final class Exprs {
             Type t;
             if (p.type() != null) t = types.resolve(p.type(), c.ctx.typeScope);
             else if (expectedFn != null) t = expectedFn.params().get(i);
-            else {
-                diag.error(Code.CANNOT_INFER, p.span(), "cannot infer the type of lambda parameter '" + p.name().text()
-                        + "'; annotate it: `" + p.name().text() + ": T`");
+            else if (p.pattern() instanceof Pattern.Binding b) {
+                diag.error(Code.CANNOT_INFER, p.span(), "cannot infer the type of lambda parameter '" + b.name().text()
+                        + "'; annotate it: `" + b.name().text() + ": T`");
+                t = Type.ERROR;
+            } else {
+                diag.error(Code.CANNOT_INFER, p.span(), "cannot infer the type of this lambda parameter; annotate it");
                 t = Type.ERROR;
             }
             paramTypes.add(t);
@@ -1307,10 +1311,15 @@ final class Exprs {
         var ctx = c.lambdaCtx(ret);
         final Type knownRet = ret;
         return c.inCtx(ctx, () -> {
-            var locals = new ArrayList<Local>();
+            var params = new ArrayList<Ir.Pat>();
             for (int i = 0; i < l.params().size(); i++) {
                 var p = l.params().get(i);
-                locals.add(c.declare(p.name().text(), p.isMutable(), paramTypes.get(i), p.span()));
+                if (p.pattern() instanceof Pattern.Binding b && b.isType() == null) {
+                    var local = c.declare(b.name().text(), b.isMutable(), paramTypes.get(i), p.span());
+                    params.add(new Ir.PBind(local, null, false));
+                } else {
+                    params.add(c.patterns.irrefutable(p.pattern(), paramTypes.get(i)));
+                }
             }
             Ir.Stmt body = null;
             Ir.Expr value = null;
@@ -1350,7 +1359,7 @@ final class Exprs {
                 }
             }
             var type = new Type.Fn(paramTypes, inferred, false);
-            return new Typed(new Ir.Lambda(locals, body, value, type), type);
+            return new Typed(new Ir.Lambda(params, body, value, type), type);
         });
     }
 
