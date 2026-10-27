@@ -152,7 +152,7 @@ pub class Random {
     }
 
     /// Shuffles `xs` in place.
-    pub fn shuffle<T>(mut self, xs: [T]) {
+    pub fn shuffle<T>(mut self, mut xs: [T]) {
         let mut i = xs.len;
         while i > 1 {
             let j = self.index(i);
@@ -166,7 +166,7 @@ pub class Random {
     /// `k` distinct elements of `xs` (distinct by position) in random order.
     pub fn sample<T>(mut self, xs: [T], k: usize) -> [T] {
         if k > xs.len { panic(f"sample: {k} elements from a list of {xs.len}"); }
-        let pool = xs[..];
+        let mut pool = xs[..];
         for i in 0..k {
             let j = i + self.index(pool.len - i);
             let t = pool[i];

@@ -1,0 +1,57 @@
+class Enemy {
+    pub let hp: i32;
+    pub fn new(hp: i32) -> Self => { hp };
+}
+
+/// A user collection: `in` works through `Contains`.
+struct Evens : Contains<i32> {
+    pub fn contains(self, x: i32) -> bool => x % 2 == 0;
+}
+
+fn has<C: Contains<i32>>(c: C, x: i32) -> bool => x in c;
+
+fn main() {
+    let xs = [1, 2, 3];
+    println(2 in xs);
+    println(5 in xs);
+    println(!(5 in xs));
+
+    // Maps test their keys; their iterators search.
+    let m: Map<str, i32> = ["a": 1, "b": 2];
+    println("a" in m);
+    println("a" in m.keys);
+    println(2 in m.values);
+    println(3 in m.values);
+    println(m.keys.contains("b"));
+    println(typeof(Enemy) in [typeof(Enemy): 0].keys);
+
+    // Searching an iterator consumes it up to the match.
+    let it = xs.iter();
+    println(2 in it);
+    println(it.to_list());
+    println(4 in xs.iter().map(x => x * 2));
+    println(1 in xs.iter().filter(x => x > 1));
+
+    let s: Set<i32> = [1, 2];
+    println(2 in s);
+    println(3 in 1..5);
+    println(5 in 1..5);
+    println(5 in 1..=5);
+
+    // A str contains chars, as `for` yields them.
+    println('e' in "hello");
+    println('z' in "hello");
+    for ch in "hi" { println(ch); }
+
+    // Classes compare by identity.
+    let a = Enemy::new(1);
+    let es = [a];
+    println(a in es);
+    println(Enemy::new(1) in es);
+
+    println(4 in Evens {});
+    println(has(Evens {}, 3));
+    println(has(xs, 3));
+    let c: Contains<i32> = xs.iter();
+    println(c.contains(3));
+}

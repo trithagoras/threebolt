@@ -247,6 +247,21 @@ class TypeSystemTest {
         assertNotNull(ts.implementsAs(union(Prim.I32, Type.NULL), ts.hash));
         assertNull(ts.implementsAs(Prim.F64, ts.hash), "floats have no Hash");
         assertNull(ts.implementsAs(Prim.BOOL, ts.ord), "bool has no Ord");
+        assertNotNull(ts.implementsAs(type("Animal"), ts.eq), "classes by identity");
+        assertNotNull(ts.implementsAs(type("Speak"), ts.eq), "trait references by identity");
+        assertNull(ts.implementsAs(type("Animal"), ts.hash));
+    }
+
+    @Test
+    void containsInstances() {
+        assertEquals(ts.nominal(ts.contains, Prim.STR), ts.implementsAs(ts.listOf(Prim.STR), ts.contains));
+        assertEquals(ts.nominal(ts.contains, type("Animal")), ts.implementsAs(ts.listOf(type("Animal")), ts.contains));
+        assertNull(ts.implementsAs(ts.listOf(type("Holder")), ts.contains), "elements without Eq");
+        assertEquals(ts.nominal(ts.contains, Prim.I32), ts.implementsAs(ts.nominal(ts.iterator, Prim.I32), ts.contains),
+                "an impl on a trait reference");
+        assertNull(ts.implementsAs(type("Dog"), ts.contains));
+        assertEquals(ts.nominal(ts.contains, Prim.CHAR), ts.implementsAs(Prim.STR, ts.contains));
+        assertEquals(ts.nominal(ts.iterable, Prim.CHAR), ts.implementsAs(Prim.STR, ts.iterable));
     }
 
     @Test

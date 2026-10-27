@@ -1,0 +1,6 @@
+index_assign_errors.3b:5:43: error[E0300]: cannot assign through `self` in a method declared `self`; declare it `mut self`
+index_assign_errors.3b:10:5: error[E0300]: cannot assign to immutable binding 'xs'; declare it `let mut`
+index_assign_errors.3b:11:5: error[E0300]: cannot assign to immutable binding 'xs'; declare it `let mut`
+index_assign_errors.3b:12:5: error[E0301]: 'set' takes `mut self`, but cannot assign to immutable binding 'xs'; declare it `let mut`
+index_assign_errors.3b:14:5: error[E0300]: cannot assign to immutable binding 'ps'; declare it `let mut`
+index_assign_errors.3b:16:5: error[E0300]: cannot assign to immutable binding 'm'; declare it `let mut`

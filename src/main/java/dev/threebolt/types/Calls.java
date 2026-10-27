@@ -251,6 +251,8 @@ final class Calls {
             }
             case Type.Nominal n when n.decl().isTrait() -> {
                 for (var tr : TypeSystem.selfAndSupers(n)) traitMembers(tr, t, name, out);
+                // Traits implemented for the trait reference itself (`impl Contains<T> for Iterator<T>`, §4.10).
+                if (out.isEmpty()) traitMethods(n.decl(), t, name, out);
             }
             case Type.Nominal n when n.decl().isClass() -> {
                 collectClassMethods(n, name, out, false);

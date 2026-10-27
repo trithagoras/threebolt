@@ -1,0 +1,12 @@
+trait Shape { fn area(self) -> f64; }
+struct Square : Shape { pub fn area(self) -> f64 => 1.0; }
+trait Named { fn name(self) -> str; }
+
+impl Eq for Ord { fn eq(self, o: Self) -> bool => true; }
+impl Named for Shape { fn name(self) -> str => "shape"; }
+
+fn main() {
+    // Only values whose static type is the trait reference get the impl.
+    let sq = Square {};
+    let n = sq.name();
+}

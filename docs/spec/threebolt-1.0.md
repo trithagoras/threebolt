@@ -284,6 +284,7 @@ impl<T: Display> Display for [T] { ... }
 - A base list also implements the supertraits of each listed trait from the body's methods, unless they are implemented elsewhere: `struct Position : Component { pub fn default() -> Self => {}; }` implements `Default` (§18).
 - `impl` may appear in any module, for any trait and any type (no orphan rule). Two impls of the same (trait, type-constructor) pair anywhere in the program ⇒ error.
 - Generic impls are allowed for a generic type constructor (`impl<T: Eq> Eq for [T]`). Blanket impls over a bare type parameter (`impl<T: X> Y for T`) are not permitted in 1.0.
+- The target may be a trait reference (§8.3): `impl<T: Eq> Contains<T> for Iterator<T>`. Values whose static type is that trait reference implement the trait; types that implement `Iterator` do not thereby implement `Contains`. A call through the impl dispatches to the receiver's own implementation of the trait if its runtime type has one, and otherwise runs the impl. Implementing a trait for a trait reference that already has it as itself or a supertrait (`impl Eq for Ord`) is an error.
 - `impl` blocks contain only implementations of that trait's members.
 
 ### 4.11 Enums
@@ -311,12 +312,12 @@ A **place** is a local binding, parameter, `self`, a field access on a place or 
 - binding/parameter/static: declared `mut`;
 - `self`: receiver declared `mut self`;
 - field `p.f`: `p` is a mutable place (whether `p` has value or reference type). E.g. inside a `mut self` method, `self.hp = 0` and `self.entity.add(c)` (a `mut self` method on a field) are both permitted.
-- index `c[i]`: `c` is a place (or reference) whose type implements `IndexMut`; if `c` has value type, `c` must be a mutable place.
+- index `c[i]`: `c`'s type implements `IndexMut` and `c` is a mutable place, whether `c` has value or reference type, as for calling `IndexMut::set` (a `mut self` method, §5.2). A temporary of reference type also counts (`make_list()[0] = 1`).
 
 ### 5.2 What `mut` permits
 - **Assignment** (`=`, compound) requires a mutable place.
 - **Calling a `mut self` method** requires the receiver expression to be a mutable place **or a temporary** (non-place, e.g. a call result — enables builder chaining). Receivers reached through a reference-typed immutable binding are not mutable: `let e = Entity::new(); e.add(c);` ⇒ error.
-- Index assignment follows §5.1: `let xs = [1]; xs[0] = 2;` is permitted (`xs` refers to a list, a reference type), while `xs.push(3)` is not (`push` takes `mut self`).
+- Index assignment follows §5.1, like any other mutation: `let xs = [1]; xs[0] = 2;` ⇒ error, as is `xs.push(3)` (`push` takes `mut self`); with `let mut xs` both are permitted. Inside a `self` method, `self.items[i] = v` ⇒ error; declare the method `mut self`.
 - Mutability is **shallow** and expresses intent, not a guarantee: `let a = Entity::new(); let mut b = a; b.add(c);` is legal and mutates the object `a` refers to.
 - Inside a `mut self` method, `self` is a mutable place; inside a `self` method it is not (so neither fields of `self` nor `mut self` methods on `self` are usable mutably; fields holding references may still have non-`mut` methods called).
 
@@ -328,7 +329,7 @@ A **place** is a local binding, parameter, `self`, a field access on a place or 
 - `for mut x in xs` over value-type elements binds copies; mutations do not affect `xs`.
 
 ### 5.4 Classes (references)
-- Assignment copies the reference. Identity is preserved; `==` is reference equality unless `Eq` is implemented. This includes `[T]`, `Map` and `Set`, which do not implement `Eq`: `[1] == [1]` is `false`.
+- Assignment copies the reference. Identity is preserved. Classes and trait references automatically implement `Eq` as reference equality, so they satisfy `T: Eq` bounds; an explicit `Eq` impl overrides it. This includes `[T]`, `Map` and `Set`: `[1] == [1]` is `false`.
 
 ### 5.5 Boxing
 - Converting a struct value to a trait type (§3.5 rule 5) copies it into a GC-allocated box. The trait reference refers to the box.
@@ -409,7 +410,7 @@ Function expression bodies, lambda bodies, `match` arms, and `unsafe =>` accept 
 | 8 | `^` | left |
 | 9 | `\|` | left |
 | 10 | `..` `..=` | none |
-| 11 | `== != < > <= >=` `is` | none (no chaining) |
+| 11 | `== != < > <= >=` `is` `in` | none (no chaining) |
 | 12 | `&&` | left |
 | 13 | `\|\|` | left |
 | 14 | `??` | right |
@@ -430,8 +431,9 @@ Bitwise binds tighter than comparison (no C precedence trap).
   - What follows `is` is decided syntactically: `[` or `(` starts a pattern (`xs is []`, `xs is [first, ..rest]`, `t is (0, _)`); so do `Name { ... }` (a struct pattern, subject to §6.3) and a literal followed by `..`/`..=` (`n is 1..=9`). Anything else is a type, as before (`x is i32`, `x is Foo<T>`, `x is i32 | null`, `x is "a"`, `x is null`).
   - So a list or tuple **type** cannot be written after `is` with brackets: write `x is List<str>` (`[str]` is `List<str>`), or a pattern of type tests `t is (is i32, is str)`. A name that denotes a type where a pattern expects a binding (`xs is [str]`, `x is (i32 | str)`) is an error.
   - Or-patterns are allowed inside brackets (`xs is [1 | 2, ..]`); at the top level, `|` after a type extends the union and after a pattern is a bitwise or.
+- `x in c`: membership test through the `Contains` trait (§16): `c`'s type must implement `Contains<E>`, `x` is checked against `E`, and the result is `Contains::contains(c, x)` (`c` is evaluated before `x`). Implemented by `[T]`, `Set<T>`, `Range<T>`, `Map<K, V>` (tests keys), `Iterator<T>` (searches the remaining elements, consuming the iterator up to the first match) and `str` (as `Contains<char>`, so `'e' in s`; substrings use `s.contains("ab")`).
 - Ranges `a..b` (half-open), `a..=b` (inclusive): integer or `char` operands; type `Range<T>` (implements `Iterable<T>`).
-- **Overloadable** via traits (§16): `+ - * / %` unary `-`, `== !=` (`Eq`), `< > <= >=` (`Ord`), `[]` (`Index`, `IndexMut`), `& | ^ ~ << >>`. Compound assignment uses the binary operator. **Not** overloadable: `&& || ! ?? ? is as as? ..`, assignment.
+- **Overloadable** via traits (§16): `+ - * / %` unary `-`, `== !=` (`Eq`), `< > <= >=` (`Ord`), `[]` (`Index`, `IndexMut`), `in` (`Contains`), `& | ^ ~ << >>`. Compound assignment uses the binary operator. **Not** overloadable: `&& || ! ?? ? is as as? ..`, assignment.
 
 ### 7.4 Conditional expression
 `a if cond else b` — evaluates `cond` first, then exactly one branch. Type: `A | B`. `cond` per §6.6. In `a`, narrowing from `cond` applies; in `b`, the negated narrowing applies.
@@ -704,13 +706,14 @@ Implicitly imported names:
 | `IndexMut<I, V> : Index<I, V>` | `fn set(mut self, i: I, v: V)` | `c[i] = v` |
 | `Iterator<T>` | `fn next(mut self) -> T \| Done` + defaults: `map filter for_each fold any all count enumerate of_type<U> to_list first` | `Done` sentinel avoids null-collapse |
 | `Iterable<T>` | `fn iter(self) -> Iterator<T>` | `for` loops |
+| `Contains<T: Eq>` | `fn contains(self, x: T) -> bool` | `in` (§7.3) |
 | `Num Signed Integer Float` | §10.1 | generic numeric code |
 
-**Collections** (`[T]`, `Map`, `Set`): implement `Len`, `Truthy`, `Iterable`, `Index`/`IndexMut` (`[T]`, `Map`). `[T]`: `push(mut self, v)`, `pop(mut self) -> T | null`, `insert`, `remove`, getter `first -> T | null`, `enumerate() -> Iterator<(usize, T)>`. `Map`: `get(k) -> V | null`, `contains_key(k)`, getters `keys`, `values` (iterators), `remove`. **Convention:** ergonomic accessors (`get`, `pop`, `first`) use `T | null` and accept null-collapse for nullable element types (disambiguate with `len`/`contains_key`); only `Iterator::next` uses `Done`. Full API is a separate stdlib document.
+**Collections** (`[T]`, `Map`, `Set`): implement `Len`, `Truthy`, `Iterable`, `Contains` (`Map` tests keys; `[T]` when `T: Eq`), `Index`/`IndexMut` (`[T]`, `Map`). `[T]`: `push(mut self, v)`, `pop(mut self) -> T | null`, `insert`, `remove`, getter `first -> T | null`, `enumerate() -> Iterator<(usize, T)>`. `Map`: `get(k) -> V | null`, `contains_key(k)`, getters `keys`, `values` (iterators), `remove`. **Convention:** ergonomic accessors (`get`, `pop`, `first`) use `T | null` and accept null-collapse for nullable element types (disambiguate with `len`/`contains_key`); only `Iterator::next` uses `Done`. Full API is a separate stdlib document.
 
 **Numeric methods:** the members of the numeric traits (§10.1); `min max abs pow sqrt` (floats), `wrapping_* checked_* saturating_*`, `T::parse(s: str) -> T | null`, `T::MIN`, `T::MAX`.
 
-**Primitive trait impls:** every primitive implements `Display` and `Eq`; all but `bool` implement `Ord`; all but floats implement `Hash`. Numeric types implement `Add Sub Mul Div Rem`, signed ones (and floats) `Neg`; integers implement `BitAnd BitOr BitXor Not Shl Shr`. `str` also implements `Len`, `Truthy` and `Add` (concatenation).
+**Primitive trait impls:** every primitive implements `Display` and `Eq`; all but `bool` implement `Ord`; all but floats implement `Hash`. Numeric types implement `Add Sub Mul Div Rem`, signed ones (and floats) `Neg`; integers implement `BitAnd BitOr BitXor Not Shl Shr`. `str` also implements `Len`, `Truthy`, `Add` (concatenation), `Iterable<char>` and `Contains<char>`.
 
 **`Display` formats:** `null` as `null` (`null` implements `Display`, so `T | null` does when `T` does); integers in decimal; `bool` as `true`/`false`; `char` as itself. Floats print the shortest digits that round-trip, never with an exponent, and integral values without a fraction: `1`, `0.5`, `0.30000000000000004`, `1000000000000000000000`, `-0`, `inf`, `-inf`, `NaN`.
 
@@ -927,3 +930,11 @@ Semantics the spec left open, decided while implementing:
 - §10 Inference takes the expected type for a return-type parameter determined only by unsuffixed numeric literals.
 - §16 `std::random`'s `randint`/`randrange` and `std::math`'s `gcd`/`lcm`/`clamp` are generic. A trait's static members (including default bodies) can be called through an implementing type: `Mod7::zero()`.
 - Fix: `abs` on an unsigned integer is the identity (it negated values with the top bit set).
+
+### 2026-10-27 — `in` operator
+- §7.2, §7.3, §16 `x in c` is a membership test at comparison precedence, through the new prelude trait `Contains<T: Eq>`. Implemented by `[T]`, `Set`, `Range`, `Map` (keys; `Map` gains `contains(k)`), `Iterator<T>` (consuming search) and `str` (`Contains<char>`). `str` also implements `Iterable<char>`, so `for ch in s` works.
+- §4.10 An impl may target a trait reference (`impl<T: Eq> Contains<T> for Iterator<T>`); it applies to values of that static type, and runtime dispatch prefers the value's own implementation.
+- §5.4 Classes and trait references implement `Eq` (identity) automatically, so they meet `T: Eq` bounds; before, `==` worked on them but the bound did not.
+
+### 2026-10-27 — index assignment needs a mutable place
+- §5.1, §5.2 `c[i] = v` requires `c` to be a mutable place even when `c` has reference type, matching `c.set(i, v)` (`IndexMut::set` takes `mut self`). Before, `let xs = [1]; xs[0] = 2;` and `self.map[k] = v` in a `self` method were permitted while the equivalent `set` call was not.

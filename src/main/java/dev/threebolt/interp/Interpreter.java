@@ -450,6 +450,14 @@ public final class Interpreter {
             for (FnInfo g : fns) if (g.params.size() == fn.params.size()) m = g;
             return m.isVirtual() ? virtualTarget(m, recv) : m;
         }
+        // An impl for a trait reference the value implements (`impl Contains<T> for Iterator<T>`, §4.10).
+        for (ImplInfo impl : ts.traitRefImpls(trait)) {
+            for (TypeInfo d = declOf(v); d != null; d = d.baseDecl()) {
+                if (ts.impl(impl.targetDecl, d) == null) continue;
+                var fns = impl.methods.get(fn.name());
+                if (fns != null && !fns.isEmpty()) return fns.getFirst();
+            }
+        }
         return fn.hasBody() ? fn : null;
     }
 

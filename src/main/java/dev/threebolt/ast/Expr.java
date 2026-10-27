@@ -149,7 +149,7 @@ public sealed interface Expr extends Body {
     /** Binary operators with their §7.2 precedence level (higher binds tighter). */
     enum BinaryOp {
         COALESCE("??", 3), OR("||", 4), AND("&&", 5),
-        EQ("==", 6), NE("!=", 6), LT("<", 6), LE("<=", 6), GT(">", 6), GE(">=", 6),
+        EQ("==", 6), NE("!=", 6), LT("<", 6), LE("<=", 6), GT(">", 6), GE(">=", 6), IN("in", 6),
         RANGE("..", 7), RANGE_INCLUSIVE("..=", 7),
         BIT_OR("|", 8), BIT_XOR("^", 9), BIT_AND("&", 10), SHL("<<", 11), SHR(">>", 11),
         ADD("+", 12), SUB("-", 12), MUL("*", 13), DIV("/", 13), REM("%", 13);

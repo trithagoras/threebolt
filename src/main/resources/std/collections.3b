@@ -1,7 +1,7 @@
 // std::collections (spec §16). Map and Set are also in the prelude. Iteration follows insertion
 // order.
 
-pub class Map<K: Hash + Eq, V> : Len, Truthy, Iterable<(K, V)>, Index<K, V>, IndexMut<K, V> {
+pub class Map<K: Hash + Eq, V> : Len, Truthy, Iterable<(K, V)>, Contains<K>, Index<K, V>, IndexMut<K, V> {
     pub get fn len(self) -> usize;
     pub fn truthy(self) -> bool;
     pub fn iter(self) -> Iterator<(K, V)>;
@@ -9,13 +9,15 @@ pub class Map<K: Hash + Eq, V> : Len, Truthy, Iterable<(K, V)>, Index<K, V>, Ind
     pub fn set(mut self, k: K, v: V);
     pub fn get(self, k: K) -> V | null;
     pub fn contains_key(self, k: K) -> bool;
+    /// `k in map` tests the keys (§7.3).
+    pub fn contains(self, k: K) -> bool => self.contains_key(k);
     pub fn remove(mut self, k: K) -> V | null;
     pub fn clear(mut self);
     pub get fn keys(self) -> Iterator<K>;
     pub get fn values(self) -> Iterator<V>;
 }
 
-pub class Set<T: Hash + Eq> : Len, Truthy, Iterable<T> {
+pub class Set<T: Hash + Eq> : Len, Truthy, Iterable<T>, Contains<T> {
     pub get fn len(self) -> usize;
     pub fn truthy(self) -> bool;
     pub fn iter(self) -> Iterator<T>;
