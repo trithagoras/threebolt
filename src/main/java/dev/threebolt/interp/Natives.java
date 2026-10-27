@@ -491,8 +491,15 @@ final class Natives {
 
     private Object str(String name, String s, Object[] a) {
         return switch (name) {
-            case "len" -> usize(Ops.utf8Length(s));
+            case "len" -> usize(s.codePointCount(0, s.length()));
             case "truthy" -> !s.isEmpty();
+            case "index" -> {
+                long i = ((Int) a[0]).v();
+                int len = s.codePointCount(0, s.length());
+                // usize values above i64::MAX are negative here; they are out of range anyway.
+                if (i < 0 || i >= len) throw new Panic("index " + Long.toUnsignedString(i) + " out of range for a string of length " + len);
+                yield new Char(s.codePointAt(s.offsetByCodePoints(0, (int) i)));
+            }
             case "chars" -> {
                 var cps = s.codePoints().iterator();
                 yield generate(Prim.CHAR, () -> cps.hasNext() ? new Char(cps.next()) : in.done);
@@ -507,9 +514,17 @@ final class Natives {
             case "ends_with" -> s.endsWith((String) a[0]);
             case "find" -> {
                 int i = s.indexOf((String) a[0]);
-                yield i < 0 ? null : usize(Ops.utf8Length(s.substring(0, i)));
+                yield i < 0 ? null : usize(s.codePointCount(0, i));
             }
-            case "slice" -> slice(s, ((Int) a[0]).v(), ((Int) a[1]).v());
+            case "slice" -> {
+                long start = ((Int) a[0]).v(), end = ((Int) a[1]).v();
+                int len = s.codePointCount(0, s.length());
+                if (start < 0 || end < 0 || end > len || start > end) {
+                    throw new Panic("slice " + Long.toUnsignedString(start) + ".." + Long.toUnsignedString(end)
+                            + " out of range for a string of length " + len);
+                }
+                yield Ops.substring(s, start, end);
+            }
             case "upper" -> s.toUpperCase(Locale.ROOT);
             case "lower" -> s.toLowerCase(Locale.ROOT);
             case "trim" -> s.strip();
@@ -539,22 +554,6 @@ final class Natives {
             case "add" -> s + a[0];
             default -> unknown("str." + name);
         };
-    }
-
-    /** Byte offsets; panics unless both fall on character boundaries. */
-    private static String slice(String s, long start, long end) {
-        var bytes = s.getBytes(StandardCharsets.UTF_8);
-        if (start < 0 || end > bytes.length || start > end) {
-            throw new Panic("slice " + start + ".." + end + " out of range for a string of length " + bytes.length);
-        }
-        if (!boundary(bytes, (int) start) || !boundary(bytes, (int) end)) {
-            throw new Panic("slice " + start + ".." + end + " is not on character boundaries");
-        }
-        return new String(bytes, (int) start, (int) (end - start), StandardCharsets.UTF_8);
-    }
-
-    private static boolean boundary(byte[] b, int i) {
-        return i == b.length || (b[i] & 0xC0) != 0x80;
     }
 
     private Object character(String name, Char c, Object[] a) {

@@ -4,7 +4,8 @@ fn main() {
     let mut xs = [1, 2, 3];
     xs[1..3] = [5];                       // a slice is not a place
     xs[1..] = [5];
-    _ = "hello"[1..];                     // only lists and arrays
+    let n = 5;
+    _ = n[1..];                           // only lists, arrays and strings
     let m: Map<str, i32> = [:];
     _ = m[..];
     let i: i32 = 1;

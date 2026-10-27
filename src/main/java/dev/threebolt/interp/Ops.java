@@ -407,13 +407,9 @@ public final class Ops {
         return h;
     }
 
-    public static int utf8Length(String s) {
-        int n = 0;
-        for (int i = 0; i < s.length(); ) {
-            int cp = s.codePointAt(i);
-            n += cp < 0x80 ? 1 : cp < 0x800 ? 2 : cp < 0x10000 ? 3 : 4;
-            i += Character.charCount(cp);
-        }
-        return n;
+    /** Characters {@code [start, end)} of {@code s}, counted in code points (§3.1); the range must be valid. */
+    public static String substring(String s, long start, long end) {
+        int from = s.offsetByCodePoints(0, (int) start);
+        return s.substring(from, s.offsetByCodePoints(from, (int) (end - start)));
     }
 }

@@ -83,7 +83,7 @@ final class Exprs {
                     yield slice(r, sl.low(), sl.high(), sl.isInclusive(), sl.span());
                 }
                 diag.error(Code.BAD_OPERAND, sl.target().span(), "'" + TypeSystem.widen(r.value().type())
-                        + "' cannot be sliced; open-ended ranges only slice lists and arrays (§7.6)");
+                        + "' cannot be sliced; open-ended ranges only slice lists, arrays and strings (§7.6)");
                 yield error();
             }
             case Expr.Propagate p -> propagate(p);
@@ -570,7 +570,7 @@ final class Exprs {
         return ir;
     }
 
-    /** Indexing by a range is not a receiver place: on a list or array it is a slice, a copy (§7.6). */
+    /** Indexing by a range is not a receiver place: on a list, array or str it is a slice, a copy (§7.6). */
     private static boolean isPlaceSyntax(Expr e) {
         return e instanceof Expr.Self || e instanceof Expr.Member || (e instanceof Expr.Index i && !isRange(i.index()))
                 || (e instanceof Expr.Path p && p.segments().size() == 1);
@@ -662,11 +662,12 @@ final class Exprs {
         return e instanceof Expr.Binary b && (b.op() == BinaryOp.RANGE || b.op() == BinaryOp.RANGE_INCLUSIVE);
     }
 
-    /** The element type of a list or array receiver, or null. */
+    /** The element type of a list, array or str receiver, or null. */
     private Type sliceElement(Recv r) {
-        return switch (TypeSystem.expand(r.value().type())) {
+        return switch (TypeSystem.widen(TypeSystem.expand(r.value().type()))) {
             case Type.Array a -> a.element();
             case Type.Nominal n when n.decl().isList() -> n.args().getFirst();
+            case Prim p when p == Prim.STR -> Prim.CHAR;
             default -> null;
         };
     }
@@ -675,13 +676,15 @@ final class Exprs {
         return sliceElement(r) != null;
     }
 
-    /** {@code xs[low..high]}: a copy of the selected elements as a new list. */
+    /** {@code xs[low..high]}: a copy of the selected elements as a new list, or a str of a str's. */
     private Typed slice(Recv r, Expr low, Expr high, boolean inclusive, Span span) {
         var lo = low == null ? null : c.check(low, Prim.USIZE);
         var hi = high == null ? null : c.check(high, Prim.USIZE);
         var element = sliceElement(r);
         if (element == null) return error();
-        return new Typed(new Ir.Slice(r.value().ir(), lo, hi, inclusive, span), ts.listOf(element));
+        var result = element == Prim.CHAR && TypeSystem.widen(TypeSystem.expand(r.value().type())) == Prim.STR
+                ? Prim.STR : ts.listOf(element);
+        return new Typed(new Ir.Slice(r.value().ir(), lo, hi, inclusive, span), result);
     }
 
     /** {@code c[i]} as a place (§7.6); null after an error. */

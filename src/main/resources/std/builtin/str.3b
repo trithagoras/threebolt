@@ -1,14 +1,17 @@
-// Members of str. Lengths and offsets count UTF-8 bytes.
+// Members of str. Lengths and offsets count characters (Unicode scalar values), not bytes.
 
 pub get fn len(self) -> usize;
 pub fn truthy(self) -> bool;
 pub fn chars(self) -> Iterator<char>;
+/// The UTF-8 encoding.
 pub fn bytes(self) -> Iterator<u8>;
 pub fn contains(self, s: str) -> bool;
 pub fn starts_with(self, s: str) -> bool;
 pub fn ends_with(self, s: str) -> bool;
 pub fn find(self, s: str) -> usize | null;
 pub fn slice(self, start: usize, end: usize) -> str;
+/// `s[i]`: the `i`th character; panics if out of range.
+pub fn index(self, i: usize) -> char;
 pub fn upper(self) -> str;
 pub fn lower(self) -> str;
 pub fn trim(self) -> str;

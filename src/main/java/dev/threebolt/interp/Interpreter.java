@@ -801,12 +801,16 @@ public final class Interpreter {
         return Ops.comparePrim(a, b);
     }
 
-    /** {@code xs[a..b]} (§7.6): copies of the selected elements as a new list. */
-    private ListVal slice(Ir.Slice sl, Frame f) {
+    /** {@code xs[a..b]} (§7.6): copies of the selected elements as a new list, or a str's characters. */
+    private Object slice(Ir.Slice sl, Frame f) {
         var target = eval(sl.target(), f);
         Object lowV = sl.low() == null ? null : eval(sl.low(), f);
         Object highV = sl.high() == null ? null : eval(sl.high(), f);
         f.at = sl.span();
+        if (target instanceof String s) {
+            long[] r = sliceBounds(lowV, highV, sl.isInclusive(), s.codePointCount(0, s.length()));
+            return Ops.substring(s, r[0], r[1]);
+        }
         Type element;
         List<Object> items;
         if (target instanceof ArrayVal a) {
@@ -819,19 +823,24 @@ public final class Interpreter {
                 items = new ArrayList<>(l.items);
             }
         }
-        long len = items.size();
+        long[] r = sliceBounds(lowV, highV, sl.isInclusive(), items.size());
+        var out = new ArrayList<Object>((int) (r[1] - r[0]));
+        for (long i = r[0]; i < r[1]; i++) out.add(Values.copy(items.get((int) i)));
+        return new ListVal(element, out);
+    }
+
+    /** The half-open range {@code [start, end)} a slice selects; panics unless it lies within {@code len}. */
+    private static long[] sliceBounds(Object lowV, Object highV, boolean inclusive, long len) {
         // usize values above i64::MAX are negative here; they are out of range anyway.
         long low = lowV == null ? 0 : ((Int) lowV).v();
         long end = highV == null ? len : ((Int) highV).v();
-        if (highV != null && sl.isInclusive()) end = end < 0 || end == Long.MAX_VALUE ? -1 : end + 1;
+        if (highV != null && inclusive) end = end < 0 || end == Long.MAX_VALUE ? -1 : end + 1;
         if (end < 0 || end > len) {
-            throw new Panic("slice end " + (highV == null ? len : highV) + (sl.isInclusive() ? " (inclusive)" : "")
+            throw new Panic("slice end " + (highV == null ? len : highV) + (inclusive ? " (inclusive)" : "")
                     + " out of range for length " + len);
         }
         if (low < 0 || low > end) throw new Panic("slice start " + lowV + " is past its end " + end);
-        var out = new ArrayList<Object>((int) (end - low));
-        for (long i = low; i < end; i++) out.add(Values.copy(items.get((int) i)));
-        return new ListVal(element, out);
+        return new long[] {low, end};
     }
 
     /** {@code Display} (§16), as used by f-strings. */

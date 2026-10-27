@@ -638,6 +638,8 @@ public final class Declarer {
             }
             builtinImpls(ts.prims.get(p), traits);
         }
+        // `s[i]` (§7.6): the only generic trait a primitive implements without an `impl`.
+        builtinImpl(ts.prims.get(Prim.STR), new Type.Nominal(ts.index, List.of(Prim.USIZE, Prim.CHAR)));
         for (TypeInfo t : allTypes) {
             if (!t.isEnum()) continue;
             var traits = new ArrayList<>(List.of(ts.display, ts.eq, ts.ord, ts.hash));
@@ -649,12 +651,14 @@ public final class Declarer {
     }
 
     private void builtinImpls(TypeInfo owner, List<TypeInfo> traits) {
-        for (TypeInfo tr : traits) {
-            var impl = new ImplInfo(new Type.Nominal(tr, List.of()), owner, prelude, null);
-            impl.target = ts.selfType(owner);
-            for (String member : tr.methods.keySet()) for (FnInfo f : owner.methods(member)) impl.addMethod(f);
-            ts.addImpl(impl);
-        }
+        for (TypeInfo tr : traits) builtinImpl(owner, new Type.Nominal(tr, List.of()));
+    }
+
+    private void builtinImpl(TypeInfo owner, Type.Nominal trait) {
+        var impl = new ImplInfo(trait, owner, prelude, null);
+        impl.target = ts.selfType(owner);
+        for (String member : trait.decl().methods.keySet()) for (FnInfo f : owner.methods(member)) impl.addMethod(f);
+        ts.addImpl(impl);
     }
 
     // ---- Declaration checks ----

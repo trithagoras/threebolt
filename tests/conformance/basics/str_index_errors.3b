@@ -1,0 +1,8 @@
+// §7.6: str is immutable and s[i] is a char.
+
+fn main() {
+    let mut s = "abc";
+    s[0] = 'x';
+    let t: str = s[0];
+    let u: char = s[0..1];
+}

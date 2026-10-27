@@ -1,0 +1,21 @@
+// §3.1, §7.6: str lengths, indices and offsets count characters, not bytes.
+
+fn main() {
+    let s = "héllo😀";
+    println(f"{s.len} {s.bytes().count()}");
+    let c: char = s[1];
+    println(f"{c} {s[5]} {s[0] == 'h'}");
+    println(f"[{s[1..3]}] [{s[..2]}] [{s[4..]}] [{s[..]}] [{s[1..=1]}] [{s[6..]}]");
+    println(f"{s.slice(1, 4)} {s.find("l") ?? 99} {s.find("😀") ?? 99}");
+    let i = s.find("ll") ?? 0;
+    println(s[i..i + 2]);
+    let mut rev = "";
+    let mut j = s.len;
+    while j > 0 {
+        j -= 1;
+        rev += s[j].to_str();
+    }
+    println(rev);
+    println(s.index(2));
+    println(f"{"literal"[0]} {"literal"[1..4]} {"literal"[4..]}");
+}

@@ -1,0 +1,2 @@
+panic: index 2 out of range for a string of length 2
+    at main (str_index_range.3b:7:13)

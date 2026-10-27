@@ -1,0 +1,3 @@
+str_index_errors.3b:5:5: error[E0300]: 'str' does not implement `IndexMut`
+str_index_errors.3b:6:18: error[E0200]: expected 'str', found 'char'
+str_index_errors.3b:7:19: error[E0200]: expected 'char', found 'str'

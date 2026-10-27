@@ -94,7 +94,7 @@ use std::math::*;               // every pub item of a module
 `i8 i16 i32 i64 isize u8 u16 u32 u64 usize f32 f64 bool char str`
 
 - Primitive names are lowercase and predeclared, not keywords; static members use paths as for any type (`i32::parse(s)`, `u64::MAX`, `str::from_cstr(p)`). Declaring a type with a primitive's name is an error (outside the standard library: `c::char`, §14.2, is an alias in `std::c`). Nominal and stdlib types are PascalCase (`Type`, `MsgErr`, `List`, `Ptr`, …).
-- `str`: immutable UTF-8 text, reference semantics but immutable (identity unobservable). No integer indexing; `.chars()`, `.bytes()`, `.len` (bytes).
+- `str`: immutable Unicode text, reference semantics but immutable (identity unobservable). A `str` is a sequence of characters (Unicode scalar values, i.e. `char`s), and every length, index and offset counts characters, as in Python: `.len`, `s[i]` (a `char`), `s[a..b]` (a `str`, §7.6), `.find`, `.slice`. `.bytes()` gives its UTF-8 encoding. Operations by index may take time linear in the string's length.
 - `char`: Unicode scalar value (32-bit).
 - `()`: unit, the empty tuple; sole value `()`.
 - `null`: the null type; sole value `null`.
@@ -446,10 +446,10 @@ Bitwise binds tighter than comparison (no C precedence trap).
 - Every value has built-in method `.type() -> Type`.
 
 ### 7.6 Indexing
-`c[i]` calls `Index::index`; as an assignment target, `IndexMut::set`. `[T]` panics on out-of-range indices; `Map[k]` panics on missing keys (use `.get(k) -> V | null`).
+`c[i]` calls `Index::index`; as an assignment target, `IndexMut::set`. `[T]` and `str` panic on out-of-range indices; `Map[k]` panics on missing keys (use `.get(k) -> V | null`). `s[i]` on a `str` is its `i`th character (`str` implements `Index<usize, char>`, not `IndexMut`: strings are immutable).
 
-**Slicing:** on `[T]` and `[T; N]`, a range inside the brackets selects elements: `xs[a..b]`, `xs[a..=b]`, `xs[a..]` (to the end), `xs[..b]`, `xs[..=b]` (from the start), `xs[..]` (all).
-- Bounds are `usize`; the result is a new `[T]` holding copies of the elements (like `..rest` in a pattern, §11). It is not a place: `xs[1..] = ys` and `xs[1..].push(v)` do not change `xs`, and the first is an error.
+**Slicing:** on `[T]`, `[T; N]` and `str`, a range inside the brackets selects elements (for `str`, characters): `xs[a..b]`, `xs[a..=b]`, `xs[a..]` (to the end), `xs[..b]`, `xs[..=b]` (from the start), `xs[..]` (all).
+- Bounds are `usize`; the result is a new `[T]` holding copies of the elements (like `..rest` in a pattern, §11), or for a `str`, the `str` of the selected characters (`"héllo"[1..3]` is `"él"`). It is not a place: `xs[1..] = ys` and `xs[1..].push(v)` do not change `xs`, and the first is an error.
 - Panics unless `start <= end <= len` (with `end` one past an inclusive bound).
 - Slicing is built in, not provided through `Index`. Open-ended ranges (`a..`, `..b`, `..`) exist only inside index brackets. On other types a bracketed range is an ordinary `Range` index (`c[a..b]` calls `Index` with a `Range`).
 
@@ -717,13 +717,13 @@ Implicitly imported names:
 
 **Numeric methods:** the members of the numeric traits (§10.1); `min max abs pow sqrt` (floats), `wrapping_* checked_* saturating_*`, `T::parse(s: str) -> T | null`, `T::MIN`, `T::MAX`.
 
-**Primitive trait impls:** every primitive implements `Display` and `Eq`; all but `bool` implement `Ord`; all but floats implement `Hash`. Numeric types implement `Add Sub Mul Div Rem`, signed ones (and floats) `Neg`; integers implement `BitAnd BitOr BitXor Not Shl Shr`. `str` also implements `Len`, `Truthy`, `Add` (concatenation), `Iterable<char>` and `Contains<char>`.
+**Primitive trait impls:** every primitive implements `Display` and `Eq`; all but `bool` implement `Ord`; all but floats implement `Hash`. Numeric types implement `Add Sub Mul Div Rem`, signed ones (and floats) `Neg`; integers implement `BitAnd BitOr BitXor Not Shl Shr`. `str` also implements `Len`, `Truthy`, `Add` (concatenation), `Index<usize, char>`, `Iterable<char>` and `Contains<char>`.
 
 **`Display` formats:** `null` as `null` (`null` implements `Display`, so `T | null` does when `T` does); integers in decimal; `bool` as `true`/`false`; `char` as itself. Floats print the shortest digits that round-trip, never with an exponent, and integral values without a fraction: `1`, `0.5`, `0.30000000000000004`, `1000000000000000000000`, `-0`, `inf`, `-inf`, `NaN`.
 
 **Copies out of collections:** reading an element of a collection (indexing, iteration, `get`, `pop`, …) yields a copy when the element type is a value type (§5.3).
 
-**`str` and `char` members:** `str` lengths and offsets are UTF-8 byte counts (`len`, `find`, `slice`); `slice` panics if an offset is not on a character boundary. Besides the members above, the 1.0 stdlib provides `str`: `chars bytes contains starts_with ends_with find slice upper lower trim split replace repeat`; `char`: `is_digit is_alphabetic is_alphanumeric is_whitespace is_uppercase is_lowercase to_upper to_lower`; floats: `floor ceil round trunc sin cos tan exp ln log10 is_nan is_infinite` and constants `EPSILON INFINITY NEG_INFINITY NAN`; `[T]`: `clear reverse contains`, getter `last`; `Map`: `clear`; `Set`: `insert contains remove clear`. The stdlib sources are the full reference.
+**`str` and `char` members:** `str` lengths and offsets count characters (§3.1): `len`, `find`, `slice(start, end)` (≡ `s[start..end]`; panics unless `start <= end <= len`). `bytes()` iterates the UTF-8 encoding. Besides the members above, the 1.0 stdlib provides `str`: `chars bytes contains starts_with ends_with find slice upper lower trim split replace repeat`; `char`: `is_digit is_alphabetic is_alphanumeric is_whitespace is_uppercase is_lowercase to_upper to_lower`; floats: `floor ceil round trunc sin cos tan exp ln log10 is_nan is_infinite` and constants `EPSILON INFINITY NEG_INFINITY NAN`; `[T]`: `clear reverse contains`, getter `last`; `Map`: `clear`; `Set`: `insert contains remove clear`. The stdlib sources are the full reference.
 
 **`std::math`** (not in the prelude; `use std::math;`): Python-style functions on `f64` (narrower numerics widen, §3.6). Constants `PI E TAU INF NAN`. Rounding and parts: `floor ceil trunc round copysign fmod`, `modf(x) -> (f64, f64)` (fraction, whole); `isnan isinf isfinite`, `isclose(a, b, rel_tol: f64 = 1e-9, abs_tol: f64 = 0.0)`; `clamp<T: Num>(x: T, lo: T, hi: T) -> T`. Powers and logarithms: `pow sqrt cbrt exp exp2 expm1 log2 log10 log1p`, `log(x, base: f64 = E)`. Trigonometry (radians): `sin cos tan asin acos atan atan2(y, x) hypot degrees radians sinh cosh tanh asinh acosh atanh`. `fsum(xs: [f64])` (compensated sum). Integers: `gcd<T: Integer>(a: T, b: T) -> T` and `lcm` (results non-negative), and `isqrt factorial comb perm` on `u64`; `comb`/`perm` are `0` when `k > n`, and a result that does not fit in `u64` panics.
 
@@ -951,3 +951,6 @@ Semantics the spec left open, decided while implementing:
 
 ### 2026-10-27 — `readln`
 - §16 Prelude functions `readln()` and `readln(prompt: str)`, returning `str | null`: print the prompt (an overload rather than a default parameter, so it is positional), flush stdout, and read a line from stdin without its `\n`/`\r\n`; `null` at end of input (like `pop`, not an error); an I/O error panics.
+
+### 2026-10-27 — strings count characters
+- §3.1, §7.6, §16 `str` lengths, indices and offsets count characters (Unicode scalar values) instead of UTF-8 bytes, as in Python: `len`, `find` and `slice` change meaning, and `slice` no longer panics on a mid-character offset. `str` implements `Index<usize, char>` (`s[i]`) and supports range slicing (`s[a..b]`, `s[a..]`, …) yielding a `str`. This reverses the original decision of no integer indexing on `str`: developer experience over constant-time indexing. Byte-level access stays available through `bytes()`.
