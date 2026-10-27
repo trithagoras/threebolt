@@ -1,0 +1,12 @@
+// §2.1–§2.2: item, group, alias and module imports, nested module paths, and an import cycle.
+
+use shapes::circle;
+use shapes::circle::{Circle, area as circle_area};
+use shapes::square::Square as Box;
+use registry::register;
+
+fn main() {
+    let c = Circle { r: 1.0 };
+    register(f"{circle_area(c)}");
+    println(f"{circle::area(c)} {Box::new(2.0).side}");
+}

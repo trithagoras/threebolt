@@ -4,7 +4,7 @@ Normative technical reference for implementers (human or agent). Supersedes `doc
 
 **Character:** statically typed, GC-managed, Rust-flavoured syntax, C#-flavoured semantics. Structs (values), classes (references, single inheritance), traits (behaviour + runtime polymorphism), flattened union types, explicit `null`, no exceptions, easy C interop. Hobbyist "three-bolt" ethos: prefer simple, slightly sharp semantics over safety machinery.
 
-**Not in 1.0:** async; ownership/borrowing/lifetimes; exceptions; ADT enums with payloads; interfaces (traits instead); setters; method hiding; sealing; `Try` trait; blanket impls; `where` clauses; variance; full reflection; finalizers/destructors; labeled `break`; format specifiers; method references as values; static fields in generic types; package manager/dependencies.
+**Not in 1.0:** async; ownership/borrowing/lifetimes; exceptions; ADT enums with payloads; interfaces (traits instead); setters; method hiding; sealing; `Try` trait; blanket impls; `where` clauses; variance; re-exports (`pub use`); full reflection; finalizers/destructors; labeled `break`; format specifiers; method references as values; static fields in generic types; package manager/dependencies.
 
 ---
 
@@ -53,7 +53,8 @@ After `.` (member access) or `::` (path segment) any keyword is accepted as a na
 ## 2. Program structure
 
 ### 2.1 Modules
-- Every `.3b` file is a module. The **source root** is the directory containing the entry file. Module path = file path relative to root, `/` → `::`, extension dropped (`game/entity.3b` → `game::entity`).
+- Every `.3b` file is a module. The **source root** is the directory containing the entry file. Module path = file path relative to root, `/` → `::`, extension dropped (`game/entity.3b` → `game::entity`). Module paths are case-sensitive.
+- The **program** is the entry module, every module reachable from it through `use` (transitively), and the standard library modules. Other files under the source root are not part of it (their `impl`s do not apply).
 - Standard library modules live under `std::`. The prelude (§16) is implicitly imported everywhere.
 - A module contains only items: `use`, `fn`, `struct`, `class`, `trait`, `impl`, `enum`, `type`, `const`, `static let`, `extern` blocks.
 
@@ -65,6 +66,9 @@ use game::entity;               // module; then entity::Entity
 use std::collections::Map as Dict;
 ```
 - Only `pub` items may be imported from another module. Cyclic module imports are permitted (resolution is whole-program).
+- `use p::n` imports module `p::n` if that file exists, else the items named `n` of module `p` (for a function, every `pub` overload). If both exist ⇒ error (ambiguous import).
+- A module's items and imports share one namespace: an import may not have the same name as an item of the module, or as another import of something different (importing the same thing twice is permitted). Functions with the same name form an overload set (§4.4); any other repeated name ⇒ error. Items and imports shadow prelude names.
+- `use` declarations cannot be `pub`: there are no re-exports in 1.0.
 - Trait methods are callable on any implementing type without importing the trait (impls are global, §8.5).
 
 ### 2.3 Visibility
@@ -86,7 +90,7 @@ use std::collections::Map as Dict;
 ### 3.1 Primitive types
 `i8 i16 i32 i64 isize u8 u16 u32 u64 usize f32 f64 bool char str`
 
-- Primitive names are lowercase and predeclared, not keywords; static members use paths as for any type (`i32::parse(s)`, `u64::MAX`, `str::from_cstr(p)`). Declaring a type with a primitive's name is an error. Nominal and stdlib types are PascalCase (`Type`, `Err`, `List`, `Ptr`, …).
+- Primitive names are lowercase and predeclared, not keywords; static members use paths as for any type (`i32::parse(s)`, `u64::MAX`, `str::from_cstr(p)`). Declaring a type with a primitive's name is an error (outside the standard library: `c::char`, §14.2, is an alias in `std::c`). Nominal and stdlib types are PascalCase (`Type`, `Err`, `List`, `Ptr`, …).
 - `str`: immutable UTF-8 text, reference semantics but immutable (identity unobservable). No integer indexing; `.chars()`, `.bytes()`, `.len` (bytes).
 - `char`: Unicode scalar value (32-bit).
 - `()`: unit, the empty tuple; sole value `()`.
@@ -428,7 +432,7 @@ Bitwise binds tighter than comparison (no C precedence trap).
 `c[i]` calls `Index::index`; as an assignment target, `IndexMut::set`. `[T]` panics on out-of-range indices; `Map[k]` panics on missing keys (use `.get(k) -> V | null`).
 
 ### 7.7 Literals
-- Tuple `(a, b)`; access `.0`, `.1`.
+- Tuple `(a, b)`; access `.0`, `.1` (a plain decimal: no suffix, `_` or leading zeros).
 - Collection `[a, b, c]`, repeat `[v; n]`, map `[k: v, k2: v2]`, empty map `[:]`. **Target-typed:** `[...]` builds `[T]`, `Set<T>`, or `[T; N]` according to the expected type (default `[T]`); `[]` is valid for any expected collection type, error without one. `[k: v]` builds `Map<K, V>`.
 - Initializers per §4.7.
 
@@ -809,3 +813,9 @@ fn main(args: [str]) -> () | Err {
 - §1 Any keyword is also accepted as a name after `::` (needed for `Ptr<T>::null()`, §14.4).
 - §6.3 Collection literals are allowed in `if`/`while`/`for`/`match` heads; only `{`-initializers need parentheses.
 - §17 Added notes 12–16, recording parser decisions the spec left open: `{` after `=>`, union return types in `fn` types, match-guard precedence, the extent of the head restriction, and no whitespace inside `>=`/`>>`/`>>=`.
+
+### 2026-10-27 — front end (0.1 Phase 3)
+- §2.1 The program is the entry module plus the modules reachable through `use`, plus the stdlib; module paths are case-sensitive.
+- §2.2 Defined how `use p::n` chooses between a module and an item (both ⇒ ambiguity error), the shared item/import namespace, and that items and imports shadow the prelude. `use` cannot be `pub` (no re-exports in 1.0; added to "Not in 1.0").
+- §3.1 The primitive-name rule exempts the standard library (`c::char`).
+- §7.7 Tuple indices are plain decimals (`t.01`, `t.0_u8` are errors).

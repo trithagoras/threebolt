@@ -1,0 +1,10 @@
+// Import errors (§2.2): each line is one diagnostic.
+
+use missing;
+use lib::Absent;
+use lib::hidden;
+use lib::{shown, Absent2};
+pub use lib::shown as shown2;
+use other::shown;
+
+fn main() {}

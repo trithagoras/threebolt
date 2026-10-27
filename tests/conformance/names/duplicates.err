@@ -1,0 +1,6 @@
+duplicates.3b:8:7: error[E0104]: 'Shape' is already defined in this module
+duplicates.3b:7:1: note: previously defined here
+duplicates.3b:9:7: error[E0104]: 'area' is already defined in this module
+duplicates.3b:4:1: note: previously defined here
+duplicates.3b:11:8: error[E0105]: 'u8' is a primitive type name
+duplicates.3b:13:1: error[E0004]: unknown attribute '@inline'

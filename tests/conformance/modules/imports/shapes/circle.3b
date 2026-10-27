@@ -1,0 +1,5 @@
+use registry;
+
+pub struct Circle { let r: f64; }
+
+pub fn area(c: Circle) -> f64 => 3.14159 * c.r * c.r;

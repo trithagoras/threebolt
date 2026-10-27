@@ -1,10 +1,17 @@
 package dev.threebolt;
 
+import dev.threebolt.ast.AstDump;
+import dev.threebolt.diag.Diagnostic;
+import dev.threebolt.diag.Diagnostics;
+import dev.threebolt.diag.Source;
+import dev.threebolt.parse.AstParser;
+import dev.threebolt.parse.AstPrinter;
 import dev.threebolt.parse.LexErrors;
 import dev.threebolt.parse.Parsing;
 import dev.threebolt.parse.TokenDump;
 import dev.threebolt.parse.TreeDump;
 import dev.threebolt.parser.ThreeboltLexer;
+import dev.threebolt.resolve.ModuleLoader;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -13,15 +20,38 @@ import org.antlr.v4.runtime.CharStreams;
 public final class Main {
     private Main() {}
 
+    private static final String USAGE = """
+            usage: threebolt <command> <file.3b>
+              check   load the program (entry file + modules reachable through `use`) and report errors
+              tokens  dump the token stream
+              parse   dump the parse tree
+              ast     dump the AST
+              print   pretty-print the AST as source""";
+
     public static void main(String[] args) throws IOException {
-        if (args.length == 2 && args[0].equals("tokens")) {
-            System.exit(dumpTokens(Path.of(args[1])));
-        }
-        if (args.length == 2 && args[0].equals("parse")) {
-            System.exit(dumpTree(Path.of(args[1])));
-        }
-        System.err.println("usage: threebolt tokens|parse <file.3b>");
+        if (args.length != 2) usage();
+        Path file = Path.of(args[1]);
+        int status = switch (args[0]) {
+            case "check" -> check(file);
+            case "tokens" -> dumpTokens(file);
+            case "parse" -> dumpTree(file);
+            case "ast" -> dumpAst(file, false);
+            case "print" -> dumpAst(file, true);
+            default -> usage();
+        };
+        System.exit(status);
+    }
+
+    private static int usage() {
+        System.err.println(USAGE);
         System.exit(2);
+        return 2;
+    }
+
+    private static int check(Path file) {
+        var diagnostics = new Diagnostics();
+        new ModuleLoader(diagnostics).load(file);
+        return report(diagnostics);
     }
 
     private static int dumpTokens(Path file) throws IOException {
@@ -41,5 +71,17 @@ public final class Main {
             System.err.println(file + ":" + e.line() + ":" + e.column() + ": error: " + e.message());
         }
         return result.ok() ? 0 : 1;
+    }
+
+    private static int dumpAst(Path file, boolean asSource) throws IOException {
+        var diagnostics = new Diagnostics();
+        var unit = AstParser.compilationUnit(new Source(file.toString(), Files.readString(file)), diagnostics);
+        if (unit != null) System.out.print(asSource ? AstPrinter.print(unit) : AstDump.render(unit) + "\n");
+        return report(diagnostics);
+    }
+
+    private static int report(Diagnostics diagnostics) {
+        for (Diagnostic d : diagnostics.sorted()) System.err.print(d.render());
+        return diagnostics.hasErrors() ? 1 : 0;
     }
 }

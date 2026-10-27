@@ -1,0 +1,4 @@
+pub struct Square {
+    let side: f64;
+    pub fn new(side: f64) -> Self => { side };
+}

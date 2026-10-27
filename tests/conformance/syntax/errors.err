@@ -1,0 +1,2 @@
+errors.3b:3:9: error[E0001]: unexpected '='
+errors.3b:3:12: error[E0001]: expected ':' or '=', found ';'

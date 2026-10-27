@@ -1,0 +1,8 @@
+main.3b:3:5: error[E0100]: module 'missing' not found
+main.3b:4:10: error[E0101]: module 'lib' has no item named 'Absent'
+main.3b:5:10: error[E0102]: 'hidden' is private to module 'lib'
+lib.3b:2:1: note: declared here without `pub`
+main.3b:6:18: error[E0101]: module 'lib' has no item named 'Absent2'
+main.3b:7:1: error[E0106]: `use` cannot be `pub`: there are no re-exports in 1.0
+main.3b:8:12: error[E0104]: 'shown' is already defined in this module
+main.3b:6:11: note: previously imported here

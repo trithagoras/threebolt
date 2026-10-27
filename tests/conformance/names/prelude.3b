@@ -1,0 +1,11 @@
+// The prelude (§16) is visible everywhere and may be shadowed by a module's own items.
+use std::collections::Map;
+
+struct Done;
+
+fn main() {
+    let m: Map<str, i32> = [:];
+    let s: Set<i32> = [];
+    let n: c::int = 0;
+    println(f"{len(m)}");
+}

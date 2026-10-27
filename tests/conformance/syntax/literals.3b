@@ -1,0 +1,7 @@
+// Literal values the lexer cannot check (§1, §7.7).
+fn main() {
+    let a = "\u{D800}";
+    let b = '\u{110000}';
+    let t = (1, (2, 3));
+    let c = t.1.01;
+}

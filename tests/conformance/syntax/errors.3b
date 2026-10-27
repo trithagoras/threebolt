@@ -1,0 +1,4 @@
+// Syntax errors stop the front end at this module.
+fn main() {
+    let = 1;
+}
