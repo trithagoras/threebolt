@@ -1,0 +1,3 @@
+panic: worker 3 failed
+    at work (panic.3b:6:16)
+    at <lambda> (panic.3b:11:33)

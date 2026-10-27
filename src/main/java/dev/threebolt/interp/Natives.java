@@ -43,34 +43,44 @@ final class Natives {
         int dot = key.indexOf('.');
         String owner = key.substring(0, dot);
         String name = key.substring(dot + 1);
-        self = Interpreter.unbox(self);
+        final Object recv = Interpreter.unbox(self);
         return switch (owner) {
             case "prelude" -> prelude(name, a);
             case "process" -> {
                 in.out.flush();
                 throw new Interpreter.ExitSignal((int) ((Int) a[0]).v());
             }
-            case "c", "Ptr" -> in.ffi.intrinsic(owner, name, self, a, typeEnv, fn);
-            case "Type" -> type(name, (TypeVal) self, a);
-            case "List" -> self instanceof ArrayVal arr ? array(name, arr, a) : list(name, (ListVal) self, a);
-            case "Map" -> map(name, (MapVal) self, a);
-            case "Set" -> set(name, (SetVal) self, a);
-            case "Range" -> range(name, (Obj) self, a);
-            case "NativeIter" -> ((IterVal) self).next.get();
-            case "int" -> integer(name, self, a, fn);
-            case "float" -> floating(name, self, a, fn);
+            case "c", "Ptr" -> in.ffi.intrinsic(owner, name, recv, a, typeEnv, fn);
+            case "cstruct" -> in.ffi.withPtr(recv, (Values.FnVal) a[0]);
+            case "thread", "Thread", "Mutex", "Atomic" -> in.threads.call(owner, name, recv, a, typeEnv, fn);
+            case "Type" -> type(name, (TypeVal) recv, a);
+            // Collections lock themselves per operation (§13.4), but not around a callback.
+            case "List" -> name.equals("with_ptr") ? in.ffi.withPtr(recv, (Values.FnVal) a[0])
+                    : locked(recv, () -> recv instanceof ArrayVal arr ? array(name, arr, a) : list(name, (ListVal) recv, a));
+            case "Map" -> locked(recv, () -> map(name, (MapVal) recv, a));
+            case "Set" -> locked(recv, () -> set(name, (SetVal) recv, a));
+            case "Range" -> range(name, (Obj) recv, a);
+            case "NativeIter" -> ((IterVal) recv).next.get();
+            case "int" -> integer(name, recv, a, fn);
+            case "float" -> floating(name, recv, a, fn);
             case "str" -> name.equals("from_cstr") || name.equals("to_cstr")
-                    ? in.ffi.intrinsic("str", name, self, a, typeEnv, fn) : str(name, (String) self, a);
-            case "char" -> character(name, (Char) self, a);
+                    ? in.ffi.intrinsic("str", name, recv, a, typeEnv, fn) : str(name, (String) recv, a);
+            case "char" -> character(name, (Char) recv, a);
             case "bool" -> switch (name) {
-                case "to_str" -> self.toString();
-                case "eq" -> self.equals(a[0]);
-                case "hash" -> new Int(Prim.U64, Ops.mix(((Boolean) self) ? 1 : 0));
+                case "to_str" -> recv.toString();
+                case "eq" -> recv.equals(a[0]);
+                case "hash" -> new Int(Prim.U64, Ops.mix(((Boolean) recv) ? 1 : 0));
                 default -> unknown(key);
             };
-            case "enum", "flags" -> enumeration(name, (EnumVal) self, a);
+            case "enum", "flags" -> enumeration(name, (EnumVal) recv, a);
             default -> unknown(key);
         };
+    }
+
+    private static Object locked(Object collection, Supplier<Object> op) {
+        synchronized (collection) {
+            return op.get();
+        }
     }
 
     private static Object unknown(String key) {
@@ -82,6 +92,7 @@ final class Natives {
     }
 
     private Object prelude(String name, Object[] a) {
+        in.checkAbort();
         switch (name) {
             case "print" -> in.out.print(in.display(a[0]));
             case "println" -> in.out.println(in.display(a[0]));
@@ -115,7 +126,11 @@ final class Natives {
     /** Iterates a live list by index: elements pushed during the loop are visited. */
     private IterVal listIter(ListVal l) {
         int[] i = {0};
-        return new IterVal(l.element, () -> i[0] < l.items.size() ? Values.copy(l.items.get(i[0]++)) : in.done);
+        return new IterVal(l.element, () -> {
+            synchronized (l) {
+                return i[0] < l.items.size() ? Values.copy(l.items.get(i[0]++)) : in.done;
+            }
+        });
     }
 
     private IterVal generate(Type element, Supplier<Object> next) {

@@ -18,6 +18,7 @@ import dev.threebolt.parse.AstParser;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.UncheckedIOException;
+import java.lang.foreign.Linker;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -26,6 +27,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
@@ -38,7 +40,7 @@ import java.util.Set;
  */
 public final class ModuleLoader {
     /** The std modules that exist; `std::a::b` is the resource `std/a/b.3b`. */
-    private static final Set<String> STD_MODULES = Set.of("prelude", "collections", "c", "process");
+    private static final Set<String> STD_MODULES = Set.of("prelude", "collections", "c", "process", "thread", "sync");
 
     private static final ModulePath PRELUDE = ModulePath.of("std", "prelude");
     private static final ModulePath COLLECTIONS = ModulePath.of("std", "collections");
@@ -93,7 +95,9 @@ public final class ModuleLoader {
             var rel = path.segments().subList(1, path.segments().size());
             if (rel.size() == 1 && STD_MODULES.contains(rel.getFirst())) {
                 String name = "std/" + String.join("/", rel) + ".3b";
-                m = parse(path, new Source(name, resource(name)));
+                String text = resource(name);
+                if (path.equals(C)) text += cIntegerAliases();
+                m = parse(path, new Source(name, text));
             }
         } else if (existsExactly(path.segments())) {
             String name = String.join("/", path.segments()) + ".3b";
@@ -193,6 +197,27 @@ public final class ModuleLoader {
         } catch (IOException e) {
             throw new UncheckedIOException("cannot read " + file, e);
         }
+    }
+
+    /**
+     * The C integer aliases of `std::c` for this platform (§14.2), sized from the native linker's
+     * canonical layouts. Plain `char` is unsigned on Linux for ARM, PowerPC, s390 and RISC-V.
+     */
+    static String cIntegerAliases() {
+        var layouts = Linker.nativeLinker().canonicalLayouts();
+        var sb = new StringBuilder("\n// Appended by the loader for this platform.\n");
+        String arch = System.getProperty("os.arch");
+        boolean unsignedChar = System.getProperty("os.name").toLowerCase(Locale.ROOT).contains("linux")
+                && (arch.startsWith("aarch64") || arch.startsWith("arm") || arch.startsWith("ppc")
+                || arch.startsWith("s390") || arch.startsWith("riscv"));
+        sb.append("pub type char = ").append(unsignedChar ? "u8" : "i8").append(";\n");
+        sb.append("pub type uchar = u8;\n");
+        for (String name : List.of("short", "int", "long", "longlong")) {
+            long bits = layouts.get(name.equals("longlong") ? "long long" : name).byteSize() * 8;
+            sb.append("pub type ").append(name).append(" = i").append(bits).append(";\n");
+            sb.append("pub type u").append(name).append(" = u").append(bits).append(";\n");
+        }
+        return sb.toString();
     }
 
     private static String resource(String name) {

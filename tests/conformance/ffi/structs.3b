@@ -1,0 +1,83 @@
+// §14.3 `@c struct`s: by value in and out of externs, through pointers, and pinned with `with_ptr`.
+
+@c struct DivT {
+    let quot: c::int;
+    let rem: c::int;
+}
+
+@c struct InAddr {
+    let s_addr: u32;
+}
+
+/// `struct tm` as macOS and glibc lay it out.
+@c struct Tm {
+    let sec: c::int = 0;
+    let min: c::int = 0;
+    let hour: c::int = 0;
+    let mday: c::int = 0;
+    let mon: c::int = 0;
+    let year: c::int = 0;
+    let wday: c::int = 0;
+    let yday: c::int = 0;
+    let isdst: c::int = 0;
+    let gmtoff: c::long = 0;
+    let zone: Ptr<c::char> = Ptr<c::char>::null();
+}
+
+/// Padding, nested structs, arrays, bools and enums.
+enum Kind : u8 { Small = 1, Large = 200 }
+
+@c struct Packet {
+    let kind: Kind;
+    let size: u64;
+    let ok: bool;
+    let tags: [u16; 3];
+    let pos: DivT;
+}
+
+extern "C" {
+    fn div(num: c::int, den: c::int) -> DivT;
+    fn inet_ntoa(a: InAddr) -> Ptr<c::char>;
+    fn gmtime_r(t: Ptr<i64>, out: Ptr<Tm>) -> Ptr<Tm>;
+}
+
+fn main() {
+    let d = unsafe => div(17, 5);
+    println(f"17 / 5 = {d.quot} rem {d.rem}");
+
+    let local = InAddr { s_addr: 0x0100007f };   // 127.0.0.1 in network byte order (little-endian host)
+    let text = unsafe => str::from_cstr(inet_ntoa(local));
+    println(text);
+
+    // with_ptr on a mutable `@c struct` place: C writes into it.
+    let t = c::alloc<i64>(1);
+    unsafe { t.write(31536000 + 86400 * 40 + 3661); }   // 1971-02-10 01:01:01 UTC
+    let mut tm = Tm {};
+    let same = tm.with_ptr(p => unsafe => gmtime_r(t, p).addr() == p.addr());
+    println(f"{tm.year + 1900}-{tm.mon + 1}-{tm.mday} {tm.hour}:{tm.min}:{tm.sec} yday {tm.yday} same {same}");
+    println(f"zone set: {!tm.zone.is_null()}");
+
+    // A struct in C memory, read and written through Ptr.
+    let heap = c::alloc<Tm>(1);
+    unsafe { gmtime_r(t, heap); }
+    let copy = unsafe => heap.read();
+    println(f"read back: {copy.year} {copy.yday}");
+    unsafe {
+        heap.write(Tm { year: 99, ..copy });
+        println(heap.read().year);
+    }
+
+    let packets = c::alloc<Packet>(2);
+    let size = unsafe => packets.offset(1).addr() - packets.addr();
+    println(f"sizeof(Packet) = {size}");
+    unsafe {
+        packets.offset(1).write(Packet { kind: Kind::Large, size: 1 << 40, ok: true, tags: [7, 8, 9], pos: DivT { quot: -1, rem: 2 } });
+        let p = packets.offset(1).read();
+        println(f"{p.kind} {p.size} {p.ok} {p.tags[2]} {p.pos.quot} {p.pos.rem}");
+        let raw = packets.offset(1).cast<u8>();
+        println(f"first byte: {raw.read()}");
+        c::free(packets);
+        c::free(heap);
+        c::free(t);
+    }
+}

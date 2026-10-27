@@ -119,6 +119,8 @@ pub class List<T> : Len, Truthy, Iterable<T>, Index<usize, T>, IndexMut<usize, T
     pub get fn first(self) -> T | null;
     pub get fn last(self) -> T | null;
     pub fn enumerate(self) -> Iterator<(usize, T)> => self.iter().enumerate();
+    /// Pins the elements for the duration of `f` and passes a pointer to the first (§14.5).
+    pub fn with_ptr<R>(self, f: fn(Ptr<T>) -> R) -> R;
 }
 
 /// `a..b` and `a..=b` over integers or chars.

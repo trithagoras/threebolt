@@ -1,0 +1,6 @@
+errors.3b:6:17: error[E0216]: `Atomic<T>` holds an integer or `bool`, not 'f64'
+errors.3b:7:17: error[E0216]: `Atomic<T>` holds an integer or `bool`, not 'str'
+errors.3b:9:5: error[E0207]: 'fetch_add' needs an integer `Atomic`, not `Atomic<bool>`
+errors.3b:13:19: error[E0300]: cannot assign to immutable binding 'g'; declare it `let mut`
+errors.3b:14:27: error[E0229]: expected a function of 0 parameter(s), this lambda takes 1
+errors.3b:15:26: error[E0200]: expected 'Thread<str>', found 'Thread<i32>'

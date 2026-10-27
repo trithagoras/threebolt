@@ -1,16 +1,7 @@
 // std::c: C types and allocation (spec §14.2), reachable everywhere as the prelude alias `c`.
-// The aliases are LP64 (64-bit macOS and Linux) for now; Phase 8 makes them platform-correct.
+// The loader appends the platform's integer aliases (`char int long ...`, from the native
+// linker's canonical layouts) to this file.
 
-pub type char = i8;
-pub type uchar = u8;
-pub type short = i16;
-pub type ushort = u16;
-pub type int = i32;
-pub type uint = u32;
-pub type long = i64;
-pub type ulong = u64;
-pub type longlong = i64;
-pub type ulonglong = u64;
 pub type size_t = usize;
 pub type ssize_t = isize;
 

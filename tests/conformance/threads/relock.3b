@@ -1,0 +1,9 @@
+// §13.4: locking a mutex the thread already holds panics instead of deadlocking.
+//! exit: 101
+use std::sync::Mutex;
+
+fn main() {
+    let m = Mutex::new(1);
+    let v = m.lock(g => m.lock(h => h.value + g.value));
+    println(v);
+}

@@ -1,0 +1,12 @@
+// §2.4: `exit` on any thread ends the process at once with its code.
+//! exit: 3
+use std::thread::Thread;
+
+fn main() {
+    let t = Thread::spawn(() => {
+        println("leaving");
+        std::process::exit(3);
+    });
+    t.join();
+    println("unreachable");
+}

@@ -593,10 +593,11 @@ For `x.m(...)`: inherent methods of `x`'s static type (and base classes), then m
 - Implementations may move objects; see §14.5 for pinning.
 
 ### 13.4 Threads and memory model
-- `std::thread::Thread::spawn<R>(f: fn() -> R) -> Thread<R>`; `t.join() -> R`.
-- `std::sync::Mutex<T>`: `Mutex::new(v)`, `m.lock<R>(f: fn(Guard<T>) -> R) -> R` where `Guard<T>` is a class with `pub let value: T` valid only during `f`.
-- `std::sync::Atomic<T>` for integer and `bool` `T`: `load`, `store`, `swap`, `compare_exchange`, `fetch_add`, etc. (sequentially consistent).
-- Data races do not corrupt memory or produce invalid references; a racy read returns some previously written value, but value types wider than a machine word may tear. Implementations may use a global interpreter lock.
+- `std::thread::Thread::spawn<R>(f: fn() -> R) -> Thread<R>`; `t.join() -> R` (a copy for value types; joining again returns the result again). `std::thread::sleep(ms: u64)`.
+- When `main` returns (or the process otherwise ends, §2.4, §13.1), threads still running are stopped; their `defer`s do not run.
+- `std::sync::Mutex<T>`: `Mutex::new(v)`, `m.lock<R>(f: fn(Guard<T>) -> R) -> R` where `Guard<T>` is a class with `pub let value: T` valid only during `f`. When `f` returns, the guard's `value` is stored back into the mutex (so `(mut g) => g.value += 1` works for value types). Locking a mutex the current thread already holds panics.
+- `std::sync::Atomic<T>` for integer and `bool` `T` (checked at `Atomic::new`): `load`, `store`, `swap`, `compare_exchange(expected, desired)`, `fetch_add`, `fetch_sub` (integers only), `fetch_and`, `fetch_or`, `fetch_xor`. All are sequentially consistent; `swap`, `compare_exchange` and the `fetch_*` operations return the previous value (`compare_exchange` succeeded iff that equals `expected`); arithmetic wraps.
+- Data races do not corrupt memory or produce invalid references; a racy read returns some previously written value, but value types wider than a machine word may tear. Each operation on a `[T]`, `Map` or `Set` is atomic with respect to the others. Implementations may use a global interpreter lock.
 
 ### 13.5 Initialization order
 - Module-level and type-level statics: lazy on first access (§4.2). No module initializers otherwise; `main` is the only entry.
@@ -614,19 +615,19 @@ extern "C" {
 }
 ```
 - Only the `"C"` ABI. `@link("name")` names a native library (platform naming applied). Functions without `@link` resolve against the process/libc.
-- `...` declares a C variadic; variadic arguments must be ABI types (f32 promoted to f64, small integers to `c::int`).
-- Extern functions are implicitly `unsafe fn`.
+- `...` declares a C variadic; variadic arguments must be scalar ABI types — integers, floats, `bool`, `Ptr<T>`, enums, `extern fn` — and are promoted as in C (f32 to f64; `bool`, enums and integers narrower than 32 bits to `c::int`).
+- Extern functions are implicitly `unsafe fn`. Their parameters cannot have defaults. Used as a value, an extern function has its `extern fn` type.
 
 ### 14.2 ABI types
-Integers, floats, `bool` (C `_Bool`), `Ptr<T>`, `extern fn` types, `@c struct`s, enums (as their backing type), `[T; N]` inside `@c struct`s only. Passing any other type to an extern ⇒ error.
+Integers, floats, `bool` (C `_Bool`), `Ptr<T>`, `extern fn` types, `@c struct`s, enums (as their backing type), `[T; N]` inside `@c struct`s only. Not `str` or `char`. Using any other type in an extern signature, an `extern fn` type or an `@c struct` field ⇒ error.
 
-`std::c` (prelude alias `c`) provides `c::char c::uchar c::short c::ushort c::int c::uint c::long c::ulong c::longlong c::ulonglong c::size_t c::ssize_t` as platform-correct aliases, plus `c::alloc<T>(count: usize) -> Ptr<T>`, `c::free<T>(p: Ptr<T>)`.
+`std::c` (prelude alias `c`) provides `c::char c::uchar c::short c::ushort c::int c::uint c::long c::ulong c::longlong c::ulonglong c::size_t c::ssize_t` as platform-correct aliases (`c::long` is 32-bit on Windows; `c::char` is `u8` where C's `char` is unsigned), plus `c::alloc<T>(count: usize) -> Ptr<T>` (uninitialized, like `malloc`), `c::free<T>(p: Ptr<T>)`.
 
 ### 14.3 `@c struct`
 ```rs
 @c struct Timespec { let tv_sec: i64; let tv_nsec: c::long; }
 ```
-C layout (declaration order, C alignment). Fields must be ABI types. Otherwise an ordinary struct.
+C layout (declaration order, C alignment). Fields must be ABI types; an `@c struct` cannot be generic. Otherwise an ordinary struct.
 
 ### 14.4 Pointers
 - `Ptr<T>`: raw address, value type, may be null. `Ptr<T>::null()` (type argument required, §10), `p.is_null()`, `p.read() -> T`, `p.write(v)`, `p.offset(n: isize) -> Ptr<T>`, `p.cast<U>() -> Ptr<U>`, `p.addr() -> usize`, `Ptr::from_addr(a: usize)`.
@@ -645,6 +646,7 @@ C layout (declaration order, C alignment). Fields must be ABI types. Otherwise a
 
 ### 14.7 Callbacks
 - A top-level, non-generic, non-capturing `fn` whose parameter and return types are ABI types converts implicitly to a matching `extern fn(...) -> R`. Closures and methods do not.
+- A panic (or `exit`) inside a callback ends the process (§13.1) without unwinding through the C frames: the C code gets a zero result from that and any later callback, and the process stops when control returns to Threebolt.
 - A callback MUST be invoked on a thread created by the Threebolt runtime (§13.4); foreign-thread invocation is undefined behaviour.
 
 ---
@@ -882,3 +884,11 @@ Semantics the spec left open, decided while implementing:
 
 ### 2026-10-27 — casts target-type collection literals
 - §7.9 A collection literal operand of `as`/`as?` takes the cast type as its expected type, so `[] as [i32]` works without a typed `let`.
+
+### 2026-10-27 — C interop and threads (0.1 Phase 8)
+Semantics the spec left open, decided while implementing:
+- §13.4 `std::thread::sleep`; `join` returns a copy and may be repeated; threads still running when `main` returns are stopped; a `Mutex` stores the guard's value back when `f` returns, and relocking on the same thread panics; the `Atomic` operation list, previous-value results (including `compare_exchange`), wrapping arithmetic, `fetch_add`/`fetch_sub` only for integers; each collection operation is atomic.
+- §14.1 Which types may be C variadic arguments and how they are promoted; extern parameters have no defaults; an extern used as a value has an `extern fn` type.
+- §14.2 `char` and `str` are not ABI types; the `c::` aliases follow the platform (including `c::char`'s signedness); `c::alloc` does not zero memory.
+- §14.3 `@c struct`s cannot be generic.
+- §14.7 A panic or `exit` inside a callback ends the process without unwinding through C.

@@ -39,9 +39,18 @@ import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.UnaryOperator;
 
-/** Runs a {@link CheckedProgram}: a tree-walking evaluator over {@link Ir}. */
+/**
+ * Runs a {@link CheckedProgram}: a tree-walking evaluator over {@link Ir}. One interpreter serves
+ * every Threebolt thread (§13.4): call stacks are per thread, and statics, caches and collections
+ * are safe to share.
+ */
 public final class Interpreter {
     final TypeSystem ts;
     private final CheckedProgram program;
@@ -49,15 +58,23 @@ public final class Interpreter {
     final PrintStream err;
     final Natives natives;
     final Ffi ffi = new Ffi(this);
+    final Threads threads = new Threads(this);
     /** The `Done` sentinel (§16). */
     final Obj done;
 
-    private enum StaticState { RUNNING, DONE }
+    /** Initialized statics (§4.2); a static is initialized under {@link #staticInit}, exactly once. */
+    private final Map<StaticInfo, Cell> statics = new ConcurrentHashMap<>();
+    private final ReentrantLock staticInit = new ReentrantLock();
+    /** The statics whose initializers are running; guarded by {@link #staticInit}. */
+    private final Set<StaticInfo> initializing = new java.util.HashSet<>();
+    private final ThreadLocal<ArrayDeque<Frame>> stacks = ThreadLocal.withInitial(ArrayDeque::new);
+    private final Map<TypeInfo, Map<FnInfo, FnInfo>> virtualCache = new ConcurrentHashMap<>();
 
-    private final Map<StaticInfo, Object> staticValues = new HashMap<>();
-    private final Map<StaticInfo, StaticState> staticStates = new HashMap<>();
-    private final ArrayDeque<Frame> stack = new ArrayDeque<>();
-    private final Map<TypeInfo, Map<FnInfo, FnInfo>> virtualCache = new HashMap<>();
+    /** The exit code, set once by whichever thread ends the process first. */
+    private final CompletableFuture<Integer> exitCode = new CompletableFuture<>();
+    private volatile boolean terminating;
+    /** The Java threads running Threebolt code, interrupted when the process ends. */
+    private final Set<Thread> running = ConcurrentHashMap.newKeySet();
 
     public Interpreter(CheckedProgram program, PrintStream out, PrintStream err) {
         this.program = program;
@@ -103,6 +120,16 @@ public final class Interpreter {
     private static final Signal BREAK = new Signal();
     private static final Signal CONTINUE = new Signal();
 
+    /**
+     * Unwinds a thread once the process is ending (a panic or `exit` on another thread, or
+     * `main` returned, §13.1); no defers run.
+     */
+    static final class Abort extends RuntimeException {
+        Abort() {
+            super(null, null, false, false);
+        }
+    }
+
     /** {@code std::process::exit}: leaves immediately, no defers (§2.4). */
     static final class ExitSignal extends RuntimeException {
         final int code;
@@ -115,30 +142,123 @@ public final class Interpreter {
 
     // ---- Entry (§2.4) ----
 
-    /** Runs `main`; returns the process exit code. */
+    /**
+     * Runs `main` on the current thread and returns the process exit code: `main`'s, or that of a
+     * panic or `exit` on any thread (§2.4, §13.1). Other Threebolt threads are stopped.
+     */
     public int run(List<String> args) {
         var main = program.main();
+        running.add(Thread.currentThread());
         try {
             var list = new ListVal(Prim.STR, new ArrayList<>(args));
             Object[] a = main.params.isEmpty() ? new Object[0] : new Object[] {list};
             var result = invoke(main, null, a, List.of(), null, null, null);
             if (result != Unit.UNIT && result != null) {
                 var message = callByName(result, ts.error, "message");
-                err.println(message);
-                return 1;
+                synchronized (exitCode) {
+                    if (!terminating) err.println(message);
+                    terminate(1);
+                }
+            } else {
+                terminate(0);
             }
-            return 0;
         } catch (ExitSignal e) {
-            return e.code;
+            terminate(e.code);
         } catch (Panic p) {
-            err.println("panic: " + p.getMessage());
-            for (String line : p.trace()) err.println("    at " + line);
-            return 101;
+            panicked(p);
+        } catch (Abort a) {
+            // Another thread ended the process.
+        } catch (RuntimeException | Error e) {
+            internalError(e);
         } finally {
+            running.remove(Thread.currentThread());
             out.flush();
             err.flush();
         }
+        return awaitExit();
     }
+
+    /** Blocks until some thread ends the process; returns its exit code. */
+    public int awaitExit() {
+        while (true) {
+            try {
+                return exitCode.get();
+            } catch (InterruptedException e) {
+                // Interrupted by terminate() itself; the code is set.
+            } catch (ExecutionException e) {
+                throw new IllegalStateException(e);
+            }
+        }
+    }
+
+    /** Ends the process with {@code code}; the first caller wins, and the other threads stop. */
+    void terminate(int code) {
+        synchronized (exitCode) {
+            if (terminating) return;
+            out.flush();
+            err.flush();
+            terminating = true;
+            exitCode.complete(code);
+        }
+        for (Thread t : running) if (t != Thread.currentThread()) t.interrupt();
+    }
+
+    /** Reports a panic on any thread and ends the process with 101 (§13.1). */
+    void panicked(Panic p) {
+        synchronized (exitCode) {
+            if (terminating) return;
+            out.flush();
+            err.println("panic: " + p.getMessage());
+            if (p.trace() != null) for (String line : p.trace()) err.println("    at " + line);
+            terminate(101);
+        }
+    }
+
+    /** A bug in the interpreter: reported with its Java stack trace; the process ends with 70. */
+    private void internalError(Throwable t) {
+        synchronized (exitCode) {
+            if (terminating) return;
+            err.println("internal error: " + t);
+            t.printStackTrace(err);
+            terminate(70);
+        }
+    }
+
+    boolean isTerminating() {
+        return terminating;
+    }
+
+    /** Stops this thread if the process is ending. */
+    void checkAbort() {
+        if (terminating) throw new Abort();
+    }
+
+    /** Starts a Threebolt thread (§13.4) running {@code body}; a panic in it ends the process. */
+    Thread startThread(Runnable body) {
+        var t = new Thread(null, () -> {
+            try {
+                body.run();
+            } catch (Panic p) {
+                panicked(p);
+            } catch (ExitSignal e) {
+                terminate(e.code);
+            } catch (Abort a) {
+                // The process is ending.
+            } catch (RuntimeException | Error e) {
+                internalError(e);
+            } finally {
+                running.remove(Thread.currentThread());
+            }
+        }, "threebolt-thread", STACK_SIZE);
+        t.setDaemon(true);
+        running.add(t);
+        checkAbort();
+        t.start();
+        return t;
+    }
+
+    /** The evaluator recurses deeply; threads get a large stack. */
+    public static final long STACK_SIZE = 1L << 30;
 
     // ---- Calls ----
 
@@ -168,6 +288,8 @@ public final class Interpreter {
     }
 
     private Object runBody(Frame frame, java.util.function.Supplier<Object> body) {
+        checkAbort();
+        var stack = stacks.get();
         if (stack.size() > 20_000) throw new Panic("stack overflow");
         stack.push(frame);
         try {
@@ -188,7 +310,7 @@ public final class Interpreter {
 
     private List<String> trace() {
         var lines = new ArrayList<String>();
-        for (Frame f : stack) lines.add(f.name + " (" + f.at + ")");
+        for (Frame f : stacks.get()) lines.add(f.name + " (" + f.at + ")");
         return lines;
     }
 
@@ -290,7 +412,7 @@ public final class Interpreter {
     /** The most-derived override of {@code fn} for the receiver's runtime class (§8.2). */
     FnInfo virtualTarget(FnInfo fn, Object recv) {
         if (!(unbox(recv) instanceof Obj o)) return fn;
-        var cache = virtualCache.computeIfAbsent(o.decl, k -> new HashMap<>());
+        var cache = virtualCache.computeIfAbsent(o.decl, k -> new ConcurrentHashMap<>());
         return cache.computeIfAbsent(fn, k -> {
             var root = fn.root();
             for (TypeInfo cls = o.decl; cls != null; cls = cls.baseDecl()) {
@@ -381,6 +503,7 @@ public final class Interpreter {
     /** Calls a function value. */
     Object callFn(FnVal fn, Object[] args) {
         if (fn.fn != null) return invoke(fn.fn, null, args, fn.typeArgs, null, null, null);
+        if (fn.lambda == null) return ffi.callPointer(fn, args);
         var lambda = fn.lambda;
         var env = new Env(fn.env);
         for (int i = 0; i < lambda.params().size(); i++) env.define(lambda.params().get(i), args[i]);
@@ -677,7 +800,9 @@ public final class Interpreter {
         } else {
             var l = (ListVal) target;
             element = l.element;
-            items = l.items;
+            synchronized (l) {
+                items = new ArrayList<>(l.items);
+            }
         }
         long len = items.size();
         // usize values above i64::MAX are negative here; they are out of range anyway.
@@ -752,15 +877,36 @@ public final class Interpreter {
     // ---- Statics (§4.2) ----
 
     Object staticValue(StaticInfo s) {
-        var state = staticStates.get(s);
-        if (state == StaticState.DONE) return staticValues.get(s);
-        if (state == StaticState.RUNNING) throw new Panic("initialization of static '" + s + "' depends on itself");
-        staticStates.put(s, StaticState.RUNNING);
-        var frame = new Frame("static " + s, new Env(null), Map.of());
-        var v = runBody(frame, () -> eval(s.init, frame));
-        staticValues.put(s, v);
-        staticStates.put(s, StaticState.DONE);
-        return v;
+        return staticCell(s).value;
+    }
+
+    /**
+     * The static's storage, initialized on first access exactly once even under threads (§4.2).
+     * One lock serializes initializers; an initializer that reaches its own static panics.
+     */
+    private Cell staticCell(StaticInfo s) {
+        var cell = statics.get(s);
+        if (cell != null) return cell;
+        try {
+            staticInit.lockInterruptibly();
+        } catch (InterruptedException e) {
+            throw new Abort();
+        }
+        try {
+            cell = statics.get(s);
+            if (cell != null) return cell;
+            if (!initializing.add(s)) throw new Panic("initialization of static '" + s + "' depends on itself");
+            try {
+                var frame = new Frame("static " + s, new Env(null), Map.of());
+                cell = new Cell(runBody(frame, () -> eval(s.init, frame)));
+                statics.put(s, cell);
+                return cell;
+            } finally {
+                initializing.remove(s);
+            }
+        } finally {
+            staticInit.unlock();
+        }
     }
 
     // ---- Places ----
@@ -799,8 +945,8 @@ public final class Interpreter {
                 cell.value = update.apply(needOld ? cell.value : null);
             }
             case Ir.StaticPlace s -> {
-                var old = staticValue(s.info());
-                staticValues.put(s.info(), update.apply(needOld ? old : null));
+                var cell = staticCell(s.info());
+                cell.value = update.apply(needOld ? cell.value : null);
             }
             case Ir.FieldPlace fp -> {
                 if (fp.basePlace() != null) {
@@ -830,14 +976,21 @@ public final class Interpreter {
         }
     }
 
+    /** Lists, maps and sets lock themselves for each operation, so racing threads cannot break them. */
     Object indexGet(Object container, Object index) {
         return switch (container) {
-            case ListVal l -> Values.copy(l.items.get(checkIndex(index, l.items.size())));
+            case ListVal l -> {
+                synchronized (l) {
+                    yield Values.copy(l.items.get(checkIndex(index, l.items.size())));
+                }
+            }
             case ArrayVal a -> Values.copy(a.items[checkIndex(index, a.items.length)]);
             case MapVal m -> {
                 var key = new Key(index, this);
-                if (!m.entries.containsKey(key)) throw new Panic("key not found in map: " + debug(index));
-                yield Values.copy(m.entries.get(key));
+                synchronized (m) {
+                    if (!m.entries.containsKey(key)) throw new Panic("key not found in map: " + debug(index));
+                    yield Values.copy(m.entries.get(key));
+                }
             }
             default -> callByName(container, ts.index, "index", index);
         };
@@ -845,9 +998,18 @@ public final class Interpreter {
 
     void indexSet(Object container, Object index, Object value) {
         switch (container) {
-            case ListVal l -> l.items.set(checkIndex(index, l.items.size()), value);
+            case ListVal l -> {
+                synchronized (l) {
+                    l.items.set(checkIndex(index, l.items.size()), value);
+                }
+            }
             case ArrayVal a -> a.items[checkIndex(index, a.items.length)] = value;
-            case MapVal m -> m.entries.put(new Key(index, this), value);
+            case MapVal m -> {
+                var key = new Key(index, this);
+                synchronized (m) {
+                    m.entries.put(key, value);
+                }
+            }
             default -> callByName(container, ts.indexMut, "set", index, value);
         }
     }
@@ -955,6 +1117,7 @@ public final class Interpreter {
 
     /** Runs one iteration; false on `break`. */
     private boolean loopBody(Ir.Block body, Frame f) {
+        checkAbort();
         try {
             execBlock(body, f);
         } catch (Signal s) {
@@ -996,7 +1159,11 @@ public final class Interpreter {
             }
             case Ir.PList l -> {
                 List<Object> items = switch (v) {
-                    case ListVal lv -> lv.items;
+                    case ListVal lv -> {
+                        synchronized (lv) {
+                            yield new ArrayList<>(lv.items);
+                        }
+                    }
                     case ArrayVal av -> java.util.Arrays.asList(av.items);
                     case null, default -> null;
                 };

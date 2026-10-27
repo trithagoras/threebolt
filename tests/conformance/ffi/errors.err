@@ -1,0 +1,22 @@
+errors.3b:4:5: error[E0232]: 'str' cannot be a field of an `@c struct`: it is not a C ABI type; pass a `Ptr<c::char>` from `to_cstr()`
+errors.3b:5:5: error[E0232]: '[i32]' cannot be a field of an `@c struct`: it is not a C ABI type
+errors.3b:9:11: error[E0232]: an `@c struct` cannot be generic
+errors.3b:14:13: error[E0232]: 'str' cannot be an extern parameter: it is not a C ABI type; pass a `Ptr<c::char>` from `to_cstr()`
+errors.3b:15:14: error[E0232]: '[i32; 4]' cannot be an extern parameter: it is not a C ABI type
+errors.3b:16:20: error[E0232]: 'char' cannot be an extern result: it is not a C ABI type
+errors.3b:18:18: error[E0407]: extern parameters cannot have defaults
+errors.3b:32:24: error[E0232]: 'str' is not a C ABI type, so it cannot appear in an `extern fn` type
+errors.3b:32:32: error[E0232]: 'char' is not a C ABI type, so it cannot appear in an `extern fn` type
+errors.3b:32:39: error[E0200]: expected 'extern fn(str) -> char', found 'extern fn(i32) -> i32'
+errors.3b:33:48: error[E0233]: a lambda cannot convert to 'extern fn(i32) -> i32'; pass a top-level function instead (§14.7)
+errors.3b:34:48: error[E0209]: generic function 'id' used as a value needs explicit type arguments
+errors.3b:35:47: error[E0233]: 'Plain::twice' is a method or static function; only top-level, non-generic functions with ABI signatures convert to `extern fn`
+errors.3b:40:21: error[E0232]: 'str' cannot be passed as a C variadic argument; pass an integer, float, bool, pointer or enum (`to_cstr()` gives a `Ptr<c::char>`)
+errors.3b:41:21: error[E0232]: 'Plain' cannot be passed as a C variadic argument; pass an integer, float, bool, pointer or enum
+errors.3b:42:9: error[E0203]: 'printf' takes at least 1 argument, found 0
+errors.3b:45:5: error[E0227]: calling unsafe function 'printf' requires an unsafe context
+errors.3b:46:5: error[E0227]: calling an `extern fn` pointer requires an unsafe context
+errors.3b:48:5: error[E0227]: calling unsafe function 'Ptr::read' requires an unsafe context
+errors.3b:49:5: error[E0227]: calling unsafe function 'Ptr::write' requires an unsafe context
+errors.3b:50:13: error[E0227]: calling unsafe function 'Ptr::offset' requires an unsafe context
+errors.3b:52:5: error[E0232]: 'with_ptr' needs elements of a C ABI type, not 'str'

@@ -1,0 +1,5 @@
+// Members of every `@c struct` (spec §14.5).
+
+/// Pins this struct for the duration of `f` and passes a pointer to it; writes through the
+/// pointer are visible in the struct. The pointer must not be kept after `f` returns.
+pub fn with_ptr<R>(mut self, f: fn(Ptr<Self>) -> R) -> R;

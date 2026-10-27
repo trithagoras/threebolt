@@ -200,4 +200,20 @@ class ModuleLoaderTest {
         assertTrue(errors.getFirst().startsWith("broken.3b:2:1: error[E0001]: "), errors::toString);
         assertTrue(errors.stream().noneMatch(e -> e.startsWith("main.3b")), errors::toString);
     }
+
+    @Test
+    void cIntegerAliasesFollowThePlatform() throws IOException {
+        var aliases = ModuleLoader.cIntegerAliases();
+        long longBits = java.lang.foreign.Linker.nativeLinker().canonicalLayouts().get("long").byteSize() * 8;
+        assertTrue(aliases.contains("pub type int = i32;"), aliases);
+        assertTrue(aliases.contains("pub type uint = u32;"), aliases);
+        assertTrue(aliases.contains("pub type long = i" + longBits + ";"), aliases);
+        assertTrue(aliases.contains("pub type longlong = i64;"), aliases);
+        assertTrue(aliases.contains("pub type char = i8;") || aliases.contains("pub type char = u8;"), aliases);
+
+        write("main.3b", "fn main() { let x: c::long = 1; let y: c::size_t = 2; }");
+        var c = load().module(ModulePath.of("std", "c"));
+        assertEquals(List.of(), errors());
+        assertInstanceOf(Item.TypeAlias.class, declaration(c.scope().lookup("ulonglong")));
+    }
 }

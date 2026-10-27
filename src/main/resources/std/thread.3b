@@ -1,0 +1,13 @@
+// std::thread (spec §13.4): Threebolt threads are OS threads. A panic on any thread ends the
+// process; when `main` returns, threads still running are stopped.
+
+/// A running thread whose function returns `R`.
+pub class Thread<R> {
+    /// Starts a thread running `f`.
+    pub fn spawn(f: fn() -> R) -> Self;
+    /// Waits for the thread to finish and returns its result (a copy for value types).
+    pub fn join(self) -> R;
+}
+
+/// Blocks the current thread for at least `ms` milliseconds.
+pub fn sleep(ms: u64);

@@ -1,0 +1,3 @@
+panic: mutex is already locked by this thread
+    at <lambda> (relock.3b:7:25)
+    at main (relock.3b:7:13)

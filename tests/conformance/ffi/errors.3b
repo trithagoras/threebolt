@@ -1,0 +1,54 @@
+// ABI types (§14.2), `@c struct`s (§14.3), callbacks (§14.7), variadics (§14.1), `unsafe` (§14.6).
+
+@c struct Named {
+    let name: str;
+    let items: [i32];
+    let ok: [u8; 4];
+}
+
+@c struct Generic<T> {
+    let value: T;
+}
+
+extern "C" {
+    fn puts(s: str) -> c::int;
+    fn first(xs: [i32; 4]) -> i32;
+    fn letter() -> char;
+    fn printf(fmt: Ptr<c::char>, ...) -> c::int;
+    fn defaulted(x: i32 = 0);
+}
+
+struct Plain {
+    let x: i32;
+
+    pub fn twice(x: c::int) -> c::int => x * 2;
+}
+
+fn id<T>(x: T) -> T => x;
+fn shout(s: str) -> str => s.upper();
+fn negate(x: c::int) -> c::int => -x;
+
+fn main() {
+    let bad: extern fn(str) -> char = negate;
+    let closure: extern fn(c::int) -> c::int = x => x + 1;
+    let generic: extern fn(c::int) -> c::int = id;
+    let method: extern fn(c::int) -> c::int = Plain::twice;
+    let fine: extern fn(c::int) -> c::int = negate;
+
+    let fmt = "%s".to_cstr();
+    unsafe {
+        printf(fmt, "not a C string");
+        printf(fmt, Plain { x: 1 });
+        printf();
+    }
+
+    printf(fmt, 1);
+    fine(2);
+    let p = c::alloc<i32>(1);
+    p.read();
+    p.write(1);
+    let q = p.offset(1);
+    let words = ["a", "b"];
+    words.with_ptr(w => 0);
+    unsafe { c::free(p); }
+}

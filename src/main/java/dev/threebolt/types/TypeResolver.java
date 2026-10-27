@@ -72,8 +72,18 @@ public final class TypeResolver {
                 }
                 yield new Type.Array(element, size.intValue());
             }
-            case TypeExpr.FnType f -> new Type.Fn(f.params().stream().map(p -> resolve(p, scope)).toList(),
-                    f.returnType() == null ? Type.UNIT : resolve(f.returnType(), scope), f.isExtern());
+            case TypeExpr.FnType f -> {
+                var params = f.params().stream().map(p -> resolve(p, scope)).toList();
+                var ret = f.returnType() == null ? Type.UNIT : resolve(f.returnType(), scope);
+                if (f.isExtern()) {
+                    // §14.2: an `extern fn` type has an ABI signature.
+                    for (int i = 0; i < params.size(); i++) {
+                        if (!TypeSystem.isAbi(params.get(i), false)) notAbi(params.get(i), f.params().get(i).span());
+                    }
+                    if (ret != Type.UNIT && !TypeSystem.isAbi(ret, false)) notAbi(ret, f.returnType().span());
+                }
+                yield new Type.Fn(params, ret, f.isExtern());
+            }
             case TypeExpr.Union u -> TypeSystem.union(u.members().stream().map(m -> resolve(m, scope)).toList());
         };
     }
@@ -183,6 +193,10 @@ public final class TypeResolver {
         } else if (t instanceof Type.Union u) {
             for (var m : u.members()) checkAliasCycle(alias, m, span);
         }
+    }
+
+    private void notAbi(Type t, Span span) {
+        diagnostics.error(Code.NOT_ABI_TYPE, span, "'" + t + "' is not a C ABI type, so it cannot appear in an `extern fn` type");
     }
 
     private void noArgs(TypeExpr.Named n) {

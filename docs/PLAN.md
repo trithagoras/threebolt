@@ -91,18 +91,33 @@ Built in one go rather than slice by slice, because one checker and one interpre
 - `x is pattern`: `isTarget` in the grammar, chosen by `isPatternAhead()`. Bindings are conditional `Local`s (`isConditional`) whose unnarrowed flow state is `Type.UNBOUND`; the condition's `whenTrue` binds them, so all the flow rules (`&&`, `!`, merges, diverging `if`) apply unchanged. Reading one elsewhere is E0231.
 - Fixed: `match` on a literal-typed scrutinee (`match 5 { 1..=9 => … }`); "cannot infer type argument" no longer follows an argument that already failed to type.
 
-**Known gaps/rough edges:** an `[]` element inside a collection literal gets no type from its siblings (`[[1], []]` needs an annotation); statics are not thread-safe (Phase 8); recursive aliases are only lightly supported (`AliasRef`); runtime `coerce` picks the first widening member of a union; a missing `IndexMut` on assignment reports E0300 (a mutability code).
+**Known gaps/rough edges:** an `[]` element inside a collection literal gets no type from its siblings (`[[1], []]` needs an annotation); recursive aliases are only lightly supported (`AliasRef`); runtime `coerce` picks the first widening member of a union; a missing `IndexMut` on assignment reports E0300 (a mutability code).
 
 **Decisions made while implementing:** confirmed by the user on 2026-10-27 and written into the spec (see its changelog entry "checker and interpreter (0.1 Phases 4–7)"). Implementation-only choices, not in the spec:
 - Error recovery: a module with syntax errors is skipped by the checker; the checker runs even after loader errors.
 - Diagnostic codes: E00xx syntax, E01xx modules/names (E0107–E0110 added: names, `main`), E02xx types/expressions, E03xx mutability, E04xx declarations; see `diag/Code.java`. Never renumber them.
 - std intrinsics: bodyless std functions are keyed `Owner.name`; `std/builtin/*.3b` member lists attach to primitives/enums.
 
-**Phase 8 head start:** `interp/Ffi.java` already does extern calls (scalar, `Ptr`, enum args/returns; variadics with C promotions; `@link` via `System.mapLibraryName`), `Ptr` null/from_addr/is_null/addr/offset/cast/read/write for primitive `T`, `c::alloc`/`c::free` (libc malloc/free), `str::to_cstr`/`from_cstr`, and the `unsafe` context check (E0227). Still missing: `@c struct` layouts, `[T; N]` in C structs, callbacks/upcalls and the `extern fn` conversion (§14.7), `with_ptr` pinning, ABI-type checking of extern signatures at declaration, threads/Mutex/Atomic.
-
-
-### Phase 8 — C interop & threads
+### Phase 8 — C interop & threads ✅ — status (branch `phase-8-ffi-threads`)
 `extern "C"`, `@link`, `@c struct`, `Ptr<T>`, `c::*` aliases, `with_ptr` pinning, `unsafe` checking, callbacks — all via FFM (`Linker.nativeLinker()`, `MemorySegment`, `Arena`, upcall stubs). Then `Thread`, `Mutex`, `Atomic` on Java threads (no GIL needed — JVM is thread-safe; interpreter state must be).
+
+**C interop (`interp/Ffi.java`):**
+- Layouts: scalars, enums (backing type), `Ptr` and `extern fn` (addresses), `@c struct`s (C alignment and padding, computed once per type), `[T; N]` (sequence layouts) inside them. `load`/`store` move any ABI value between a `MemorySegment` and runtime values, so `Ptr<T>` read/write/offset and `c::alloc` work for structs and nested arrays.
+- Downcalls: structs by value in both directions (a `SegmentAllocator` for struct returns), variadics (`firstVariadicArg`, C promotions), `@link` libraries. One confined arena per call.
+- `extern fn` values: `FnVal.pointer(type, addr)` for addresses from C; calling one is a downcall to the address. Passing a Threebolt function to C creates an upcall stub (one per function, global arena) that calls the interpreter on the C thread. Nothing can unwind through C frames, so a panic or `exit` in a callback ends the process (`Interpreter.panicked`/`terminate`), returns zero to C, and the caller stops when the downcall returns.
+- `with_ptr` (lists, arrays, `@c struct` places via `std/builtin/cstruct.3b`) copies into a native buffer for the duration of `f` and copies back afterwards.
+- `std::c`'s integer aliases are generated per platform by `ModuleLoader.cIntegerAliases()` from the linker's canonical layouts.
+- Checker: ABI types (`TypeSystem.isAbi`) in extern signatures and `@c struct` fields (`Declarer.checkAbi`) and `extern fn` types (`TypeResolver`), E0232; variadic calls and their argument types (`Calls.bind`); a top-level function converts to `extern fn` where one is expected, lambdas/methods/generics cannot (E0233); `with_ptr` element types and `Atomic<T>` checked in `Calls.stdCallRules`.
+
+**Threads (`interp/Threads.java`, `std/thread.3b`, `std/sync.3b`):**
+- One `Interpreter` for all threads: call stacks are `ThreadLocal`; statics live in a `ConcurrentHashMap` and initialize under one `ReentrantLock` (exactly once; a cycle still panics); caches are concurrent; list/map/set operations lock the collection (not around `with_ptr`'s callback).
+- Ending the process: the first of `main` returning, a panic or an `exit` on any thread sets the exit code (`terminate`), prints (for a panic), and interrupts the other threads; they unwind with `Interpreter.Abort` at their next call, loop iteration, print or blocking operation. `Driver.run` waits for the exit code, not for the main thread. Threebolt threads are daemons with 1 GiB stacks. An interpreter bug reports `internal error` with exit code 70 instead of hanging.
+- `Thread`, `Mutex`, `Atomic` are std classes whose Java state is in `Obj.nat` (`Thread` + result, `ReentrantLock`, `AtomicLong`).
+- `--enable-native-access=ALL-UNNAMED` is passed to the test JVM too.
+
+**Tests:** conformance `ffi/` (structs by value, through pointers and `with_ptr`, padding/arrays/enums/bools; strings, variadics, `@link("m")`; callbacks with `qsort`, `extern fn` values both ways and through C memory; a panicking callback; an errors case) and `threads/` (spawn/join, Atomic, Mutex over a list and a struct, statics initialized once under contention, panics and `exit` on threads, `main` returning with a spinning thread, mutex relock, errors). Unit tests: `TypeSystemTest.abiTypes`, `ModuleLoaderTest.cIntegerAliasesFollowThePlatform`. The C cases assume a little-endian macOS or glibc system.
+
+**Known gaps:** `with_ptr` copies in and out, so inside `f` writes through the pointer are not yet visible when reading `x` directly (spec §14.5 says they are visible during `f`; pending a decision). One lock serializes all static initializers, so an initializer that waits for another thread which needs an uninitialized static deadlocks. A generic function cannot be named with explicit type arguments as a value (`id<i32>` without a call is not §7.5 syntax), so generic functions never convert to `extern fn`. Callbacks invoked on foreign threads work but are undefined behaviour per §14.7.
 
 ## Conventions for the implementing agent
 - The spec is the source of truth; if code and spec disagree, fix one deliberately and record it.

@@ -1,0 +1,33 @@
+// std::sync (spec §13.4).
+
+/// A value shared between threads, accessed under a lock.
+pub class Mutex<T> {
+    let value: T;
+
+    pub fn new(value: T) -> Self;
+    /// Runs `f` with the lock held. The guard is valid only during `f`; its `value` is stored
+    /// back into the mutex when `f` returns. Locking a mutex the thread already holds panics.
+    pub fn lock<R>(self, f: fn(Guard<T>) -> R) -> R;
+}
+
+/// Access to a locked `Mutex`'s value (§13.4).
+pub class Guard<T> {
+    pub let value: T;
+}
+
+/// An integer or `bool` with atomic, sequentially consistent operations. The `fetch_*`
+/// operations return the previous value; arithmetic wraps.
+pub class Atomic<T> {
+    pub fn new(value: T) -> Self;
+    pub fn load(self) -> T;
+    pub fn store(self, value: T);
+    pub fn swap(self, value: T) -> T;
+    /// Stores `desired` if the value is `expected`; returns the previous value either way, so it
+    /// succeeded iff the result equals `expected`.
+    pub fn compare_exchange(self, expected: T, desired: T) -> T;
+    pub fn fetch_add(self, value: T) -> T;
+    pub fn fetch_sub(self, value: T) -> T;
+    pub fn fetch_and(self, value: T) -> T;
+    pub fn fetch_or(self, value: T) -> T;
+    pub fn fetch_xor(self, value: T) -> T;
+}

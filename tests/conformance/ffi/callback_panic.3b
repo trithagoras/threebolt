@@ -1,0 +1,16 @@
+// §13.1, §14.7: a panic inside a callback ends the process; nothing unwinds through C.
+//! exit: 101
+
+extern "C" {
+    fn qsort(base: Ptr<i32>, n: c::size_t, size: c::size_t, cmp: extern fn(Ptr<i32>, Ptr<i32>) -> c::int);
+}
+
+fn compare(a: Ptr<i32>, b: Ptr<i32>) -> c::int {
+    panic("comparator exploded");
+}
+
+fn main() {
+    let xs = [2, 1, 3];
+    xs.with_ptr(p => { unsafe { qsort(p, 3, 4, compare); } });
+    println("unreachable");
+}

@@ -211,6 +211,21 @@ public final class TypeSystem {
         return expand(t) instanceof Type.Nominal n && n.decl().isStruct();
     }
 
+    /**
+     * A C ABI type (§14.2): integers, floats, `bool`, `Ptr<T>`, `extern fn` types, `@c struct`s
+     * and enums; `[T; N]` of ABI type only as an `@c struct` field ({@code inCStruct}).
+     */
+    public static boolean isAbi(Type t, boolean inCStruct) {
+        t = expand(t);
+        return switch (t) {
+            case Prim p -> p != Prim.STR && p != Prim.CHAR;
+            case Type.Nominal n -> n.decl().isEnum() || n.decl().isStd("Ptr") || (n.decl().isStruct() && n.decl().isC);
+            case Type.Fn f -> f.isExtern();
+            case Type.Array a -> inCStruct && isAbi(a.element(), true);
+            default -> t == Type.ERROR;
+        };
+    }
+
     public static Prim prim(Type t) {
         t = expand(t);
         if (t instanceof Prim p) return p;
