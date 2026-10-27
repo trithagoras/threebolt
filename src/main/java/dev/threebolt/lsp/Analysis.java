@@ -8,6 +8,7 @@ import dev.threebolt.resolve.Module;
 import dev.threebolt.resolve.ModuleLoader;
 import dev.threebolt.resolve.Program;
 import dev.threebolt.types.Checker;
+import dev.threebolt.types.Completion;
 import dev.threebolt.types.SymbolIndex;
 import java.nio.file.Path;
 import java.util.HashMap;
@@ -42,9 +43,14 @@ final class Analysis {
     }
 
     static Analysis run(Path entry, Function<Path, String> reader, StdFiles std) {
+        return run(entry, reader, std, null);
+    }
+
+    /** Also answers {@code completion} (if not null) while checking. */
+    static Analysis run(Path entry, Function<Path, String> reader, StdFiles std, Completion completion) {
         var diagnostics = new Diagnostics();
         var program = new ModuleLoader(diagnostics, reader).load(entry);
-        var index = new SymbolIndex();
+        var index = completion == null ? new SymbolIndex() : new SymbolIndex(completion);
         new Checker(program, diagnostics, index).check();
         var ds = diagnostics.sorted();
         if (!entry.getFileName().toString().equals("main.3b") && program.entry().scope().items("main").isEmpty()) {

@@ -14,6 +14,10 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import org.antlr.v4.runtime.CharStreams;
+import org.eclipse.lsp4j.CompletionItem;
+import org.eclipse.lsp4j.CompletionList;
+import org.eclipse.lsp4j.CompletionOptions;
+import org.eclipse.lsp4j.CompletionParams;
 import org.eclipse.lsp4j.DefinitionParams;
 import org.eclipse.lsp4j.DidChangeConfigurationParams;
 import org.eclipse.lsp4j.DidChangeTextDocumentParams;
@@ -47,6 +51,9 @@ import org.eclipse.lsp4j.RenameOptions;
 import org.eclipse.lsp4j.RenameParams;
 import org.eclipse.lsp4j.ServerCapabilities;
 import org.eclipse.lsp4j.ServerInfo;
+import org.eclipse.lsp4j.SignatureHelp;
+import org.eclipse.lsp4j.SignatureHelpOptions;
+import org.eclipse.lsp4j.SignatureHelpParams;
 import org.eclipse.lsp4j.SymbolInformation;
 import org.eclipse.lsp4j.TextDocumentPositionParams;
 import org.eclipse.lsp4j.TextDocumentSyncKind;
@@ -66,11 +73,13 @@ import org.eclipse.lsp4j.services.WorkspaceService;
 /**
  * The Threebolt language server: diagnostics as you type, outline, hover, go to definition,
  * references, highlights and rename, all from {@link Analysis} (the checker plus its
- * {@link SymbolIndex}).
+ * {@link SymbolIndex}); completion and signature help check a patched copy of the text
+ * ({@link Completions}).
  */
 public final class Server implements LanguageServer, LanguageClientAware, TextDocumentService, WorkspaceService {
     private LanguageClient client;
     private final Workspace workspace = new Workspace(this::publish, this::log);
+    private final Completions completions = new Completions(workspace);
 
     Workspace workspace() {
         return workspace;
@@ -96,6 +105,8 @@ public final class Server implements LanguageServer, LanguageClientAware, TextDo
         caps.setDocumentHighlightProvider(true);
         caps.setDocumentSymbolProvider(true);
         caps.setRenameProvider(new RenameOptions(true));
+        caps.setCompletionProvider(new CompletionOptions(false, List.of(".", ":")));
+        caps.setSignatureHelpProvider(new SignatureHelpOptions(List.of("(", ","), List.of(")")));
         return CompletableFuture.completedFuture(new InitializeResult(caps, new ServerInfo("threebolt", "0.1")));
     }
 
@@ -244,6 +255,31 @@ public final class Server implements LanguageServer, LanguageClientAware, TextDo
             var m = a == null ? null : a.module(file);
             if (m == null || m.ast() == null) return List.of();
             return Outline.of(m.ast()).stream().map(Either::<SymbolInformation, DocumentSymbol>forRight).toList();
+        });
+    }
+
+    @Override
+    public CompletableFuture<Either<List<CompletionItem>, CompletionList>> completion(CompletionParams params) {
+        return CompletableFuture.supplyAsync(() -> {
+            try {
+                var file = path(params.getTextDocument().getUri());
+                return Either.forLeft(completions.complete(file, params.getPosition()));
+            } catch (Exception e) {
+                log("threebolt: completion failed: " + e);
+                return Either.forLeft(List.of());
+            }
+        });
+    }
+
+    @Override
+    public CompletableFuture<SignatureHelp> signatureHelp(SignatureHelpParams params) {
+        return CompletableFuture.supplyAsync(() -> {
+            try {
+                return completions.signatureHelp(path(params.getTextDocument().getUri()), params.getPosition());
+            } catch (Exception e) {
+                log("threebolt: signature help failed: " + e);
+                return null;
+            }
         });
     }
 

@@ -1,8 +1,11 @@
 package dev.threebolt.lsp;
 
 import dev.threebolt.diag.Diagnostic;
+import dev.threebolt.diag.Diagnostics;
 import dev.threebolt.resolve.Module;
 import dev.threebolt.resolve.ModuleLoader;
+import dev.threebolt.resolve.Program;
+import dev.threebolt.types.Completion;
 import java.io.PrintWriter;
 import java.io.StringWriter;
 import java.nio.file.Files;
@@ -19,6 +22,7 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
+import java.util.function.Function;
 
 /**
  * The open documents and the latest analysis of each program they belong to. A program is
@@ -88,6 +92,53 @@ final class Workspace {
         return a != null ? a : current.get(file);
     }
 
+    /** The editor's text of {@code file}, else the file on disk; null if it cannot be read. */
+    String text(Path file) {
+        var text = open.get(file);
+        if (text != null) return text;
+        try {
+            return Files.readString(file);
+        } catch (java.io.IOException e) {
+            return null;
+        }
+    }
+
+    /** Whether {@code file} can be checked: a `.3b` file outside std. */
+    boolean checkable(Path file) {
+        return !std.contains(file) && file.toString().endsWith(".3b");
+    }
+
+    /**
+     * Checks {@code file}'s program with {@code text} in place of the file, answering
+     * {@code completion}. Runs on the analysis thread, ahead of debounced work that is not yet
+     * due; the result is not recorded, so it neither publishes diagnostics nor answers queries.
+     */
+    Analysis check(Path file, String text, Completion completion) throws Exception {
+        Function<Path, String> reader = p -> p.equals(file) ? text : read(p);
+        return executor.submit(() -> {
+            var entry = entryFor(file);
+            var a = Analysis.run(entry, reader, std, completion);
+            if (a.module(file) == null && !entry.equals(file)) a = Analysis.run(file, reader, std, completion);
+            return a;
+        }).get();
+    }
+
+    /** Loads (does not check) {@code file}'s program with {@code text} in place of the file. */
+    Program load(Path file, String text) {
+        Function<Path, String> reader = p -> p.equals(file) ? text : read(p);
+        var entry = entryFor(file);
+        var program = new ModuleLoader(new Diagnostics(), reader).load(entry);
+        if (!entry.equals(file) && program.all().stream().noneMatch(m -> file.equals(m.file()))) {
+            program = new ModuleLoader(new Diagnostics(), reader).load(file);
+        }
+        return program;
+    }
+
+    /** The source root of {@code file}'s program: its entry file's directory (§2.1). */
+    Path sourceRoot(Path file) {
+        return entryFor(file).getParent();
+    }
+
     /** Waits for every scheduled analysis to finish (tests). */
     void awaitIdle() throws Exception {
         for (var f : List.copyOf(pending.values())) {
@@ -105,13 +156,16 @@ final class Workspace {
     }
 
     private void schedule(Path file, long delayMs) {
-        if (std.contains(file) || !file.toString().endsWith(".3b")) return;
+        if (!checkable(file)) return;
         var entry = entryFor(file);
         var old = pending.put(entry, executor.schedule(() -> analyze(entry, file), delayMs, TimeUnit.MILLISECONDS));
         if (old != null) old.cancel(false);
     }
 
-    /** The nearest `main.3b` at or above {@code file}, within a workspace root; else the file. */
+    /**
+     * The nearest `main.3b` at or above {@code file}, within a workspace root; else the file.
+     * (Checking may still fall back to the file alone when that program does not include it.)
+     */
     private Path entryFor(Path file) {
         var stop = roots.stream().filter(file::startsWith).findFirst().orElse(file.getParent());
         for (Path dir = file.getParent(); dir != null && dir.startsWith(stop); dir = dir.getParent()) {
