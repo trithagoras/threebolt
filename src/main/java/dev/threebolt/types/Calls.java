@@ -85,7 +85,7 @@ final class Calls {
     private Typed pathCall(Expr.Call e, Expr.Path p) {
         var target = c.exprs.pathTarget(p, true);
         return switch (target) {
-            case Exprs.LocalTarget l -> valueCall(e, c.readLocal(l.local()));
+            case Exprs.LocalTarget l -> valueCall(e, c.readLocal(l.local(), p.span()));
             case Exprs.ValueTarget v -> valueCall(e, v.value());
             case Exprs.StaticTarget s -> valueCall(e, new Typed(new Ir.Read(new Ir.StaticPlace(s.info())), s.info().type));
             case Exprs.FnTarget f -> {
@@ -634,10 +634,14 @@ final class Calls {
             typed[idx] = c.exprs.lambda((Expr.Lambda) argOf[idx].value(), pt);
             ts.unify(paramType[idx], typed[idx].type(), env, vars);
         }
+        // An argument that failed to type has been reported; inferring from it is no news.
+        boolean argError = java.util.Arrays.stream(typed).anyMatch(t -> t != null && t.type() == Type.ERROR);
         for (var v : vars) {
             if (!env.containsKey(v)) {
-                diag.error(Code.CANNOT_INFER, span, "cannot infer type argument '" + v.name() + "' of '" + name
-                        + "'; give it explicitly: `" + name + "<...>(...)`");
+                if (!argError) {
+                    diag.error(Code.CANNOT_INFER, span, "cannot infer type argument '" + v.name() + "' of '" + name
+                            + "'; give it explicitly: `" + name + "<...>(...)`");
+                }
                 env.put(v, Type.ERROR);
             }
         }

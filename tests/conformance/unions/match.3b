@@ -56,4 +56,6 @@ fn main() {
     let ch = 'q';
     let k = match ch { 'a'..='m' => 1, 'n'..='z' => 2, _ => 3 };
     println(f"{k}");
+    let lit = match 5 { 1..=9 => "digit", _ => "other" };   // a literal scrutinee matches as i32
+    println(lit);
 }

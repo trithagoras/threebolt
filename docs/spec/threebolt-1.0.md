@@ -354,7 +354,7 @@ if cond { ... } else if cond2 { ... } else { ... }
 if let x = expr { ... } else { ... }
 if let mut x = expr { ... }
 ```
-- `cond` follows §6.6. No parentheses required; a struct/class initializer (`Name { ... }` or `{ ... }`) may not appear directly in a condition, `while` head, `for` iterable, or `match` scrutinee unless parenthesized. Collection literals are allowed (`for x in [1, 2].iter() { ... }`).
+- `cond` follows §6.6. No parentheses required; a struct/class initializer (`Name { ... }` or `{ ... }`) may not appear directly in a condition, `while` head, `for` iterable, or `match` scrutinee unless parenthesized. The same holds for a struct pattern after `is` (§7.3): `if (p is Point { x: 0, .. }) { ... }`; unparenthesized, `if p is Point { ... }` is a type test followed by the block. Collection literals are allowed (`for x in [1, 2].iter() { ... }`).
 - `if let x = e`: evaluates `e` (type `T | null`); if non-null, binds `x: T` (narrowed) in the then-block. Never consults `Truthy`. `e`'s type must include `null` ⇒ else error.
 
 ### 6.4 Loops
@@ -424,6 +424,10 @@ Bitwise binds tighter than comparison (no C precedence trap).
 - `&& || !`: short-circuit, operands per §6.6, result `bool`.
 - `a ?? b`: if `a` is `null`, evaluates `b`. Type: `(A minus null) | B`. Only null is defaulted (errors are not).
 - `x is T`: runtime test, `bool`. `T` may be any type including traits, literal types and unions (true if any member matches). Narrows (§9).
+- `x is pattern`: `true` if `x` matches the refutable pattern (§11); its bindings are in scope where the test is known to be true: the then-block of an `if`/`while`, the right operand of `&&`, the `a` of `a if c else b`, and the code after an `if !(x is p) { ... }` whose block diverges (§9). Guards are not allowed (`&&` instead).
+  - What follows `is` is decided syntactically: `[` or `(` starts a pattern (`xs is []`, `xs is [first, ..rest]`, `t is (0, _)`); so do `Name { ... }` (a struct pattern, subject to §6.3) and a literal followed by `..`/`..=` (`n is 1..=9`). Anything else is a type, as before (`x is i32`, `x is Foo<T>`, `x is i32 | null`, `x is "a"`, `x is null`).
+  - So a list or tuple **type** cannot be written after `is` with brackets: write `x is List<str>` (`[str]` is `List<str>`), or a pattern of type tests `t is (is i32, is str)`. A name that denotes a type where a pattern expects a binding (`xs is [str]`, `x is (i32 | str)`) is an error.
+  - Or-patterns are allowed inside brackets (`xs is [1 | 2, ..]`); at the top level, `|` after a type extends the union and after a pattern is a bitwise or.
 - Ranges `a..b` (half-open), `a..=b` (inclusive): integer or `char` operands; type `Range<T>` (implements `Iterable<T>`).
 - **Overloadable** via traits (§16): `+ - * / %` unary `-`, `== !=` (`Eq`), `< > <= >=` (`Ord`), `[]` (`Index`, `IndexMut`), `& | ^ ~ << >>`. Compound assignment uses the binary operator. **Not** overloadable: `&& || ! ?? ? is as as? ..`, assignment.
 
@@ -437,6 +441,11 @@ Bitwise binds tighter than comparison (no C precedence trap).
 
 ### 7.6 Indexing
 `c[i]` calls `Index::index`; as an assignment target, `IndexMut::set`. `[T]` panics on out-of-range indices; `Map[k]` panics on missing keys (use `.get(k) -> V | null`).
+
+**Slicing:** on `[T]` and `[T; N]`, a range inside the brackets selects elements: `xs[a..b]`, `xs[a..=b]`, `xs[a..]` (to the end), `xs[..b]`, `xs[..=b]` (from the start), `xs[..]` (all).
+- Bounds are `usize`; the result is a new `[T]` holding copies of the elements (like `..rest` in a pattern, §11). It is not a place: `xs[1..] = ys` and `xs[1..].push(v)` do not change `xs`, and the first is an error.
+- Panics unless `start <= end <= len` (with `end` one past an inclusive bound).
+- Slicing is built in, not provided through `Index`. Open-ended ranges (`a..`, `..b`, `..`) exist only inside index brackets. On other types a bracketed range is an ordinary `Range` index (`c[a..b]` calls `Index` with a `Range`).
 
 ### 7.7 Literals
 - Tuple `(a, b)`; access `.0`, `.1` (a plain decimal: no suffix, `_` or leading zeros).
@@ -518,7 +527,7 @@ For `x.m(...)`: inherent methods of `x`'s static type (and base classes), then m
 ## 9. Narrowing
 
 - Applies to: locals, parameters, and `self`. Not to fields (always potentially mutable through aliases), statics, indexers, or getter results — bind first: `if let p = self.parent { p.x }`.
-- Narrowing sources: `x is T` (true branch → `x: T` if `T` is a member or subtype of `x`'s type, else narrowed to `T` itself; false branch removes `T`'s members from a union), `x == null` / `x != null`, `x == literal` (literal unions), truthy test (§6.6), `if let`, match arms, `&&`/`||` composition, `!`.
+- Narrowing sources: `x is pattern` (bindings as §7.3; in the true branch `x` also narrows to the types the pattern can match, e.g. `[T]` for a list pattern on `[T] | null`), `x is T` (true branch → `x: T` if `T` is a member or subtype of `x`'s type, else narrowed to `T` itself; false branch removes `T`'s members from a union), `x == null` / `x != null`, `x == literal` (literal unions), truthy test (§6.6), `if let`, match arms, `&&`/`||` composition, `!`.
 - **Flow sensitivity:** narrowing persists after an `if` whose branch diverges (`return`, `break`, `continue`, panic): `if x == null { return; } x.use();`.
 - Assignment to a narrowed `let mut` local resets its type to the assigned value's type.
 - Inside a lambda, captured `let mut` variables are not narrowed.
@@ -553,6 +562,7 @@ For `x.m(...)`: inherent methods of `x`'s static type (and base classes), then m
 | `Enum::Member` | enum value |
 | `pattern if guard` | (arms only) pattern + bool/Truthy guard |
 
+- Patterns appear in `match` arms, `let`, `for`, and after `is` (§7.3).
 - `let` and `for` require irrefutable patterns (tuples, struct destructure, bindings, `_`).
 
 ---
@@ -651,7 +661,7 @@ C layout (declaration order, C alignment). Fields must be ABI types. Otherwise a
 
 Implicitly imported names:
 
-**Functions:** `print(s: str)`, `println(s: str)`, `eprintln(s: str)`, `panic(msg: str) -> !`, `error(msg: str) -> Err`, `len<T: Len>(x: T) -> usize`.
+**Functions:** `print<T: Display>(x: T)`, `println<T: Display>(x: T)`, `eprintln<T: Display>(x: T)` (write `x.to_str()`; `println` and `eprintln` add a newline), `panic(msg: str) -> !`, `error(msg: str) -> Err`, `len<T: Len>(x: T) -> usize`.
 
 **Types:** `Err`, `Done`, `Type`, `List<T>` (`[T]`), `Map<K: Hash + Eq, V>`, `Set<T: Hash + Eq>`, `Range<T>`, `Ptr<T>`, module alias `c`.
 
@@ -697,7 +707,7 @@ Implicitly imported names:
 2. `>>` token splitting inside type-argument lists.
 3. Statement-initial `{` is always a block (§6.1).
 4. No bare initializer in `if`/`while`/`for`/`match` heads (§6.3); collection literals are fine.
-5. In type context `|` is union; in expression context bitwise or. Types appear only after `:`, `->`, `as`, `as?`, `is`, in `<...>`, in `type` aliases, and in pattern `is`.
+5. In type context `|` is union; in expression context bitwise or. Types appear only after `:`, `->`, `as`, `as?`, `is` (unless a pattern follows, §17 note 18), in `<...>`, in `type` aliases, and in pattern `is`.
 6. `as?` is one token; `x as T?` is `(x as T)?`.
 7. Lambda detection: `ident =>`, `mut ident =>`, `( params ) =>` where params are identifiers with optional `mut`/`: Type`. `(a, b)` not followed by `=>` is a tuple.
 8. Conditional expression `a if c else b` only in expression position; statement-initial `if` is the statement.
@@ -709,6 +719,8 @@ Implicitly imported names:
 14. A match guard is an expression at `??` precedence or tighter (no lambda, `unsafe =>` or conditional without parentheses), so the arm's `=>` is never taken as a lambda.
 15. The §6.3 head restriction applies to any initializer not enclosed in `()`, `[]` or `{}`: `if p == Point { x: 0 }.norm() {` is an error; write `if p == (Point { x: 0 }).norm() {`.
 16. The assembled operators `>=`, `>>`, `>>=` may not contain whitespace (`a > = b` is an error).
+17. Inside index brackets, a range may omit either bound or both (`xs[1..]`, `xs[..n]`, `xs[..]`, §7.6); `..=` requires an upper bound.
+18. After `is`, a pattern follows iff the next tokens are `[`, `(`, a path followed by `{` (where initializers are allowed, §6.3), or a literal (optionally negated) followed by `..`/`..=`; otherwise a type follows (§7.3).
 
 ---
 
@@ -858,3 +870,11 @@ Semantics the spec left open, decided while implementing:
 - §12 The `Err` class API.
 - §13.1 Panic message and trace format.
 - §16 Primitive trait impls, `Display` formats (floats), value copies out of collections, `str` byte offsets, additional `str`/`char`/float/collection members, std keyword-named members.
+
+### 2026-10-27 — slicing, printing any `Display`
+- §7.6 Slicing `[T]` and `[T; N]` with a range in index brackets, including open-ended ranges (`xs[1..]`); the result is a copy. §17 note 17.
+- §16 `print`, `println` and `eprintln` take any `Display` value (`println(true)`).
+
+### 2026-10-27 — patterns after `is`
+- §7.3 `x is pattern` tests a refutable pattern and binds its names where the test holds (`if xs is [first, ..rest]`). What follows `is` is chosen syntactically (§17 note 18): `[`, `(`, `Name {` and literal ranges start patterns, anything else is a type. List and tuple *types* after `is` are written `List<T>` or `(is A, is B)`.
+- §6.3 Struct patterns after `is` are subject to the head restriction. §9 pattern tests narrow. §11 lists where patterns appear.

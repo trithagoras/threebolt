@@ -21,6 +21,7 @@ import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -68,14 +69,32 @@ final class Exprs {
             case Expr.Member m -> member(m);
             case Expr.Call call -> c.calls.call(call, expected);
             case Expr.Index i -> {
-                var p = indexPlace(i);
+                var r = recv(i.target());
+                if (isRange(i.index()) && sliceable(r)) {
+                    var b = (Expr.Binary) i.index();
+                    yield slice(r, b.left(), b.right(), b.op() == BinaryOp.RANGE_INCLUSIVE, i.span());
+                }
+                var p = indexPlace(i, r);
                 yield p == null ? error() : new Typed(new Ir.Read(p.place()), p.type());
+            }
+            case Expr.Slice sl -> {
+                var r = recv(sl.target());
+                if (sliceable(r) || r.value().type() == Type.ERROR) {
+                    yield slice(r, sl.low(), sl.high(), sl.isInclusive(), sl.span());
+                }
+                diag.error(Code.BAD_OPERAND, sl.target().span(), "'" + TypeSystem.widen(r.value().type())
+                        + "' cannot be sliced; open-ended ranges only slice lists and arrays (§7.6)");
+                yield error();
             }
             case Expr.Propagate p -> propagate(p);
             case Expr.Unary u -> unary(u, expected);
             case Expr.Cast cast -> cast(cast);
             case Expr.Binary b -> binaryExpr(b, expected);
             case Expr.Is is -> {
+                var cond = condition(is);
+                yield new Typed(cond.ir(), Prim.BOOL);
+            }
+            case Expr.IsPattern is -> {
                 var cond = condition(is);
                 yield new Typed(cond.ir(), Prim.BOOL);
             }
@@ -212,12 +231,12 @@ final class Exprs {
             diag.error(Code.UNRESOLVED_NAME, span, "`self` is only available in methods");
             return error();
         }
-        return c.readLocal(c.ctx.self);
+        return c.readLocal(c.ctx.self, span);
     }
 
     private Typed path(Expr.Path p, Type expected) {
         return switch (pathTarget(p, false)) {
-            case LocalTarget(Local l) -> c.readLocal(l);
+            case LocalTarget(Local l) -> c.readLocal(l, p.span());
             case ValueTarget(Typed v) -> v;
             case StaticTarget(StaticInfo s) -> new Typed(new Ir.Read(new Ir.StaticPlace(s)), s.type);
             case FnTarget f -> c.calls.fnValue(f, expected, p.span());
@@ -490,8 +509,9 @@ final class Exprs {
         return ir;
     }
 
+    /** Indexing by a range is not a receiver place: on a list or array it is a slice, a copy (§7.6). */
     private static boolean isPlaceSyntax(Expr e) {
-        return e instanceof Expr.Self || e instanceof Expr.Member || e instanceof Expr.Index
+        return e instanceof Expr.Self || e instanceof Expr.Member || (e instanceof Expr.Index i && !isRange(i.index()))
                 || (e instanceof Expr.Path p && p.segments().size() == 1);
     }
 
@@ -568,9 +588,45 @@ final class Exprs {
                 null, m.span()), ret);
     }
 
-    /** {@code c[i]} (§7.6); null after an error. */
+    // ---- Indexing and slicing (§7.6) ----
+
+    private static boolean isRange(Expr e) {
+        return e instanceof Expr.Binary b && (b.op() == BinaryOp.RANGE || b.op() == BinaryOp.RANGE_INCLUSIVE);
+    }
+
+    /** The element type of a list or array receiver, or null. */
+    private Type sliceElement(Recv r) {
+        return switch (TypeSystem.expand(r.value().type())) {
+            case Type.Array a -> a.element();
+            case Type.Nominal n when n.decl().isList() -> n.args().getFirst();
+            default -> null;
+        };
+    }
+
+    private boolean sliceable(Recv r) {
+        return sliceElement(r) != null;
+    }
+
+    /** {@code xs[low..high]}: a copy of the selected elements as a new list. */
+    private Typed slice(Recv r, Expr low, Expr high, boolean inclusive, Span span) {
+        var lo = low == null ? null : c.check(low, Prim.USIZE);
+        var hi = high == null ? null : c.check(high, Prim.USIZE);
+        var element = sliceElement(r);
+        if (element == null) return error();
+        return new Typed(new Ir.Slice(r.value().ir(), lo, hi, inclusive, span), ts.listOf(element));
+    }
+
+    /** {@code c[i]} as a place (§7.6); null after an error. */
     PlaceInfo indexPlace(Expr.Index i) {
         var r = recv(i.target());
+        if (isRange(i.index()) && sliceable(r)) {
+            diag.error(Code.NOT_A_PLACE, i.span(), "a slice is a copy, not a place: cannot assign to it (§7.6)");
+            return null;
+        }
+        return indexPlace(i, r);
+    }
+
+    private PlaceInfo indexPlace(Expr.Index i, Recv r) {
         var t = TypeSystem.expand(r.value().type());
         if (t == Type.ERROR) {
             expr(i.index(), null);
@@ -976,6 +1032,21 @@ final class Exprs {
                 if (local == null || target == Type.ERROR) return new Cond(ir, Map.of(), Map.of());
                 var t = operand.type();
                 return new Cond(ir, Map.of(local, narrowIs(t, target)), Map.of(local, ts.minus(t, target)));
+            }
+            case Expr.IsPattern is -> {
+                var local = narrowable(is.operand());
+                var operand = expr(is.operand(), null);
+                var t = operand.type();
+                var bindings = new LinkedHashMap<String, Local>();
+                var pat = c.patterns.test(is.pattern(), t, bindings);
+                var whenTrue = new HashMap<Local, Type>();
+                for (Local b : bindings.values()) whenTrue.put(b, b.type);
+                Map<Local, Type> whenFalse = Map.of();
+                if (local != null && t != Type.ERROR) {
+                    whenTrue.put(local, c.patterns.possible(pat, t));
+                    whenFalse = Map.of(local, c.patterns.remainder(pat, t));
+                }
+                return new Cond(new Ir.IsPattern(operand.ir(), pat), whenTrue, whenFalse);
             }
             case Expr.Binary b when b.op() == BinaryOp.EQ || b.op() == BinaryOp.NE -> {
                 var typed = binaryExpr(b, null);

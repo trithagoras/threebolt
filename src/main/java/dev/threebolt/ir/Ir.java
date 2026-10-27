@@ -114,6 +114,9 @@ public final class Ir {
 
     public record Is(Expr operand, Type type) implements Expr {}
 
+    /** {@code operand is pattern} (§7.3); matching binds the pattern's locals. */
+    public record IsPattern(Expr operand, Pat pattern) implements Expr {}
+
     public record Cast(Expr operand, Type type, boolean isChecked, Span span) implements Expr {}
 
     /** An implicit conversion to {@code type}: numeric widening, boxing a struct for a trait (§5.5). */
@@ -140,6 +143,9 @@ public final class Ir {
     public enum CollectionKind { LIST, SET, ARRAY }
 
     public record NewCollection(CollectionKind kind, Type element, List<Expr> elements) implements Expr {}
+
+    /** {@code xs[low..high]} on a list or array (§7.6): a new list; absent bounds are null. */
+    public record Slice(Expr target, Expr low, Expr high, boolean isInclusive, Span span) implements Expr {}
 
     public record NewMap(Type key, Type value, List<Expr> keys, List<Expr> values) implements Expr {}
 

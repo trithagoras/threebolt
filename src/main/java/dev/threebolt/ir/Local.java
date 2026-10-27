@@ -9,6 +9,11 @@ public final class Local {
     private final boolean isMutable;
     private final Span span;
     public Type type;
+    /**
+     * Bound by a pattern after `is` (§7.3): unbound wherever the flow state does not say
+     * otherwise, so its default narrowing is {@link Type#UNBOUND}.
+     */
+    public boolean isConditional;
 
     public Local(String name, boolean isMutable, Type type, Span span) {
         this.name = name;

@@ -85,7 +85,13 @@ Built in one go rather than slice by slice, because one checker and one interpre
 - Less cascading: no "must override abstract" for a class's own abstract methods or after a failed `override`; a lambda of the wrong arity reports only that.
 - Dead code removed (`Exprs` stubs and `&& false`, `Values.fill/debugFields`, unused imports).
 
-**Known gaps/rough edges:** statics are not thread-safe (Phase 8); recursive aliases are only lightly supported (`AliasRef`); runtime `coerce` picks the first widening member of a union; a missing `IndexMut` on assignment reports E0300 (a mutability code).
+**Language additions after the Phase 7 review (spec changelog 2026-10-27, "slicing…" and "patterns after `is`"):**
+- Slicing `xs[a..b]`, `xs[a..]`, `xs[..b]`, `xs[..]` on lists and arrays (`Expr.Slice` for open-ended forms, `Ir.Slice`; closed ranges stay `Expr.Index` and the checker picks slice vs `Index`). A range index is not a receiver place.
+- `print`/`println`/`eprintln` take any `Display`.
+- `x is pattern`: `isTarget` in the grammar, chosen by `isPatternAhead()`. Bindings are conditional `Local`s (`isConditional`) whose unnarrowed flow state is `Type.UNBOUND`; the condition's `whenTrue` binds them, so all the flow rules (`&&`, `!`, merges, diverging `if`) apply unchanged. Reading one elsewhere is E0231.
+- Fixed: `match` on a literal-typed scrutinee (`match 5 { 1..=9 => … }`); "cannot infer type argument" no longer follows an argument that already failed to type.
+
+**Known gaps/rough edges:** an `[]` element inside a collection literal gets no type from its siblings (`[[1], []]` needs an annotation); statics are not thread-safe (Phase 8); recursive aliases are only lightly supported (`AliasRef`); runtime `coerce` picks the first widening member of a union; a missing `IndexMut` on assignment reports E0300 (a mutability code).
 
 **Decisions made while implementing:** confirmed by the user on 2026-10-27 and written into the spec (see its changelog entry "checker and interpreter (0.1 Phases 4–7)"). Implementation-only choices, not in the spec:
 - Error recovery: a module with syntax errors is skipped by the checker; the checker runs even after loader errors.

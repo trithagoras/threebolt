@@ -518,11 +518,13 @@ public final class AstPrinter {
             case Expr.Conditional c -> CONDITIONAL;
             case Expr.Binary b -> b.op().precedence();
             case Expr.Is i -> COMPARISON;
+            case Expr.IsPattern i -> COMPARISON;
             case Expr.Cast c -> CAST;
             case Expr.Unary u -> PREFIX;
             case Expr.Member m -> POSTFIX;
             case Expr.Call c -> POSTFIX;
             case Expr.Index i -> POSTFIX;
+            case Expr.Slice sl -> POSTFIX;
             case Expr.Propagate p -> POSTFIX;
             default -> PRIMARY;
         };
@@ -535,6 +537,7 @@ public final class AstPrinter {
     private void expr(Expr e, int min, boolean typeFollows) {
         boolean parens = precedence(e) < min
                 || (inHead && e instanceof Expr.Init)
+                || (inHead && e instanceof Expr.IsPattern ip && ip.pattern() instanceof Pattern.Struct)
                 || (inList && e instanceof Expr.Binary b && b.op() == Expr.BinaryOp.LT)
                 || (typeFollows && e instanceof Expr.Cast);
         if (!parens) {
@@ -581,6 +584,17 @@ public final class AstPrinter {
                 nested(() -> expr(i.index(), 0, false));
                 out.append(']');
             }
+            case Expr.Slice sl -> {
+                expr(sl.target(), POSTFIX, false);
+                out.append('[');
+                int bound = Expr.BinaryOp.RANGE.precedence() + 1;
+                nested(() -> {
+                    if (sl.low() != null) expr(sl.low(), bound, false);
+                    out.append(sl.isInclusive() ? "..=" : "..");
+                    if (sl.high() != null) expr(sl.high(), bound, false);
+                });
+                out.append(']');
+            }
             case Expr.Propagate p -> {
                 expr(p.operand(), POSTFIX, false);
                 out.append('?');
@@ -599,6 +613,11 @@ public final class AstPrinter {
                 expr(i.operand(), RANGE, false);
                 out.append(" is ");
                 type(i.type());
+            }
+            case Expr.IsPattern i -> {
+                expr(i.operand(), RANGE, false);
+                out.append(" is ");
+                isPattern(i.pattern());
             }
             case Expr.Conditional c -> {
                 expr(c.then(), COALESCE, false);
@@ -899,6 +918,18 @@ public final class AstPrinter {
     }
 
     // ---- Patterns ----
+
+    /**
+     * A pattern after `is` (§17.18). Only `[`, `(`, `Name {` and ranges read as patterns there, so
+     * any other pattern is wrapped in parentheses.
+     */
+    private void isPattern(Pattern p) {
+        boolean direct = p instanceof Pattern.ListPattern || p instanceof Pattern.Tuple || p instanceof Pattern.Unit
+                || p instanceof Pattern.Struct || p instanceof Pattern.Range;
+        if (!direct) out.append('(');
+        pattern(p);
+        if (!direct) out.append(')');
+    }
 
     private void pattern(Pattern p) {
         switch (p) {

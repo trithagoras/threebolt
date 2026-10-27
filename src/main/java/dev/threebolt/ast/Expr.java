@@ -64,6 +64,12 @@ public sealed interface Expr extends Body {
 
     record Index(Expr target, Expr index, Span span) implements Expr {}
 
+    /**
+     * An open-ended slice {@code xs[a..]}, {@code xs[..b]}, {@code xs[..=b]}, {@code xs[..]} (§7.6);
+     * absent bounds are null. Closed ones ({@code xs[a..b]}) are an {@link Index} of a range.
+     */
+    record Slice(Expr target, Expr low, Expr high, boolean isInclusive, Span span) implements Expr {}
+
     /** {@code operand?}. */
     record Propagate(Expr operand, Span span) implements Expr {}
 
@@ -77,6 +83,9 @@ public sealed interface Expr extends Body {
     record Binary(BinaryOp op, Expr left, Expr right, Span span) implements Expr {}
 
     record Is(Expr operand, TypeExpr type, Span span) implements Expr {}
+
+    /** {@code operand is pattern} (§7.3): a refutable pattern test that binds where it holds. */
+    record IsPattern(Expr operand, Pattern pattern, Span span) implements Expr {}
 
     /** {@code then if condition else otherwise}. */
     record Conditional(Expr then, Expr condition, Expr otherwise, Span span) implements Expr {}

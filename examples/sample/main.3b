@@ -1,0 +1,56 @@
+// sample shiet
+
+impl Display for List<i32> {
+    pub fn to_str(self) -> str => match self {
+        [] => "[]",
+        [x] => f"[{x}]",
+        _ => "too big lol"
+    };
+}
+
+
+class Node<T> {
+    let value: T;
+    let next: Node<T> | null;
+
+    pub fn new(value: T, mut parent: Node<T> | null = null) -> Node<T> {
+        let x: Node<T> = { value: value, next: null };
+        if let mut p = parent {
+            p.next = x;
+        }
+        return x;
+    }
+}
+
+impl Len for Node<i32> {
+    pub get fn len(self) -> usize {
+        if let nxt = self.next {
+            return 1 + len(nxt);
+        }
+        return 1;
+    }
+}
+
+fn any<T>(xs: [T], pred: fn (T) -> bool) -> bool
+    => match xs {
+        [] => false,
+        [x, ..] => true if pred(x) else any(xs[1..], pred)
+    };
+
+fn tail<T>(xs: [T]) -> [T] {
+    if xs is [] {
+        return [];
+    }
+    return xs[1..];
+}
+
+fn main() {
+    println(any([1,2,3], x => x >= 3));
+
+    // println(tail([] as [i32])); // this doesn't work but i'd expect it to!
+
+    let mut head = Node::new(1);
+    let next = Node::new(2, parent: head);
+
+    println(len(head));
+}

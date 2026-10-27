@@ -135,6 +135,63 @@ final class Patterns {
         return local;
     }
 
+    /**
+     * The type patterns are checked against: a single literal type is widened (`match 5` matches
+     * `i32` patterns), a union of literals is kept for exhaustiveness.
+     */
+    private static Type subject(Type t) {
+        return t instanceof Type.Lit l ? l.base() : t;
+    }
+
+    // ---- Pattern tests after `is` (§7.3) ----
+
+    /**
+     * {@code x is p}: checks {@code p} against {@code type}. Its bindings, collected in
+     * {@code bindings}, are declared in the current scope as conditional locals: unbound until the
+     * test's true branch says otherwise.
+     */
+    Ir.Pat test(Pattern p, Type type, Map<String, Local> bindings) {
+        var pat = pattern(p, subject(type), bindings, null);
+        for (Local l : bindings.values()) {
+            l.isConditional = true;
+            if (namesType(l.name())) {
+                diag.error(Code.BAD_PATTERN, l.span(), "'" + l.name() + "' is a type, but here it would be a binding: "
+                        + "after `is`, `[` and `(` start a pattern (§7.3); test a list type with `List<T>`, "
+                        + "a tuple's element types with `(is A, is B)`");
+            }
+        }
+        return pat;
+    }
+
+    private boolean namesType(String name) {
+        if (Prim.named(name) != null || c.ctx.typeScope.params().containsKey(name)) return true;
+        return c.names.lookup(c.ctx.module, name) instanceof Names.TypeEntity;
+    }
+
+    /** What {@code x} is known to be when {@code x is pat} holds: the members it may match. */
+    Type possible(Ir.Pat pat, Type type) {
+        if (pat instanceof Ir.PIs is) return c.exprs.narrowIs(type, is.type());
+        if (pat instanceof Ir.PBind b && b.sub() instanceof Ir.PIs is) return c.exprs.narrowIs(type, is.type());
+        var out = new ArrayList<Type>();
+        for (Type m : TypeSystem.members(type)) if (mayMatch(pat, m)) out.add(m);
+        return out.isEmpty() ? type : TypeSystem.union(out);
+    }
+
+    private boolean mayMatch(Ir.Pat pat, Type m) {
+        var e = TypeSystem.expand(m);
+        return switch (pat) {
+            case Ir.PWild w -> true;
+            case Ir.PBind b -> b.sub() == null || mayMatch(b.sub(), m);
+            case Ir.PIs is -> c.exprs.castPossible(m, is.type());
+            case Ir.PLit l -> l.value() == null ? m == Type.NULL : m != Type.NULL;
+            case Ir.PRange r -> e instanceof Prim || e instanceof Type.Lit;
+            case Ir.PTuple t -> e instanceof Type.Tuple tu && tu.elements().size() == t.elements().size();
+            case Ir.PList l -> e instanceof Type.Array || (e instanceof Type.Nominal n && n.decl() == ts.list);
+            case Ir.PStruct st -> e instanceof Type.Nominal;
+            case Ir.POr o -> o.alternatives().stream().anyMatch(a -> mayMatch(a, m));
+        };
+    }
+
     @SuppressWarnings("unchecked")
     private <T extends Type> T memberOf(Type type, Class<T> kind, java.util.function.Predicate<T> ok) {
         for (Type m : TypeSystem.members(type)) {
@@ -252,7 +309,7 @@ final class Patterns {
     Typed match(Expr.Match m, Type expected, boolean statement) {
         var ctx = c.ctx;
         var scrutinee = c.exprs.expr(m.scrutinee(), null);
-        var scrType = TypeSystem.widen(scrutinee.type()) instanceof Type.Union ? scrutinee.type() : scrutinee.type();
+        var scrType = subject(scrutinee.type());
         Local subject = m.scrutinee() instanceof Expr.Path p && p.segments().size() == 1
                 ? c.lookupLocal(p.segments().getFirst().name().text()) : null;
         if (m.scrutinee() instanceof Expr.Self) subject = ctx.self;
@@ -335,7 +392,7 @@ final class Patterns {
     }
 
     /** The scrutinee's type after an unguarded arm with this pattern did not match. */
-    private Type remainder(Ir.Pat pat, Type t) {
+    Type remainder(Ir.Pat pat, Type t) {
         var out = new ArrayList<Type>();
         for (Type m : TypeSystem.members(t)) {
             if (!coversAtom(pat, m)) out.add(m);

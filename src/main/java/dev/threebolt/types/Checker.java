@@ -260,21 +260,24 @@ public final class Checker {
 
     /** The current (possibly narrowed) type of a local. */
     Type typeOf(Local local) {
+        var t = ctx.narrowed.getOrDefault(local, unnarrowed(local));
+        if (t == Type.UNBOUND) return t;
         // Captured `let mut` locals are not narrowed inside lambdas (§9).
         if (local.isMutable() && localDepth.getOrDefault(local, 0) < ctx.depth) return local.type;
-        return ctx.narrowed.getOrDefault(local, local.type);
+        return t;
     }
 
     /** Reading a local: narrowed to a struct, a boxed value becomes a copy (§5.5). */
-    Typed readLocal(Local local) {
+    Typed readLocal(Local local, Span span) {
         var type = typeOf(local);
+        if (type == Type.UNBOUND) return unbound(local, span);
         Ir.Expr ir = new Ir.Read(new Ir.LocalPlace(local));
         if (type != local.type && TypeSystem.isStruct(type)) ir = new Ir.Unbox(ir);
         return new Typed(ir, type);
     }
 
     void narrow(Local local, Type type) {
-        if (type.equals(local.type)) ctx.narrowed.remove(local);
+        if (type.equals(unnarrowed(local))) ctx.narrowed.remove(local);
         else ctx.narrowed.put(local, type);
     }
 
@@ -284,10 +287,23 @@ public final class Checker {
         var keys = new HashSet<>(a.keySet());
         keys.addAll(b.keySet());
         for (Local l : keys) {
-            var t = TypeSystem.union(a.getOrDefault(l, l.type), b.getOrDefault(l, l.type));
-            if (!t.equals(l.type)) out.put(l, t);
+            var unnarrowed = unnarrowed(l);
+            var t = TypeSystem.union(a.getOrDefault(l, unnarrowed), b.getOrDefault(l, unnarrowed));
+            if (!t.equals(unnarrowed)) out.put(l, t);
         }
         return out;
+    }
+
+    /** A local's type where nothing narrows it: unbound for an `is`-pattern binding (§7.3). */
+    private static Type unnarrowed(Local l) {
+        return l.isConditional ? Type.UNBOUND : l.type;
+    }
+
+    /** Reading an `is`-pattern binding where its test is not known to hold. */
+    private Typed unbound(Local local, Span span) {
+        diag.error(Code.UNBOUND_BINDING, span, "'" + local.name() + "' is only bound where the `is` test that "
+                + "binds it holds (§7.3)");
+        return new Typed(new Ir.Lit(Values.Unit.UNIT), Type.ERROR);
     }
 
     static Map<Local, Type> with(Map<Local, Type> base, Map<Local, Type> more) {
@@ -593,8 +609,14 @@ public final class Checker {
             if (t.type() == Type.NEVER) ctx.reachable = false;
             return new Ir.Eval(t.ir());
         }
+        int errors = diag.count();
         var place = place(a.target());
         if (place == null) {
+            if (diag.count() > errors) {
+                // `place` already said why (e.g. assigning to a slice); just check the value.
+                exprs.expr(a.value(), null);
+                return new Ir.Eval(new Ir.Lit(Values.Unit.UNIT));
+            }
             exprs.expr(a.target(), null);
             diag.error(Code.NOT_A_PLACE, a.target().span(), "cannot assign to this expression");
             exprs.expr(a.value(), null);
@@ -644,7 +666,9 @@ public final class Checker {
                 String name = p.segments().getFirst().name().text();
                 var local = lookupLocal(name);
                 if (local != null) {
-                    yield new PlaceInfo(new Ir.LocalPlace(local), typeOf(local), local.isMutable(),
+                    var type = typeOf(local);
+                    if (type == Type.UNBOUND) type = unbound(local, p.span()).type();
+                    yield new PlaceInfo(new Ir.LocalPlace(local), type, local.isMutable(),
                             "cannot assign to immutable binding '" + name + "'; declare it `let mut`", local);
                 }
                 if (names.lookup(ctx.module, name) instanceof Names.StaticEntity(StaticInfo s)) yield staticPlace(s);
@@ -662,6 +686,10 @@ public final class Checker {
             }
             case Expr.Member m -> exprs.fieldPlace(m);
             case Expr.Index i -> exprs.indexPlace(i);
+            case Expr.Slice sl -> {
+                diag.error(Code.NOT_A_PLACE, sl.span(), "a slice is a copy, not a place: cannot assign to it (§7.6)");
+                yield null;
+            }
             default -> null;
         };
     }

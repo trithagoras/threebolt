@@ -71,6 +71,7 @@ public final class TypeSystem {
         var flat = new LinkedHashSet<Type>();
         for (Type t : types) flatten(t, flat);
         if (flat.contains(Type.ERROR)) return Type.ERROR;
+        if (flat.contains(Type.UNBOUND)) return Type.UNBOUND;
         flat.remove(Type.NEVER);
         flat.removeIf(t -> t instanceof Type.Lit l && flat.contains(l.base()));
         if (flat.isEmpty()) return Type.NEVER;

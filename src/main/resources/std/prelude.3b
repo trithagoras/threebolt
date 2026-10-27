@@ -3,9 +3,9 @@
 //
 // Functions without a body are intrinsics provided by the interpreter.
 
-pub fn print(s: str);
-pub fn println(s: str);
-pub fn eprintln(s: str);
+pub fn print<T: Display>(x: T);
+pub fn println<T: Display>(x: T);
+pub fn eprintln<T: Display>(x: T);
 pub fn panic(msg: str) -> !;
 pub fn error(msg: str) -> Err => Err::new(msg);
 pub fn len<T: Len>(x: T) -> usize => x.len;

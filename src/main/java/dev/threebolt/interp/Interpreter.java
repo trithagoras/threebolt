@@ -35,6 +35,7 @@ import dev.threebolt.types.TypeSystem;
 import java.io.PrintStream;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -449,6 +450,7 @@ public final class Interpreter {
                     case UNIT -> v == Unit.UNIT;
                     case NEVER -> false;
                     case ERROR -> true;
+                    case UNBOUND -> throw new IllegalStateException("unbound is a checker-only type");
                 };
             }
             case Type.Lit l -> {
@@ -659,6 +661,37 @@ public final class Interpreter {
             return Long.signum(r.v());
         }
         return Ops.comparePrim(a, b);
+    }
+
+    /** {@code xs[a..b]} (§7.6): copies of the selected elements as a new list. */
+    private ListVal slice(Ir.Slice sl, Frame f) {
+        var target = eval(sl.target(), f);
+        Object lowV = sl.low() == null ? null : eval(sl.low(), f);
+        Object highV = sl.high() == null ? null : eval(sl.high(), f);
+        f.at = sl.span();
+        Type element;
+        List<Object> items;
+        if (target instanceof ArrayVal a) {
+            element = a.element;
+            items = Arrays.asList(a.items);
+        } else {
+            var l = (ListVal) target;
+            element = l.element;
+            items = l.items;
+        }
+        long len = items.size();
+        // usize values above i64::MAX are negative here; they are out of range anyway.
+        long low = lowV == null ? 0 : ((Int) lowV).v();
+        long end = highV == null ? len : ((Int) highV).v();
+        if (highV != null && sl.isInclusive()) end = end < 0 || end == Long.MAX_VALUE ? -1 : end + 1;
+        if (end < 0 || end > len) {
+            throw new Panic("slice end " + (highV == null ? len : highV) + (sl.isInclusive() ? " (inclusive)" : "")
+                    + " out of range for length " + len);
+        }
+        if (low < 0 || low > end) throw new Panic("slice start " + lowV + " is past its end " + end);
+        var out = new ArrayList<Object>((int) (end - low));
+        for (long i = low; i < end; i++) out.add(Values.copy(items.get((int) i)));
+        return new ListVal(element, out);
     }
 
     /** {@code Display} (§16), as used by f-strings. */
@@ -1071,6 +1104,7 @@ public final class Interpreter {
             }
             case Ir.Cond c -> (Boolean) eval(c.condition(), f) ? eval(c.then(), f) : eval(c.otherwise(), f);
             case Ir.Is is -> isInstance(eval(is.operand(), f), subst(is.type(), f));
+            case Ir.IsPattern is -> match(is.pattern(), eval(is.operand(), f), f);
             case Ir.Cast c -> {
                 var v = eval(c.operand(), f);
                 f.at = c.span();
@@ -1095,6 +1129,7 @@ public final class Interpreter {
                 yield sb.toString();
             }
             case Ir.New n -> construct(n, f);
+            case Ir.Slice sl -> slice(sl, f);
             case Ir.NewCollection c -> {
                 var element = subst(c.element(), f);
                 var items = new ArrayList<Object>();

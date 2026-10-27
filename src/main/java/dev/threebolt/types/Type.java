@@ -12,9 +12,12 @@ import java.util.stream.Collectors;
 public sealed interface Type permits Prim, Type.Special, Type.Lit, Type.Tuple, Type.Nominal, Type.Array,
         Type.Fn, Type.Union, Type.Param, Type.AliasRef {
 
-    /** {@code ()}, {@code null}, {@code !}, and the error type that silences follow-on errors. */
+    /**
+     * {@code ()}, {@code null}, {@code !}, the error type that silences follow-on errors, and the
+     * flow state of an `is`-pattern binding where it is not bound (§7.3; absorbs in unions).
+     */
     enum Special implements Type {
-        UNIT("()"), NULL("null"), NEVER("!"), ERROR("{error}");
+        UNIT("()"), NULL("null"), NEVER("!"), ERROR("{error}"), UNBOUND("{unbound}");
 
         private final String text;
 
@@ -32,6 +35,7 @@ public sealed interface Type permits Prim, Type.Special, Type.Lit, Type.Tuple, T
     Type NULL = Special.NULL;
     Type NEVER = Special.NEVER;
     Type ERROR = Special.ERROR;
+    Type UNBOUND = Special.UNBOUND;
 
     /**
      * A literal type (§3.2): {@code value} is a {@link BigInteger} (integer), {@link String},

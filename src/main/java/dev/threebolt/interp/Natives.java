@@ -83,11 +83,11 @@ final class Natives {
 
     private Object prelude(String name, Object[] a) {
         switch (name) {
-            case "print" -> in.out.print((String) a[0]);
-            case "println" -> in.out.println((String) a[0]);
+            case "print" -> in.out.print(in.display(a[0]));
+            case "println" -> in.out.println(in.display(a[0]));
             case "eprintln" -> {
                 in.out.flush();
-                in.err.println((String) a[0]);
+                in.err.println(in.display(a[0]));
             }
             case "panic" -> throw new Panic((String) a[0]);
             default -> unknown("prelude." + name);

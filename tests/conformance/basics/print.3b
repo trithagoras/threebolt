@@ -1,0 +1,22 @@
+// §16: print, println and eprintln take any `Display` value.
+
+enum Color { Red, Green }
+struct V : Display {
+    let x: i32;
+    pub fn to_str(self) -> str => f"V({self.x})";
+}
+
+fn main() {
+    println("text");
+    println(42);
+    println(-2.5);
+    println(true);
+    println('c');
+    println(Color::Green);
+    println(V { x: 7 });
+    println(typeof([i32]));
+    print(1);
+    print(" and ");
+    println(2);
+    eprintln(error("to stderr").message());
+}
