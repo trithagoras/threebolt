@@ -42,8 +42,9 @@ other backend and for dogfooding the language.)
 2. ~~**One callback interface**~~ — done (`5504a3b`): `interp.Callbacks` (`call(FnVal, args)`, `callTrait`,
    `equal`/`hash`/`display`/`next`, process hooks) is all `Natives`, `Threads`, `Ffi` and `Io` see; `BoundaryTest`
    enforces it. No measurable slowdown.
-3. **Bodied members in `builtin/*.3b`**: primitive member files are all bodyless today; check the checker and
-   interpreter accept members with bodies there, and private (non-`pub`) bodyless helpers, as `io.3b` does.
+3. ~~**Bodied members in `builtin/*.3b`**~~ — done (`81244d2`): bodied members are checked once per owner type;
+   private members are visible only within std/builtin. Moved: integer `abs`/`min`/`max`, `char::is_digit`,
+   `flags::has`. No measurable slowdown.
 4. **`str` representation** (§1.1), then move the derivable `str` members.
 5. **Literal defaulting to `f64`** (§5.2, decided): spec, checker and conformance cases, before `std::math` moves,
    so its float functions can become generic over `Float` as they move.
