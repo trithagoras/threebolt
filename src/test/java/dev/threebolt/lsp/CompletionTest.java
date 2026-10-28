@@ -149,6 +149,19 @@ class CompletionTest {
     }
 
     @Test
+    void operatorMethodsSortLast() throws Exception {
+        var items = complete("""
+                fn main() {
+                    let n = 5;
+                    n.‸
+                }
+                """);
+        // `+` calls `add`; nobody writes `n.add(1)`.
+        assertTrue(find(items, "wrapping_add").getSortText().compareTo(find(items, "add").getSortText()) < 0);
+        assertTrue(find(items, "to_str").getSortText().compareTo(find(items, "eq").getSortText()) < 0);
+    }
+
+    @Test
     void privateMembersAreVisibleInsideTheType() throws Exception {
         var names = names(complete("""
                 struct Box {

@@ -71,10 +71,23 @@ final class Completer {
             if (cands.isEmpty()) continue;
             var first = cands.getFirst();
             var kind = first.fn().isGetter() ? Kind.PROPERTY : Kind.METHOD;
-            items.put(m, new Item(m, kind, signature(first.fn(), first.env(), cands.size()), first.fn().owner == own ? 1 : 2,
-                    first.fn()));
+            int rank = operatorMethod(t, m) ? 3 : first.fn().owner == own ? 1 : 2;
+            items.put(m, new Item(m, kind, signature(first.fn(), first.env(), cands.size()), rank, first.fn()));
         }
         record(Site.MEMBER, name, items.values(), null);
+    }
+
+    /**
+     * Whether {@code name} on {@code t} is what an operator or condition calls (`add` for `+`, `eq`
+     * for `==`, `truthy` for `if x`): {@code t} implements the trait it comes from. Rarely written out.
+     */
+    private boolean operatorMethod(Type t, String name) {
+        var traits = new ArrayList<TypeInfo>(c.ts.operatorTraits.values());
+        traits.addAll(List.of(c.ts.eq, c.ts.ord, c.ts.hash, c.ts.truthy, c.ts.index, c.ts.indexMut));
+        for (var trait : traits) {
+            if (trait != null && !trait.methods(name).isEmpty() && c.ts.implementsAs(t, trait) != null) return true;
+        }
+        return false;
     }
 
     /** {@code Type::|}: enum members, constants, statics and static functions. */
