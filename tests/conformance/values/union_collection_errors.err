@@ -1,0 +1,6 @@
+union_collection_errors.3b:4:32: error[E0220]: ambiguous collection literal for '[i32] | Set<i32>': it could build any of its collection members; pick one with `as`
+union_collection_errors.3b:5:32: error[E0220]: ambiguous collection literal for '[i32] | Set<i32>': it could build any of its collection members; pick one with `as`
+union_collection_errors.3b:6:29: error[E0220]: ambiguous collection literal for '[i32] | [str]': it could build any of its collection members; pick one with `as`
+union_collection_errors.3b:7:45: error[E0220]: ambiguous collection literal for 'Map<str, i32> | Map<i32, i32>': it could build any of its collection members; pick one with `as`
+union_collection_errors.3b:9:32: error[E0200]: a map literal cannot create a '[i32] | Set<i32>'
+union_collection_errors.3b:9:32: error[E0200]: expected '[i32] | Set<i32>', found 'Map<str, i32>'

@@ -1,0 +1,10 @@
+// A collection literal against a union with several members of its form is ambiguous (§7.7).
+
+fn main() {
+    let _a: [i32] | Set<i32> = [5];
+    let _b: [i32] | Set<i32> = [];
+    let _c: [i32] | [str] = [x for x in [1]];
+    let _d: Map<str, i32> | Map<i32, i32> = [:];
+    let _e: [i32] | Set<i32> = [5] as [i32];       // fine
+    let _f: [i32] | Set<i32> = ["a": 1];           // no map member
+}

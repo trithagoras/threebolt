@@ -1,0 +1,46 @@
+// Collection literals against a union pick the member of their form (§7.7).
+
+pub type Json = null | bool | f64 | str | [Json] | Map<str, Json>;
+type Swapped = null | Map<str, Swapped> | [Swapped];
+
+fn kind(j: Json) -> str {
+    return match j {
+        null => "null",
+        is bool => "bool",
+        is f64 => "f64",
+        is str => "str",
+        is [Json] => "list",
+        is Map<str, Json> => "map",
+    };
+}
+
+fn main() {
+    let j: Json = [
+        "proto_version": 2,
+        "person": [
+            "age": 25,
+            "tags": ["a", "b"],
+        ],
+    ];
+    println(kind(j));
+    if j is Map<str, Json> {
+        println(kind(j["proto_version"]));
+        println(kind(j["person"]));
+    }
+
+    let empty: Json = [];
+    let empty_map: Json = [:];
+    println(f"{kind(empty)} {kind(empty_map)}");
+
+    let s: Swapped = ["a": [null, ["b": null]]];
+    println(s is Map<str, Swapped>);
+
+    let maybe: Map<str, i32> | null = [];
+    println(maybe is Map<str, i32>);
+
+    let xs: [i32] | Set<i32> = [5, 5] as Set<i32>;
+    println(xs is Set<i32>);
+
+    let ys: [Json] | Map<str, Json> = [k: k for k in ["x", "y"]];
+    println(ys is Map<str, Json>);
+}

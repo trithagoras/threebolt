@@ -622,13 +622,16 @@ public final class TypeSystem {
     }
 
     public static boolean mentions(Type t, Set<TypeParamInfo> vars) {
-        return switch (expand(t)) {
+        return switch (t) {
             case Type.Param p -> vars.contains(p.param());
             case Type.Nominal n -> n.args().stream().anyMatch(a -> mentions(a, vars));
             case Type.Tuple tu -> tu.elements().stream().anyMatch(a -> mentions(a, vars));
             case Type.Array a -> mentions(a.element(), vars);
             case Type.Fn f -> mentions(f.ret(), vars) || f.params().stream().anyMatch(a -> mentions(a, vars));
             case Type.Union u -> u.members().stream().anyMatch(a -> mentions(a, vars));
+            // An alias's body refers only to its own parameters, so its arguments decide (and a
+            // recursive alias is not expanded forever).
+            case Type.AliasRef r -> r.args().stream().anyMatch(a -> mentions(a, vars));
             default -> false;
         };
     }

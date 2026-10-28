@@ -1554,30 +1554,37 @@ final class Exprs {
 
     private record CollectionTarget(Want want, Type element, Type key, Type value, int size) {}
 
-    private CollectionTarget collectionTarget(Type expected) {
+    /** The written shape of a collection literal: it picks which collection member of a union it builds. */
+    private enum Form { ELEMENTS, ENTRIES }
+
+    private CollectionTarget collectionTarget(Type expected, Form form, Span span) {
         if (expected == null) return null;
+        var all = new ArrayList<CollectionTarget>();
         for (Type m : TypeSystem.members(expected)) {
             switch (TypeSystem.expand(m)) {
-                case Type.Array a -> {
-                    return new CollectionTarget(Want.ARRAY, a.element(), null, null, a.size());
-                }
-                case Type.Nominal n when n.decl() == ts.list -> {
-                    return new CollectionTarget(Want.LIST, n.args().getFirst(), null, null, -1);
-                }
-                case Type.Nominal n when n.decl() == ts.set -> {
-                    return new CollectionTarget(Want.SET, n.args().getFirst(), null, null, -1);
-                }
-                case Type.Nominal n when n.decl() == ts.map -> {
-                    return new CollectionTarget(Want.MAP, null, n.args().get(0), n.args().get(1), -1);
-                }
+                case Type.Array a -> all.add(new CollectionTarget(Want.ARRAY, a.element(), null, null, a.size()));
+                case Type.Nominal n when n.decl() == ts.list ->
+                        all.add(new CollectionTarget(Want.LIST, n.args().getFirst(), null, null, -1));
+                case Type.Nominal n when n.decl() == ts.set ->
+                        all.add(new CollectionTarget(Want.SET, n.args().getFirst(), null, null, -1));
+                case Type.Nominal n when n.decl() == ts.map ->
+                        all.add(new CollectionTarget(Want.MAP, null, n.args().get(0), n.args().get(1), -1));
                 default -> {}
             }
         }
-        return null;
+        if (all.size() <= 1) return all.isEmpty() ? null : all.getFirst();
+        // §7.7: in a union, `[k: v]` targets the map member; `[a, b]` and `[]` the list, set or array member.
+        var fits = all.stream().filter(t -> (t.want() == Want.MAP) == (form == Form.ENTRIES)).toList();
+        if (fits.isEmpty()) return all.getFirst();
+        if (fits.size() > 1) {
+            diag.error(Code.NO_TARGET_TYPE, span, "ambiguous collection literal for '" + expected
+                    + "': it could build any of its collection members; pick one with `as`");
+        }
+        return fits.getFirst();
     }
 
     private Typed listLit(Expr.ListLit l, Type expected) {
-        var target = collectionTarget(expected);
+        var target = collectionTarget(expected, Form.ELEMENTS, l.span());
         if (target != null && target.want() == Want.MAP) {
             if (!l.elements().isEmpty()) {
                 diag.error(Code.TYPE_MISMATCH, l.span(), "expected a map literal `[k: v]` for '" + expected + "'");
@@ -1626,7 +1633,7 @@ final class Exprs {
     }
 
     private Typed repeat(Expr.RepeatLit r, Type expected) {
-        var target = collectionTarget(expected);
+        var target = collectionTarget(expected, Form.ELEMENTS, r.span());
         Type element = target != null && target.element() != null ? target.element() : null;
         var value = element != null ? c.check(r.value(), element) : null;
         if (element == null) {
@@ -1648,7 +1655,7 @@ final class Exprs {
     }
 
     private Typed mapLit(Expr.MapLit m, Type expected) {
-        var target = collectionTarget(expected);
+        var target = collectionTarget(expected, Form.ENTRIES, m.span());
         Type key;
         Type value;
         var keys = new ArrayList<Ir.Expr>();
@@ -1684,7 +1691,7 @@ final class Exprs {
     // ---- Comprehensions (§7.7) ----
 
     private Typed listComp(Expr.ListComp l, Type expected) {
-        var target = collectionTarget(expected);
+        var target = collectionTarget(expected, Form.ELEMENTS, l.span());
         if (target != null && (target.want() == Want.ARRAY || target.want() == Want.MAP)) {
             diag.error(Code.TYPE_MISMATCH, l.span(), "a comprehension cannot create a '" + expected + "'"
                     + (target.want() == Want.MAP ? "; write `[k: v for ...]`" : ": its length is not known"));
@@ -1716,7 +1723,7 @@ final class Exprs {
     }
 
     private Typed mapComp(Expr.MapComp m, Type expected) {
-        var target = collectionTarget(expected);
+        var target = collectionTarget(expected, Form.ENTRIES, m.span());
         if (target != null && target.want() != Want.MAP) {
             diag.error(Code.TYPE_MISMATCH, m.span(), "a map comprehension cannot create a '" + expected + "'");
             return comprehension(m.clauses(), new ArrayList<>(), () -> {
