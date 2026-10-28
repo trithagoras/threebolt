@@ -1,0 +1,6 @@
+pub struct Point { let x: i32; let y: i32; }
+
+pub fn bumped() -> i32 {
+    shared::counter::bump();
+    return shared::counter::total();
+}

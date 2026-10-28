@@ -141,13 +141,13 @@ final class Completer {
             var item = entityItem(bound, c.names.entity(i.targets()), 2);
             if (!typePosition || isTypeLike(item.kind())) items.add(item);
         });
-        items.addAll(submodules(m.path()));
+        items.addAll(submodules(c.program.children(m)));
         record(Site.MODULE_ITEM, name, items, m.path());
     }
 
     /** {@code a::b::|} where {@code a::b} is not a module itself, e.g. {@code std::|}. */
-    void modulePrefix(ModulePath prefix, Name name) {
-        record(Site.MODULE_ITEM, name, submodules(prefix), prefix);
+    void modulePrefix(Module from, ModulePath prefix, Name name) {
+        record(Site.MODULE_ITEM, name, submodules(c.program.children(from, prefix)), prefix);
     }
 
     /** A bare name in an expression: locals, then the module's names, the prelude and primitives. */
@@ -344,11 +344,9 @@ final class Completer {
         return overloads > 1 ? s + "  (+" + (overloads - 1) + " overload" + (overloads > 2 ? "s" : "") + ")" : s;
     }
 
-    private List<Item> submodules(ModulePath parent) {
+    private static List<Item> submodules(List<Module> modules) {
         var items = new ArrayList<Item>();
-        for (var path : c.program.modules().keySet()) {
-            if (parent.equals(path.parent())) items.add(new Item(path.last(), Kind.MODULE, "mod " + path, 2));
-        }
+        for (var m : modules) items.add(new Item(m.local().last(), Kind.MODULE, "mod " + m.path(), 2));
         return items;
     }
 

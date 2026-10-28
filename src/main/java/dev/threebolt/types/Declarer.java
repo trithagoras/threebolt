@@ -973,7 +973,7 @@ public final class Declarer {
     /** §2.4: {@code fn main()} or {@code fn main(args: [str])}, returning () or () | errors. */
     private void checkMain() {
         var entry = program.entry();
-        if (entry.ast() == null) return;
+        if (entry == null || entry.ast() == null) return;
         var decls = entry.scope().items("main");
         var fns = decls.stream().map(d -> names.infos.get(d.item())).filter(FnInfo.class::isInstance).map(FnInfo.class::cast).toList();
         if (fns.isEmpty()) {

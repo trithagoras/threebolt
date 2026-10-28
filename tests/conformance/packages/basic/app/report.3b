@@ -1,0 +1,3 @@
+use shared::api::{User, describe};
+
+pub fn line(u: User) -> str => f"report: {describe(u)}";

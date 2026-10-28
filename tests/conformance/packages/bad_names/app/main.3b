@@ -1,0 +1,2 @@
+// §2.5: package names and dependency keys are identifiers other than `std`.
+fn main() {}

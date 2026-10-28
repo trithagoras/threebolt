@@ -99,7 +99,7 @@ public final class Names {
         // The longest prefix naming a module wins; then continue with its items.
         for (int k = path.size(); k >= 1; k--) {
             var mp = new ModulePath(path.subList(0, k).stream().map(Name::text).toList());
-            var m = program.module(mp);
+            var m = program.module(from, mp);
             if (m != null) {
                 record(path.get(k - 1), new ModuleEntity(m));
                 return continueFrom(from, new ModuleEntity(m), path, k);
@@ -107,7 +107,7 @@ public final class Names {
         }
         if (completer != null && path.size() > 1 && completer.at(path.getLast())) {
             // `std::|`: a path prefix that is not a module itself.
-            completer.modulePrefix(new ModulePath(path.subList(0, path.size() - 1).stream().map(Name::text).toList()),
+            completer.modulePrefix(from, new ModulePath(path.subList(0, path.size() - 1).stream().map(Name::text).toList()),
                     path.getLast());
             return null;
         }
@@ -138,7 +138,7 @@ public final class Names {
             }
             if (items.isEmpty()) {
                 // A submodule: a::b where a/b.3b exists.
-                var sub = program.module(m.path().child(seg.text()));
+                var sub = program.child(m, seg.text());
                 if (sub != null) {
                     entity = new ModuleEntity(sub);
                     record(seg, entity);

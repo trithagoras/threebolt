@@ -16,7 +16,16 @@ public final class Driver {
 
     /** The checked program, or null if {@code diagnostics} has errors. */
     public static CheckedProgram check(Path entry, Diagnostics diagnostics) {
-        var program = new ModuleLoader(diagnostics).load(entry);
+        return check(entry, null, diagnostics);
+    }
+
+    /**
+     * {@link #check(Path, Diagnostics)} in the package rooted at {@code packageRoot} (§2.5); null
+     * for a program without a manifest.
+     */
+    public static CheckedProgram check(Path entry, Path packageRoot, Diagnostics diagnostics) {
+        var loader = new ModuleLoader(diagnostics);
+        var program = packageRoot == null ? loader.load(entry) : loader.load(entry, packageRoot);
         var checked = new Checker(program, diagnostics).check();
         return diagnostics.hasErrors() ? null : checked;
     }

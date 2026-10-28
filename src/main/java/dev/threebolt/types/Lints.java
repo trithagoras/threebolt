@@ -45,7 +45,7 @@ final class Lints {
     }
 
     private boolean active() {
-        return c.ctx != null && !c.ctx.module.isStd() && !diag.isMuted();
+        return c.ctx != null && c.ctx.module.pkg().isApplication() && !diag.isMuted();
     }
 
     // ---- Facts, recorded while checking ----
@@ -156,7 +156,7 @@ final class Lints {
             }
         }
         for (Module m : program.all()) {
-            if (!m.isStd() && m.ast() != null) imports(m);
+            if (m.pkg().isApplication() && m.ast() != null) imports(m);
         }
         unusedItems(program, decls);
     }
@@ -235,7 +235,7 @@ final class Lints {
 
     private void unusedItems(Program program, Declarer decls) {
         for (FnInfo f : decls.allFns) {
-            if (f.module.isStd() || f.visibility() != Visibility.PRIVATE || used.contains(f)) continue;
+            if (!f.module.pkg().isApplication() || f.visibility() != Visibility.PRIVATE || used.contains(f)) continue;
             if (f.owner == null && f.name().equals("main") && f.module == program.entry()) continue;
             if (f.isExtern || f.owner instanceof ImplInfo || f.dispatch() != Dispatch.NONE) continue;
             if (f.owner instanceof TypeInfo t && (t.isTrait() || implementedMember(t, f) != null)) continue;
@@ -243,7 +243,7 @@ final class Lints {
             diag.warning(Code.UNUSED_ITEM, f.ast.name().span(), what + " '" + f.qualifiedName() + "' is never used");
         }
         for (TypeInfo t : decls.allTypes) {
-            if (t.item == null || t.module.isStd()) continue;
+            if (t.item == null || !t.module.pkg().isApplication()) continue;
             if (t.visibility == Visibility.PRIVATE && !used.contains(t)) {
                 diag.warning(Code.UNUSED_ITEM, SymbolIndex.definition(t), kind(t) + " '" + t.name() + "' is never used");
             }
@@ -255,12 +255,12 @@ final class Lints {
             }
         }
         for (StaticInfo s : decls.statics) {
-            if (!s.module.isStd() && s.ast.visibility() == Visibility.PRIVATE && !used.contains(s)) {
+            if (s.module.pkg().isApplication() && s.ast.visibility() == Visibility.PRIVATE && !used.contains(s)) {
                 diag.warning(Code.UNUSED_ITEM, s.ast.name().span(), "static '" + s + "' is never used");
             }
         }
         for (ConstInfo k : decls.consts) {
-            if (!k.module.isStd() && k.ast.visibility() == Visibility.PRIVATE && !used.contains(k)) {
+            if (k.module.pkg().isApplication() && k.ast.visibility() == Visibility.PRIVATE && !used.contains(k)) {
                 diag.warning(Code.UNUSED_ITEM, k.ast.name().span(), "constant '" + k.name() + "' is never used");
             }
         }

@@ -140,7 +140,7 @@ public final class Checker {
         for (StaticInfo s : decls.statics) staticInit(s);
         for (FnInfo f : new ArrayList<>(decls.allFns)) function(f);
         FnInfo main = null;
-        if (program.entry().ast() != null) {
+        if (program.entry() != null && program.entry().ast() != null) {
             for (var d : program.entry().scope().items("main")) {
                 if (names.info(d.item()) instanceof FnInfo f) main = f;
             }

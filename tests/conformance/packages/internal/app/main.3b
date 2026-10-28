@@ -1,0 +1,11 @@
+// §2.3: `internal` items and members are visible only within their package.
+use lib::m::{Counter, hidden};
+use lib::m::open;
+
+fn main() {
+    let c = Counter::new();
+    println(c.secret);
+    c.tick();
+    println(lib::m::hidden());
+    open();
+}

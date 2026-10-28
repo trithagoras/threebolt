@@ -559,7 +559,7 @@ final class Exprs {
         if (!ok) {
             String how = switch (vis) {
                 case PROT -> "protected in '" + owner.name() + "'";
-                case INTERNAL -> declaring.isStd() ? "internal to the standard library" : "internal to the package of '" + owner.name() + "'";
+                case INTERNAL -> declaring.isStd() ? "internal to the standard library" : "internal to package '" + declaring.pkg().name() + "'";
                 default -> "private in '" + owner.name() + "'";
             };
             diag.error(Code.PRIVATE_MEMBER, span, what + " is " + how);

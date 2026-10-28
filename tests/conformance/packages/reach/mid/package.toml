@@ -1,0 +1,5 @@
+[package]
+name = "mid"
+
+[dependencies]
+base = { path = "../base" }
