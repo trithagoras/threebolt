@@ -22,3 +22,15 @@ Tree-walking interpreter before the runtime-boundary work (2026-10-28, `32f7628`
 | collections |  950 ms | `100 10007 1501058220 2000 5551` |
 | strings     | 1955 ms | `19999 44472000` |
 | threads     |  870 ms | `800000 40002400000` |
+
+## After the runtime boundary (roadmap task 1)
+
+Same machine, 2026-10-28, after std moved into Threebolt (outputs unchanged):
+
+| benchmark   | time     | vs baseline |
+|-------------|----------|-------------|
+| arith       |  1540 ms | same |
+| calls       |  1757 ms | same |
+| collections |   985 ms | same |
+| strings     | 30835 ms | ~16× slower: `split`/`find`/`trim` scan character by character in Threebolt |
+| threads     |  1658 ms | ~1.9× slower: `Mutex::lock` is Threebolt |

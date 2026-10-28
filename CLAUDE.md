@@ -40,7 +40,7 @@ src/main/java/dev/threebolt/
   Main.java                CLI
   diag/                    Source, Span, diagnostics with stable E0xxx codes
   ast/ parse/ resolve/ types/ interp/ runtime/   (created as phases land — see PLAN)
-src/main/resources/std/    std modules in Threebolt (bodyless fns are interpreter intrinsics)
+src/main/resources/std/    std modules in Threebolt (bodyless fns are intrinsics: see PLAN.md § Runtime boundary)
 src/test/java/…            JUnit 5 unit tests
 tests/conformance/         .3b programs + expected output / expected diagnostics (see its README)
 examples/                  sample Threebolt programs (must keep parsing as the grammar evolves)

@@ -175,6 +175,63 @@ Checker warnings, `W0xxx` codes (`diag.Code.isWarning`): they never count as err
 - Member completion sorts methods that operators call (`add`, `eq`, `cmp`, `truthy`, ...) after the rest when the receiver implements their trait.
 - Not done: a warning for a `///` that documents nothing; formatting.
 
+## Runtime boundary (roadmap task 1)
+
+Std is Threebolt except for its **intrinsics**: bodyless functions in `src/main/resources/std` (keyed `Owner.name`,
+dispatched by `interp.Natives`). This section is what a new backend must provide. Signatures are in the std sources;
+listed here is what they do not say. Every intrinsic is value-in/value-out: it receives evaluated arguments (and
+`self`), returns a value, and may panic (`Panic`, process exit 101 with the message shown). Intrinsics reach the
+evaluator only through `interp.Callbacks` (`BoundaryTest` checks this):
+
+| `Callbacks` member | Contract |
+|---|---|
+| `call(f, args…)` | calls a function value: closure, named function or C function pointer |
+| `callTrait(recv, trait, name, args…)` | calls trait member `name` on `recv`'s runtime type (§8.3), including the automatic `Eq`/`Hash`/`Display` of structs, tuples and `null` |
+| `equal`, `hash`, `display`, `debug`, `next`, `done()`, `typeOf` | `==` (§7.3), `Hash`, `Display` text, display-or-type-name for messages, one `Iterator::next` step, the `Done` sentinel, the runtime type (§15) |
+| `out()`, `err()`, `stdin()` | the process streams (stdin read under its own lock) |
+| `checkAbort`, `isTerminating`, `startThread`, `panicked`, `terminate` | process control (§13.1): stop this thread if the process is ending; start a Threebolt thread; report a panic that cannot unwind (C upcalls); end the process |
+| `Abort`, `ExitSignal` | the unwinding signals: process ending elsewhere (no defers run), `process::exit` |
+
+Values (`interp.Values`): integers carry their kind (`u64`/`usize` hold raw two's-complement bits), `f32` values are
+kept rounded to `f32`, `str` is `Str` (UTF-16 + character count + offsets outside the BMP: O(1) `len`/`s[i]`, §3.1),
+lists/maps/sets are mutable reference objects that lock themselves per operation (§13.4), arrays/tuples/structs are
+copied on read (§5.3). Reading an element out of a collection yields a copy (§16).
+
+### Primitive operations (every backend emits these directly)
+
+| Owner | Intrinsics | Contract |
+|---|---|---|
+| integer types (`builtin/int.3b`) | `add sub mul div rem neg`, `shl shr`, `bitand bitor bitxor not`, `eq cmp hash` | §13.2: overflow panics `integer overflow (T)`; `div`/`rem` by zero panic `division by zero` / `remainder by zero` (`rem` takes the dividend's sign); a shift amount outside `0..bits` panics `shift amount n out of range for T`. `cmp` is `-1/0/1`; `hash` mixes the value (64-bit finalizer) |
+| | `wrapping_* checked_* saturating_*` (`add sub mul neg shl shr`) | modulo 2^bits / `null` on overflow / clamped to `MIN`/`MAX`. Shifts: `wrapping_` masks the amount; `checked_` is `null` outside `0..bits`; `saturating_` gives `0` (or `-1` for a negative `shr`) |
+| | `from_i64(n)`, `bits()`, `parse(s)`, `to_str` | `from_i64` panics `n does not fit in 'T'`; `parse` accepts `[+-]?[0-9]+` (ASCII digits, no spaces or `_`) whose value fits, else `null`; `to_str` is decimal (unsigned for `u64`/`usize`) |
+| float types (`builtin/float.3b`) | `add sub mul div rem neg eq cmp`, `abs min max pow sqrt floor ceil trunc round sin cos tan exp ln log10 is_nan is_infinite`, `from_i64 from_f64 parse to_str` | IEEE 754 in `f64`, rounded to `f32` for `f32`. `round` is half away from zero; `min`/`max` follow Java's `Math.min/max` (NaN wins, `-0 < 0`); `cmp` orders NaN above everything (Java `Double.compare`). `parse` accepts decimal (`1`, `.5`, `-1e3`) and exactly `inf`, `+inf`, `infinity`, `-inf`, `-infinity`, `NaN`. `to_str` per §16's float format |
+| `bool`, `char`, enums | `to_str eq cmp hash`; `flags`: `bitand bitor bitxor not` | enum `to_str` is the member name, `A \| B` for flag combinations, the integer for undeclared bits; `not` keeps to the backing type's bits |
+| `char` | `is_alphabetic is_alphanumeric is_whitespace is_uppercase is_lowercase to_upper to_lower` | Unicode properties and simple case mapping (Java `Character`) |
+| `str` (`builtin/str.3b`) | `len`, `index` (`s[i]`), `slice` (`s[a..b]`), `add`, `eq`, `cmp`, `hash` | counts characters (§3.1), O(1) `len`/`index`; out-of-range `index`/`slice` panic `index i out of range for a string of length n` / `slice a..b out of range for a string of length n`; `cmp` is code-point order; `hash` is FNV-1a over UTF-8 |
+| | `chars bytes upper lower from_chars from_utf8` | `bytes` is UTF-8; `upper`/`lower` are full Unicode case mapping (may change the length: `"ß".upper()` is `"SS"`); `from_utf8` replaces invalid sequences with U+FFFD |
+| `Range` | `iter`, `contains` | over integers (any kind; never overflows, the end may be the type's `MAX`) and `char`s (surrogates skipped); `contains` by `<`/`<=` on the bounds |
+| `Type` | `name to_str eq hash is_subtype_of` | reflection (§15) |
+| prelude | `panic(msg)` | panics with `msg` |
+
+### Host capabilities (thin, platform-provided)
+
+| Owner | Intrinsics | Contract |
+|---|---|---|
+| `[T]` (`List`, also `[T; N]`) | `len index set push pop insert remove clear iter` | the representation core; each call is atomic (§13.4). `index`/`set`/`remove` panic `index out of range: i >= n`, `insert` panics `insert index out of range: i > n`; `pop` is `null` when empty; `iter` visits elements pushed during the loop |
+| | `contains reverse first last join` | derivable, but intrinsic so they stay atomic per §13.4 (roadmap task 1, step 6). `join` reads a snapshot, then calls `to_str` outside the lock |
+| `Map`, `Set` (`collections.3b`) | `len iter index set get contains_key remove clear keys values` / `len iter insert contains remove clear` | insertion-ordered hash tables keyed by `Eq`/`Hash` (`Callbacks.equal`/`hash`); `index` panics `key not found in map: <key>`; iterators walk a snapshot |
+| `std::thread` | `Thread::spawn`, `join`, `sleep(ms)` | OS threads (§13.4); `join` returns a copy of the result and may be repeated; a panic on any thread ends the process |
+| `std::sync` | `Atomic::new load store swap compare_exchange fetch_*`; private `RawLock::new acquire release`, `guard` | sequentially consistent, wrapping; `Atomic<bool>` arithmetic panics. `acquire` waits interruptibly and panics `mutex is already locked by this thread` on a relock; `guard(v)` builds a `Guard { value: v }` (`Mutex` itself is Threebolt) |
+| `std::io` (private) | `sys_open close read write write_str flush seek error kind size remove rename mkdir list_dir temp_dir` | POSIX-shaped: numbered handles (0–2 are the standard streams), results ≥ 0 or a negated `E_*` code with a per-thread description for `sys_error`; `sys_kind` is 0 none, 1 file, 2 directory, 3 other. Constants are shared with `io.3b` (`Io.java`) |
+| `std::process` | `exit(code)` | flushes stdout and ends the process; no defers run (§2.4) |
+| `std::random` (private) | `entropy()` | 64 bits from the OS's secure generator |
+| `std::math` | `copysign cbrt expm1 log2 log1p asin acos atan atan2 hypot sinh cosh tanh asinh acosh atanh` | libm on `f64`; `log2` is exact for powers of two |
+| C interop (§14) | `c::alloc free`, `Ptr::null from_addr is_null addr read write offset cast`, `str::to_cstr from_cstr`, `with_ptr` (lists, arrays, `@c struct`s), `extern` calls and upcalls | `malloc`/`free`; `read`/`write` through a null pointer panic `null pointer dereference`; `offset` scales by the target's size; `to_cstr` is NUL-terminated UTF-8 in `malloc`ed memory; `with_ptr` copies into native memory for the call and back after it (roadmap §5.1). A panic in an upcall ends the process; C gets a zero result |
+
+Moved to Threebolt in task 1 (no longer intrinsics): `str` `trim split replace repeat starts_with ends_with find
+contains truthy to_str`; integer `abs min max pow zero one min_value max_value`; float `zero one nan infinity epsilon`;
+`char::is_digit`; `flags::has`; collection `truthy`; `Mutex`; `math::isqrt factorial comb perm`.
+
 ## Conventions for the implementing agent
 - The spec is the source of truth; if code and spec disagree, fix one deliberately and record it.
 - Every feature lands with conformance tests in `tests/conformance/` (positive run + at least one compile-error case).
