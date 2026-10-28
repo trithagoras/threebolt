@@ -53,9 +53,16 @@ other backend and for dogfooding the language.)
    instead of `HashMap` environments, no exception per `return`), or keeping `find_from` as an intrinsic.
 5. ~~**Literal defaulting to `f64`**~~ — done (`4057ed3`): spec §10.1, `Calls.literalDefault`, conformance
    `numeric/literal_default*`. No slowdown.
-6. **Move the rest** module by module (prelude collections, `int`/`float`, `sync`), each with the conformance
-   suite as the oracle. Behaviour must not change; `.err` goldens may only change if a diagnostic's wording or
-   span legitimately moves.
+6. ~~**Move the rest**~~ — done as far as the spec allows (`314d457`, `4f2f406`, `59d5c4f`, `d117ad6`): collection
+   `truthy`; integer `pow`/`zero`/`one`/`min_value`/`max_value`, float `zero`/`one`/`nan`/`infinity`/`epsilon`;
+   `Mutex` over a private `RawLock` (plus a private `sync::guard` constructor intrinsic); `math::isqrt`/
+   `factorial`/`comb`/`perm`. Panic traces from moved code now show std frames (`relock`, `math_overflow`
+   goldens). **Slowdown:** `threads` ~0.87 s → ~1.6 s (`Mutex::lock` interpreted); the rest unchanged.
+   **Open, needs a decision:** `[T]` `contains`/`reverse`/`first`/`last`/`join` stay intrinsic because spec §13.4
+   makes each collection operation atomic; written in Threebolt over `len`/`xs[i]` they would not be. Either
+   narrow §13.4 to the primitive operations (`len`, index, `set`, `push`, `pop`, `insert`, `remove`, `clear`,
+   one iteration step) and move them, or keep them intrinsic. Also left: making `std::math`'s float functions
+   generic over `Float` would break `math::sqrt(n)` for an `i32` variable `n`, so they keep `f64`.
 7. **Document the boundary**: a `PLAN.md` section listing every remaining intrinsic, its group, and its
    contract (arguments, result, panics), i.e. what a new backend must provide.
 
