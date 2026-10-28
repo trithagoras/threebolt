@@ -54,13 +54,14 @@ pub fn is_infinite(self) -> bool;
 pub fn parse(s: str) -> Self | null;
 /// The shortest digits that read back as the same value, never with an exponent (§16).
 pub fn to_str(self) -> str;
-pub fn eq(self, o: Self) -> bool;
+/// IEEE equality: `NaN` equals nothing, and `-0` equals `0`.
+pub fn eq(self, o: Self) -> bool => self == o;
 /// A total order: `-0` sorts before `0`, and `NaN` after every other value.
 pub fn cmp(self, o: Self) -> Ordering;
 
-pub fn add(self, o: Self) -> Self;
-pub fn sub(self, o: Self) -> Self;
-pub fn mul(self, o: Self) -> Self;
-pub fn div(self, o: Self) -> Self;
-pub fn rem(self, o: Self) -> Self;
-pub fn neg(self) -> Self;
+pub fn add(self, o: Self) -> Self => self + o;
+pub fn sub(self, o: Self) -> Self => self - o;
+pub fn mul(self, o: Self) -> Self => self * o;
+pub fn div(self, o: Self) -> Self => self / o;
+pub fn rem(self, o: Self) -> Self => self % o;
+pub fn neg(self) -> Self => -self;

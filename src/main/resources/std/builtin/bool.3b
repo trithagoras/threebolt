@@ -1,5 +1,6 @@
 // Members of bool.
 
-pub fn to_str(self) -> str;
-pub fn eq(self, o: Self) -> bool;
+/// `"true"` or `"false"`.
+pub fn to_str(self) -> str => "true" if self else "false";
+pub fn eq(self, o: Self) -> bool => self == o;
 pub fn hash(self) -> u64;

@@ -2,7 +2,7 @@
 
 /// The member's name.
 pub fn to_str(self) -> str;
-pub fn eq(self, o: Self) -> bool;
+pub fn eq(self, o: Self) -> bool => self == o;
 /// Compares the members' values.
-pub fn cmp(self, o: Self) -> Ordering;
+pub fn cmp(self, o: Self) -> Ordering => "less" if self < o else ("greater" if self > o else "equal");
 pub fn hash(self) -> u64;

@@ -374,13 +374,7 @@ public final class Ops {
 
     // ---- Parsing ----
 
-    private static final Pattern INT = Pattern.compile("[+-]?[0-9]+");
     private static final Pattern FLOAT = Pattern.compile("[+-]?([0-9]+(\\.[0-9]*)?|\\.[0-9]+)([eE][+-]?[0-9]+)?");
-
-    public static Int parseInt(String s, Prim kind) {
-        if (!INT.matcher(s).matches()) return null;
-        return exact(kind, new BigInteger(s));
-    }
 
     public static Flt parseFloat(String s, Prim kind) {
         switch (s) {

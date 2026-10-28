@@ -1,0 +1,11 @@
+// T::parse for integers (§16, PLAN § Runtime boundary): `[+-]?[0-9]+` whose value fits, else null.
+
+fn main() {
+    println(f"{i32::parse("-42")} {i32::parse("+7")} {i32::parse("007")}");
+    println(f"{i8::parse("-128")} {i8::parse("127")} {i8::parse("128")} {i8::parse("-129")}");
+    println(f"{u8::parse("-0")} {u8::parse("-1")} {u8::parse("+255")} {u8::parse("256")}");
+    println(f"{i64::parse("-9223372036854775808")} {i64::parse("9223372036854775808")}");
+    println(f"{u64::parse("18446744073709551615")} {u64::parse("18446744073709551616")}");
+    println(f"{i32::parse("")} {i32::parse("+")} {i32::parse("-")} {i32::parse(" 1")} {i32::parse("1 ")}");
+    println(f"{i32::parse("1_000")} {i32::parse("0x10")} {i32::parse("1.0")} {i32::parse("٣")}");
+}

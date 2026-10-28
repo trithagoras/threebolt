@@ -152,13 +152,6 @@ class OpsTest {
 
     @Test
     void parsing() {
-        assertEquals(i(Prim.I32, -42), Ops.parseInt("-42", Prim.I32));
-        assertEquals(i(Prim.I32, 7), Ops.parseInt("+7", Prim.I32));
-        assertNull(Ops.parseInt("128", Prim.I8), "out of range");
-        assertNull(Ops.parseInt("1_000", Prim.I32), "no separators");
-        assertNull(Ops.parseInt("0x10", Prim.I32));
-        assertNull(Ops.parseInt(" 1", Prim.I32));
-        assertNull(Ops.parseInt("", Prim.I32));
         assertEquals(new Flt(Prim.F64, 2.5), Ops.parseFloat("2.5", Prim.F64));
         assertEquals(new Flt(Prim.F64, 0.5), Ops.parseFloat(".5", Prim.F64));
         assertEquals(new Flt(Prim.F64, 1e3), Ops.parseFloat("1e3", Prim.F64));

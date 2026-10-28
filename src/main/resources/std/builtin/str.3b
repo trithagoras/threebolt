@@ -79,12 +79,12 @@ pub fn from_utf8(bytes: [u8]) -> str;
 /// The string itself.
 pub fn to_str(self) -> str => self;
 /// Whether the strings have the same characters.
-pub fn eq(self, o: Self) -> bool;
+pub fn eq(self, o: Self) -> bool => self == o;
 /// Compares character by character (by code point).
-pub fn cmp(self, o: Self) -> Ordering;
+pub fn cmp(self, o: Self) -> Ordering => "less" if self < o else ("greater" if self > o else "equal");
 pub fn hash(self) -> u64;
 /// `a + b`: the concatenation.
-pub fn add(self, o: Self) -> Self;
+pub fn add(self, o: Self) -> Self => self + o;
 
 /// Whether `s` occurs at character offset `at`; needs `at + s.len <= self.len`.
 internal fn matches_at(self, s: str, at: usize) -> bool {

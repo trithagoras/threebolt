@@ -1,0 +1,3 @@
+panic: integer overflow (u8)
+    at u8::neg (std/builtin/int.3b:112:29)
+    at main (operator_methods.3b:11:13)

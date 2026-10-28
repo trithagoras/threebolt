@@ -2,7 +2,7 @@
 
 /// Whether every flag set in `flag` is set in `self`.
 pub fn has(self, flag: Self) -> bool => (self & flag) == flag;
-pub fn bitand(self, o: Self) -> Self;
-pub fn bitor(self, o: Self) -> Self;
-pub fn bitxor(self, o: Self) -> Self;
-pub fn not(self) -> Self;
+pub fn bitand(self, o: Self) -> Self => self & o;
+pub fn bitor(self, o: Self) -> Self => self | o;
+pub fn bitxor(self, o: Self) -> Self => self ^ o;
+pub fn not(self) -> Self => ~self;

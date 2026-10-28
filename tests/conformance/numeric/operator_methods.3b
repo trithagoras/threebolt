@@ -1,0 +1,12 @@
+// Operator trait methods on primitives, written in std over the operators themselves.
+//! exit: 101
+
+enum Color { Red, Green }
+@flags enum Perm : u8 { None = 0, Read, Write }
+fn main() {
+    println(f"{3.add(4)} {7_u8.sub(2_u8)} {(-7).rem(2)} {5.neg()} {0_u32.neg()} {6.bitand(3)} {1.shl(4)} {(~0_u8)} {0_u8.not()}");
+    println(f"{1.5.add(1.0)} {0.0.neg()} {f64::NAN.eq(f64::NAN)} {2.0.cmp(1.0)}");
+    println(f"{'x'.eq('x')} {'a'.cmp('z')} {"ab".add("c")} {true.to_str()} {false.eq(false)}");
+    println(f"{Color::Red.eq(Color::Green)} {Color::Green.cmp(Color::Red)} {Perm::Read.bitor(Perm::Write)} {Perm::Read.not()}");
+    println(1_u8.neg());
+}

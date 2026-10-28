@@ -74,24 +74,45 @@ pub fn saturating_shr(self, n: u32) -> Self;
 
 /// The decimal number in `s` (an optional sign, then digits), or `null` if `s` is not one or the
 /// value does not fit.
-pub fn parse(s: str) -> Self | null;
+pub fn parse(s: str) -> Self | null {
+    let n = s.len;
+    let negative = n > 0 && s[0] == '-';
+    let mut i: usize = 1 if n > 0 && (negative || s[0] == '+') else 0;
+    if i == n { return null; }
+    // Negative numbers accumulate downwards, so `MIN` (and `-0` for unsigned types) fit.
+    let ten: Self = 10;
+    let mut value: Self = 0;
+    while i < n {
+        let c = s[i];
+        if !c.is_digit() { return null; }
+        let digit = Self::from_i64((c as i64) - ('0' as i64));
+        let shifted = value.checked_mul(ten);
+        if shifted == null { return null; }
+        let next = shifted.checked_sub(digit) if negative else shifted.checked_add(digit);
+        if next == null { return null; }
+        value = next;
+        i += 1;
+    }
+    return value;
+}
 /// The value in decimal.
 pub fn to_str(self) -> str;
-pub fn eq(self, o: Self) -> bool;
-pub fn cmp(self, o: Self) -> Ordering;
+pub fn eq(self, o: Self) -> bool => self == o;
+pub fn cmp(self, o: Self) -> Ordering => "less" if self < o else ("greater" if self > o else "equal");
 pub fn hash(self) -> u64;
 
-pub fn add(self, o: Self) -> Self;
-pub fn sub(self, o: Self) -> Self;
-pub fn mul(self, o: Self) -> Self;
+pub fn add(self, o: Self) -> Self => self + o;
+pub fn sub(self, o: Self) -> Self => self - o;
+pub fn mul(self, o: Self) -> Self => self * o;
 /// Integer division, rounding towards zero; dividing by zero panics.
-pub fn div(self, o: Self) -> Self;
+pub fn div(self, o: Self) -> Self => self / o;
 /// The remainder of `div`, with the sign of `self`; by zero panics.
-pub fn rem(self, o: Self) -> Self;
-pub fn neg(self) -> Self;
-pub fn bitand(self, o: Self) -> Self;
-pub fn bitor(self, o: Self) -> Self;
-pub fn bitxor(self, o: Self) -> Self;
-pub fn not(self) -> Self;
-pub fn shl(self, o: Self) -> Self;
-pub fn shr(self, o: Self) -> Self;
+pub fn rem(self, o: Self) -> Self => self % o;
+/// `-self`; overflows (and panics) for `MIN`, and for any non-zero unsigned value.
+pub fn neg(self) -> Self => 0 - self;
+pub fn bitand(self, o: Self) -> Self => self & o;
+pub fn bitor(self, o: Self) -> Self => self | o;
+pub fn bitxor(self, o: Self) -> Self => self ^ o;
+pub fn not(self) -> Self => ~self;
+pub fn shl(self, o: Self) -> Self => self << o;
+pub fn shr(self, o: Self) -> Self => self >> o;

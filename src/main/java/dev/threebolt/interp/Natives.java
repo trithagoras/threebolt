@@ -82,8 +82,6 @@ final class Natives {
                     : name.equals("from_utf8") ? fromUtf8((ListVal) a[0]) : str(name, (Str) recv, a);
             case "char" -> character(name, (Char) recv, a);
             case "bool" -> switch (name) {
-                case "to_str" -> Str.of(recv.toString());
-                case "eq" -> recv.equals(a[0]);
                 case "hash" -> new Int(Prim.U64, Ops.mix(((Boolean) recv) ? 1 : 0));
                 default -> unknown(key);
             };
@@ -369,7 +367,6 @@ final class Natives {
 
     private Object integer(String name, Object self, Object[] a, FnInfo fn) {
         switch (name) {
-            case "parse" -> { return Ops.parseInt(a[0].toString(), ownerPrim(fn)); }
             case "from_i64" -> { return fromI64(ownerPrim(fn), ((Int) a[0]).v()); }
             case "bits" -> { return new Int(Prim.U32, ownerPrim(fn).bits()); }
             default -> {}
@@ -378,21 +375,7 @@ final class Natives {
         var k = x.kind();
         return switch (name) {
             case "to_str" -> Str.of(x.toString());
-            case "eq" -> x.equals(a[0]);
-            case "cmp" -> Ops.ordering(Ops.compare(x, (Int) a[0]));
             case "hash" -> new Int(Prim.U64, Ops.mix(x.v()));
-            case "add" -> Ops.add(x, (Int) a[0]);
-            case "sub" -> Ops.sub(x, (Int) a[0]);
-            case "mul" -> Ops.mul(x, (Int) a[0]);
-            case "div" -> Ops.div(x, (Int) a[0]);
-            case "rem" -> Ops.rem(x, (Int) a[0]);
-            case "neg" -> Ops.neg(x);
-            case "bitand" -> Ops.and(x, (Int) a[0]);
-            case "bitor" -> Ops.or(x, (Int) a[0]);
-            case "bitxor" -> Ops.xor(x, (Int) a[0]);
-            case "not" -> Ops.bitNot(x);
-            case "shl" -> Ops.shl(x, (Int) a[0]);
-            case "shr" -> Ops.shr(x, (Int) a[0]);
             default -> family(name, x, a, k);
         };
     }
@@ -464,14 +447,7 @@ final class Natives {
             case "is_nan" -> Double.isNaN(v);
             case "is_infinite" -> Double.isInfinite(v);
             case "to_str" -> Str.of(Ops.display(x));
-            case "eq" -> v == o;
             case "cmp" -> Ops.ordering(Double.compare(v, o));
-            case "add" -> Ops.flt(k, v + o);
-            case "sub" -> Ops.flt(k, v - o);
-            case "mul" -> Ops.flt(k, v * o);
-            case "div" -> Ops.flt(k, v / o);
-            case "rem" -> Ops.flt(k, v % o);
-            case "neg" -> Ops.flt(k, -v);
             default -> unknown("float." + name);
         };
     }
@@ -527,10 +503,7 @@ final class Natives {
             }
             case "upper" -> Str.of(s.toString().toUpperCase(Locale.ROOT));
             case "lower" -> Str.of(s.toString().toLowerCase(Locale.ROOT));
-            case "eq" -> s.equals(a[0]);
-            case "cmp" -> Ops.ordering(s.compareTo((Str) a[0]));
             case "hash" -> new Int(Prim.U64, Ops.hashStr(s.toString()));
-            case "add" -> s.concat((Str) a[0]);
             default -> unknown("str." + name);
         };
     }
@@ -546,8 +519,6 @@ final class Natives {
             case "to_upper" -> new Char(Character.toUpperCase(cp));
             case "to_lower" -> new Char(Character.toLowerCase(cp));
             case "to_str" -> Str.of(Character.toString(cp));
-            case "eq" -> c.equals(a[0]);
-            case "cmp" -> Ops.ordering(Integer.compare(cp, ((Char) a[0]).cp()));
             case "hash" -> new Int(Prim.U64, Ops.mix(cp));
             default -> unknown("char." + name);
         };
@@ -556,13 +527,7 @@ final class Natives {
     private Object enumeration(String name, EnumVal e, Object[] a) {
         return switch (name) {
             case "to_str" -> Str.of(Ops.display(e));
-            case "eq" -> e.equals(a[0]);
-            case "cmp" -> Ops.ordering(Long.compare(e.v(), ((EnumVal) a[0]).v()));
             case "hash" -> new Int(Prim.U64, Ops.mix(e.v()));
-            case "bitand" -> new EnumVal(e.decl(), e.v() & ((EnumVal) a[0]).v());
-            case "bitor" -> new EnumVal(e.decl(), e.v() | ((EnumVal) a[0]).v());
-            case "bitxor" -> new EnumVal(e.decl(), e.v() ^ ((EnumVal) a[0]).v());
-            case "not" -> new EnumVal(e.decl(), Ops.wrap(e.decl().backing, ~e.v()).v());
             default -> unknown("enum." + name);
         };
     }
