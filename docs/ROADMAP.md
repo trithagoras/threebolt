@@ -16,7 +16,7 @@ The small open decisions (§5) are deferred, except 5.2, which is decided and la
 
 ---
 
-## 1. Runtime boundary (done, except the §13.4 decision in step 6)
+## 1. Runtime boundary (done)
 
 **Goal:** as much of std as possible written in Threebolt, over an intrinsic layer that is small, explicit
 and value-in/value-out, so a future backend reimplements only that layer. Today ~370 std functions are
@@ -58,11 +58,10 @@ other backend and for dogfooding the language.)
    `Mutex` over a private `RawLock` (plus a private `sync::guard` constructor intrinsic); `math::isqrt`/
    `factorial`/`comb`/`perm`. Panic traces from moved code now show std frames (`relock`, `math_overflow`
    goldens). **Slowdown:** `threads` ~0.87 s → ~1.6 s (`Mutex::lock` interpreted); the rest unchanged.
-   **Open, needs a decision:** `[T]` `contains`/`reverse`/`first`/`last`/`join` stay intrinsic because spec §13.4
-   makes each collection operation atomic; written in Threebolt over `len`/`xs[i]` they would not be. Either
-   narrow §13.4 to the primitive operations (`len`, index, `set`, `push`, `pop`, `insert`, `remove`, `clear`,
-   one iteration step) and move them, or keep them intrinsic. Also left: making `std::math`'s float functions
-   generic over `Float` would break `math::sqrt(n)` for an `i32` variable `n`, so they keep `f64`.
+   **Decided 2026-10-28 (middle ground):** spec §13.4 narrowed to the primitive collection operations, so `[T]`
+   `contains`/`reverse`/`first`/`last` moved to Threebolt too; `join` stays intrinsic as the linear-time way to
+   build a string. `std::math`'s float functions keep `f64` signatures (generic over `Float` would break
+   `math::sqrt(n)` for an `i32` variable). Concurrent collections, if wanted, belong to task 3.
 7. ~~**Document the boundary**~~ — done (`3a9fae7`): `PLAN.md` § Runtime boundary; post-task timings in
    `tests/bench/README.md`.
 

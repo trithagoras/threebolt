@@ -217,8 +217,9 @@ copied on read (§5.3). Reading an element out of a collection yields a copy (§
 
 | Owner | Intrinsics | Contract |
 |---|---|---|
-| `[T]` (`List`, also `[T; N]`) | `len index set push pop insert remove clear iter` | the representation core; each call is atomic (§13.4). `index`/`set`/`remove` panic `index out of range: i >= n`, `insert` panics `insert index out of range: i > n`; `pop` is `null` when empty; `iter` visits elements pushed during the loop |
-| | `contains reverse first last join` | derivable, but intrinsic so they stay atomic per §13.4 (roadmap task 1, step 6). `join` reads a snapshot, then calls `to_str` outside the lock |
+| `[T]` (`List`, also `[T; N]`) | `len index set push pop insert remove clear iter` | the representation core; each call is atomic (§13.4: only these primitive operations are). `index`/`set`/`remove` panic `index out of range: i >= n`, `insert` panics `insert index out of range: i > n`; `pop` is `null` when empty; `iter` visits elements pushed during the loop |
+| | `join(sep)` | linear-time concatenation of the elements' `to_str()`, the way to build a string; reads a snapshot, then calls `to_str` outside the lock. `T: Display` is checked at the call (`Calls.stdCallRules`) |
+| prelude (private) | `equal(a, b)` | §7.3 `==` on any `T`, for std members generic over an unbounded `T` whose callers need `T: Eq` (`[T].contains`) |
 | `Map`, `Set` (`collections.3b`) | `len iter index set get contains_key remove clear keys values` / `len iter insert contains remove clear` | insertion-ordered hash tables keyed by `Eq`/`Hash` (`Callbacks.equal`/`hash`); `index` panics `key not found in map: <key>`; iterators walk a snapshot |
 | `std::thread` | `Thread::spawn`, `join`, `sleep(ms)` | OS threads (§13.4); `join` returns a copy of the result and may be repeated; a panic on any thread ends the process |
 | `std::sync` | `Atomic::new load store swap compare_exchange fetch_*`; private `RawLock::new acquire release`, `guard` | sequentially consistent, wrapping; `Atomic<bool>` arithmetic panics. `acquire` waits interruptibly and panics `mutex is already locked by this thread` on a relock; `guard(v)` builds a `Guard { value: v }` (`Mutex` itself is Threebolt) |
@@ -230,7 +231,7 @@ copied on read (§5.3). Reading an element out of a collection yields a copy (§
 
 Moved to Threebolt in task 1 (no longer intrinsics): `str` `trim split replace repeat starts_with ends_with find
 contains truthy to_str`; integer `abs min max pow zero one min_value max_value`; float `zero one nan infinity epsilon`;
-`char::is_digit`; `flags::has`; collection `truthy`; `Mutex`; `math::isqrt factorial comb perm`.
+`char::is_digit`; `flags::has`; collection `truthy`; `[T]` `contains reverse first last`; `Mutex`; `math::isqrt factorial comb perm`.
 
 ## Conventions for the implementing agent
 - The spec is the source of truth; if code and spec disagree, fix one deliberately and record it.

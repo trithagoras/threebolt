@@ -198,6 +198,7 @@ final class Natives {
     private Object prelude(String name, Object[] a) {
         rt.checkAbort();
         if (name.equals("panic")) throw new Panic(a[0].toString());
+        if (name.equals("equal")) return rt.equal(a[0], a[1]);
         return unknown("prelude." + name);
     }
 
@@ -260,16 +261,6 @@ final class Natives {
                 items.clear();
                 yield Unit.UNIT;
             }
-            case "reverse" -> {
-                Collections.reverse(items);
-                yield Unit.UNIT;
-            }
-            case "contains" -> {
-                for (Object x : items) if (rt.equal(x, a[0])) yield true;
-                yield false;
-            }
-            case "first" -> items.isEmpty() ? null : Values.copy(items.getFirst());
-            case "last" -> items.isEmpty() ? null : Values.copy(items.getLast());
             default -> unknown("List." + name);
         };
     }
@@ -284,12 +275,6 @@ final class Natives {
                 set(arr, a[0], a[1]);
                 yield Unit.UNIT;
             }
-            case "contains" -> {
-                for (Object x : items) if (rt.equal(x, a[0])) yield true;
-                yield false;
-            }
-            case "first" -> items.length == 0 ? null : Values.copy(items[0]);
-            case "last" -> items.length == 0 ? null : Values.copy(items[items.length - 1]);
             default -> unknown("array." + name);
         };
     }

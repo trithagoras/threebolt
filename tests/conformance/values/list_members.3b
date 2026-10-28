@@ -1,0 +1,22 @@
+// §16 [T] members written in Threebolt: contains, reverse, first, last (lists and arrays).
+struct P { let x: i32; }
+
+fn main() {
+    let mut xs = [1, 2, 3, 4, 5];
+    xs.reverse();
+    let mut one = [7];
+    one.reverse();
+    let mut none: [i32] = [];
+    none.reverse();
+    println(f"{xs} {one} {none} {xs.first ?? 0} {xs.last ?? 0} {none.first ?? -1} {none.last ?? -1}");
+    println(f"{xs.contains(3)} {xs.contains(9)} {none.contains(1)} {3 in xs}");
+    let arr = [10, 20, 30];
+    println(f"{arr.first ?? 0} {arr.last ?? 0} {arr.contains(20)} {arr.contains(5)}");
+    let mut ps = [P { x: 1 }, P { x: 2 }];
+    ps.reverse();
+    let mut f = ps.first ?? P { x: 0 };
+    f.x = 99;
+    println(f"{ps[0].x} {ps[1].x} {f.x} {ps.contains(P { x: 1 })}");
+    let maybe: [i32 | null] = [null, 1];
+    println(f"{maybe.first} {maybe.contains(null)}");
+}

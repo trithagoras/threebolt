@@ -31,6 +31,6 @@ Same machine, 2026-10-28, after std moved into Threebolt (outputs unchanged):
 |-------------|----------|-------------|
 | arith       |  1540 ms | same |
 | calls       |  1757 ms | same |
-| collections |   985 ms | same |
+| collections |  1978 ms | ~2× slower: `[T]` `contains`/`reverse` are Threebolt (after the §13.4 change) |
 | strings     | 30835 ms | ~16× slower: `split`/`find`/`trim` scan character by character in Threebolt |
 | threads     |  1658 ms | ~1.9× slower: `Mutex::lock` is Threebolt |
