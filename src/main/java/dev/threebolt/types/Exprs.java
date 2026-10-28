@@ -761,8 +761,11 @@ final class Exprs {
         if (t.type() == Type.ERROR) return t;
         var fail = new ArrayList<Type>();
         var rest = new ArrayList<Type>();
-        for (Type m : TypeSystem.members(t.type())) {
-            if (m == Type.NULL || (!(m instanceof Type.Param) && ts.implementsAs(m, ts.error) != null)) fail.add(m);
+        // Errors when there are any, else null: with an error member, null is a value.
+        var members = TypeSystem.members(t.type());
+        boolean errors = members.stream().anyMatch(this::isError);
+        for (Type m : members) {
+            if (errors ? isError(m) : m == Type.NULL) fail.add(m);
             else rest.add(m);
         }
         if (fail.isEmpty()) {
@@ -784,6 +787,10 @@ final class Exprs {
             }
         }
         return new Typed(new Ir.Propagate(t.ir(), fail, p.span()), TypeSystem.union(rest));
+    }
+
+    private boolean isError(Type m) {
+        return m != Type.NULL && !(m instanceof Type.Param) && ts.implementsAs(m, ts.error) != null;
     }
 
     // ---- Operators (§7.3) ----

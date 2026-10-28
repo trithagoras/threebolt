@@ -1,0 +1,53 @@
+{"proto_version":2,"person":{"age":25,"ok":true,"none":null},"list":[1.5,"a\"b\n",[]],"empty":{}}
+{
+  "proto_version": 2,
+  "person": {
+    "age": 25,
+    "ok": true,
+    "none": null
+  },
+  "list": [
+    1.5,
+    "a\"b\n",
+    []
+  ],
+  "empty": {}
+}
+{"a":[1,-2500,0.1,true,false,null],"s":"tab\tq\" \\ / é 😀 \u0001 �x","o":{}}
+true
+object
+true
+unexpected end of text at line 1, column 1 (1:1)
+expected ',' or ']', found the end of text at line 1, column 6 (1:6)
+expected ':', found '1' at line 1, column 6 (1:6)
+unexpected character ']' at line 1, column 4 (1:4)
+unexpected text after the value at line 1, column 2 (1:2)
+unterminated string at line 1, column 5 (1:5)
+unexpected character 't' at line 1, column 1 (1:1)
+unexpected text after the value at line 1, column 5 (1:5)
+unexpected character '}' at line 2, column 4 (2:4)
+invalid escape at line 1, column 3 (1:3)
+unexpected end of text at line 1, column 3 (1:3)
+invalid \u escape at line 1, column 7 (1:7)
+expected a string key, found '1' at line 1, column 2 (1:2)
+error: nesting too deep at line 1, column 513
+[null,null,-0]
+Ann 30 null ["x"]
+{"name":"Ann","age":30,"nick":null,"tags":["x"]}
+{
+ "name": "Bo",
+ "age": 4,
+ "nick": "b",
+ "tags": []
+}
+[1,2,3]
+{"x":[true]}
+decode: expected u8, found 300 at age [age]
+decode: expected u8, found 1.5 at age [age]
+decode: missing field "name" []
+decode: expected string, found number at tags[1] [tags[1]]
+decode: expected object, found array []
+other: expected ',' or '}', found the end of text at line 1, column 11
+expected u8, found -1 at team[1].age
+[9007199254740992, -9223372036854775808]
+expected u64, found 18446744073709552000

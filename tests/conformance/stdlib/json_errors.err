@@ -1,0 +1,5 @@
+json_errors.3b:8:12: error[E0403]: 'from_json' does not match the signature required by trait 'FromJson'
+json_errors.3b:13:13: error[E0216]: 'Point' does not implement 'FromJson' (required by 'T')
+json_errors.3b:14:13: error[E0216]: 'Point' does not implement 'ToJson' (required by 'T')
+json_errors.3b:16:5: error[E0211]: this value of type 'null | bool | f64 | str | [Json] | Map<str, Json> | JsonSyntaxErr' may be an error; handle it, propagate it with `?`, or discard it with `_ = ...;`
+json_errors.3b:19:13: error[E0216]: 'null | bool | f64 | str | [Json] | Map<str, Json>' does not implement 'ToJson' (required by 'T')

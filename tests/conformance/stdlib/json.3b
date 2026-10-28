@@ -1,0 +1,72 @@
+use std::json;
+use std::json::{Json, ToJson, FromJson, JsonErr, JsonSyntaxErr, JsonDecodeErr};
+
+struct Person : ToJson, FromJson {
+    let name: str;
+    let age: u8;
+    let nick: str | null = null;
+    let tags: [str] = [];
+
+    pub fn to_json(self) -> Json => ["name": self.name, "age": self.age as f64, "nick": self.nick, "tags": self.tags.to_json()];
+
+    pub fn from_json(j: Json) -> Self | JsonErr {
+        let o = json::object(j)?;
+        return Person {
+            name: json::field<str>(o, "name")?,
+            age: json::field<u8>(o, "age")?,
+            nick: json::optional<str>(o, "nick")?,
+            tags: json::field<[str]>(o, "tags")?,
+        };
+    }
+}
+
+fn show(r: Json | JsonErr) {
+    if r is JsonErr { println(f"error: {r.message()}"); } else { println(json::stringify(r)); }
+}
+
+fn main() -> () | Err {
+    // Literals, compact and pretty output, insertion order kept.
+    let j: Json = ["proto_version": 2, "person": ["age": 25, "ok": true, "none": null], "list": [1.5, "a\"b\n", []], "empty": [:]];
+    println(json::stringify(j));
+    println(json::stringify(j, indent: 2));
+
+    // Parsing round-trips.
+    let text = """ { "a" : [1, -2.5e3, 0.1, true, false, null], "s": "tab\\tq\\\" \\\\ \\/ \\u00e9 \\ud83d\\ude00 \\u0001 \\ud800x", "o": {} } """;
+    let p = json::parse(text)?;
+    println(json::stringify(p));
+    println(json::stringify(json::parse(json::stringify(p))?) == json::stringify(p));
+    println(json::kind(p));
+    if p is Map<str, Json> { println("a" in p); }
+
+    // Syntax errors.
+    for bad in ["", "[1, 2", "{\"a\" 1}", "[1,]", "01", "\"abc", "tru", "[1] x", "{\"a\":\n  -}", "\"\\x\"", "1.", "[\"\\u12\"]", "{1: 2}"] {
+        let r = json::parse(bad);
+        if r is JsonSyntaxErr { println(f"{r.message()} ({r.line}:{r.col})"); } else { println(f"parsed: {json::stringify(r)}"); }
+    }
+    let deep = "[".repeat(600);
+    show(json::parse(deep));
+
+    // Non-finite numbers.
+    show([1.0 / 0.0, 0.0 / 0.0, -0.0] as Json);
+
+    // Typed decoding and encoding.
+    let ann = json::decode<Person>("{\"name\": \"Ann\", \"age\": 30, \"tags\": [\"x\"]}")?;
+    println(f"{ann.name} {ann.age} {ann.nick} {ann.tags}");
+    println(json::encode(ann));
+    println(json::encode(Person { name: "Bo", age: 4, nick: "b" }, indent: 1));
+    println(json::encode([1, 2, 3]));
+    println(json::encode(["x": [true]]));
+
+    for bad in ["{\"name\": \"A\", \"age\": 300, \"tags\": []}", "{\"name\": \"A\", \"age\": 1.5, \"tags\": []}", "{\"age\": 1, \"tags\": []}",
+                "{\"name\": \"A\", \"age\": 1, \"tags\": [\"a\", 2]}", "[]", "{\"name\": 1"] {
+        let r = json::decode<Person>(bad);
+        if r is JsonDecodeErr { println(f"decode: {r.message()} [{r.path}]"); }
+        else if r is JsonErr { println(f"other: {r.message()}"); }
+        else { println("ok"); }
+    }
+    let nested = json::decode<Map<str, [Person]>>("{\"team\": [{\"name\": \"A\", \"age\": 1, \"tags\": []}, {\"name\": \"B\", \"age\": -1, \"tags\": []}]}");
+    if nested is JsonErr { println(nested.message()); }
+    println(json::decode<[i64]>("[9007199254740992, -9223372036854775808]")?);
+    let big = json::decode<u64>("18446744073709551616");
+    if big is JsonErr { println(big.message()); }
+}

@@ -1,0 +1,28 @@
+// §7.10: with an error member, `?` propagates only errors; null is a value.
+struct NotFound : Err { pub fn message(self) -> str => "not found"; }
+
+fn lookup(id: i32) -> str | null | NotFound {
+    if id == 0 { return null; }
+    if id < 0 { return NotFound {}; }
+    return f"user{id}";
+}
+
+fn name(id: i32) -> str | NotFound {
+    let u = lookup(id)?;
+    return u ?? "(nobody)";
+}
+
+// Without an error member, `?` still propagates null.
+fn first_digit(s: str) -> i32 | null {
+    let n = i32::parse(s)?;
+    return n % 10;
+}
+
+fn main() {
+    for id in [1, 0, -1] {
+        let r = name(id);
+        if r is NotFound { println(r.message()); } else { println(r); }
+    }
+    println(first_digit("42"));
+    println(first_digit("x"));
+}

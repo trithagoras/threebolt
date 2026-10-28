@@ -1,0 +1,480 @@
+// std::json: JSON text, values and conversions (spec §16).
+//
+// A JSON value is the union `Json`, so collection literals build documents directly
+// (`let j: Json = ["name": "Ann", "tags": []];`) and narrowing takes them apart. Numbers are
+// `f64`, as in JavaScript: integers beyond 2^53 lose precision. JSON `null` is Threebolt's
+// `null`, so `obj.get(k)` cannot tell a missing key from a null value; use `k in obj`.
+//
+// `ToJson` and `FromJson` map user types to and from `Json`; there is no derive, so impls are
+// written by hand, with `object`, `field` and `optional` to keep them short.
+
+// ---- Values and errors ----
+
+/// A JSON value.
+pub type Json = null | bool | f64 | str | [Json] | Map<str, Json>;
+
+/// A JSON failure: text that is not JSON (`JsonSyntaxErr`) or a value of the wrong shape for
+/// the type it is decoded into (`JsonDecodeErr`).
+pub class JsonErr : MsgErr {
+    pub fn new(msg: str) -> Self => { ..MsgErr::new(msg) };
+}
+
+/// Text that is not JSON. `line` and `col` (from 1, counting characters) are where it fails.
+pub class JsonSyntaxErr : JsonErr {
+    pub let line: usize;
+    pub let col: usize;
+
+    pub fn new(what: str, line: usize, col: usize) -> Self
+        => { ..JsonErr::new(f"{what} at line {line}, column {col}"), line, col };
+}
+
+/// A value of the wrong shape: `reason` is what is wrong (`expected i32, found string`) and
+/// `path` where, from the decoded value (`person.age`, `items[2]`; `""` for the value itself).
+pub class JsonDecodeErr : JsonErr {
+    pub let reason: str;
+    pub let path: str;
+
+    pub fn new(reason: str, path: str = "") -> Self
+        => { ..JsonErr::new(reason if path == "" else f"{reason} at {path}"), reason, path };
+
+    /// The error for the same failure inside member `key` of an object.
+    pub fn in_field(self, key: str) -> JsonDecodeErr
+        => JsonDecodeErr::new(self.reason, path: key if self.path == "" else (
+            f"{key}{self.path}" if self.path.starts_with("[") else f"{key}.{self.path}"));
+
+    /// The error for the same failure inside element `i` of an array.
+    pub fn in_element(self, i: usize) -> JsonDecodeErr
+        => JsonDecodeErr::new(self.reason, path: f"[{i}]" if self.path == "" else (
+            f"[{i}]{self.path}" if self.path.starts_with("[") else f"[{i}].{self.path}"));
+}
+
+/// The JSON name of `j`'s kind, for messages: `null`, `bool`, `number`, `string`, `array`
+/// or `object`.
+pub fn kind(j: Json) -> str {
+    if j == null { return "null"; }
+    if j is bool { return "bool"; }
+    if j is f64 { return "number"; }
+    if j is str { return "string"; }
+    if j is List<Json> { return "array"; }
+    return "object";
+}
+
+/// The error for `j` where a `want` was expected.
+fn mismatch(want: str, j: Json) -> JsonDecodeErr => JsonDecodeErr::new(f"expected {want}, found {kind(j)}");
+
+// ---- Text ----
+
+/// The value `s` holds: one JSON value (RFC 8259), with whitespace around it. Duplicate object
+/// keys keep the last value; a number too large for `f64` is infinite.
+pub fn parse(s: str) -> Json | JsonSyntaxErr {
+    let mut p = Parser::new(s);
+    p.space();
+    let j = p.value(0)?;
+    p.space();
+    if p.pos < s.len { return p.fail("unexpected text after the value"); }
+    return j;
+}
+
+/// `j` as JSON text: compact with `indent` 0, else one member or element per line, nested
+/// `indent` spaces deeper. Object members keep the map's order. NaN and infinities, which JSON
+/// cannot hold, are written as `null` (as JavaScript does).
+pub fn stringify(j: Json, indent: usize = 0) -> str {
+    let mut out: [str] = [];
+    write(j, out, " ".repeat(indent), "\n");
+    return out.join("");
+}
+
+/// Appends `j` to `out`, its nested lines starting with `nl` (a newline and the current
+/// indentation) and indented one `step` more.
+fn write(j: Json, mut out: [str], step: str, nl: str) {
+    if j == null { out.push("null"); }
+    else if j is bool { out.push(j.to_str()); }
+    else if j is f64 { out.push("null" if j.is_nan() || j.is_infinite() else j.to_str()); }
+    else if j is str { quote(j, out); }
+    else if j is List<Json> {
+        if j.len == 0 { out.push("[]"); return; }
+        let inner = nl + step;
+        out.push("[");
+        for (i, e) in j.enumerate() {
+            if i > 0 { out.push(","); }
+            if step != "" { out.push(inner); }
+            write(e, out, step, inner);
+        }
+        if step != "" { out.push(nl); }
+        out.push("]");
+    } else {
+        if j.len == 0 { out.push("{}"); return; }
+        let inner = nl + step;
+        let colon = ": " if step != "" else ":";
+        out.push("{");
+        let mut first = true;
+        for (k, v) in j {
+            if !first { out.push(","); }
+            first = false;
+            if step != "" { out.push(inner); }
+            quote(k, out);
+            out.push(colon);
+            write(v, out, step, inner);
+        }
+        if step != "" { out.push(nl); }
+        out.push("}");
+    }
+}
+
+/// Appends `s` to `out` as a JSON string, escaping quotes, backslashes and control characters.
+fn quote(s: str, mut out: [str]) {
+    let mut cs: [char] = ['"'];
+    for c in s {
+        if c == '"' { cs.push('\\'); cs.push('"'); }
+        else if c == '\\' { cs.push('\\'); cs.push('\\'); }
+        else if c == '\n' { cs.push('\\'); cs.push('n'); }
+        else if c == '\r' { cs.push('\\'); cs.push('r'); }
+        else if c == '\t' { cs.push('\\'); cs.push('t'); }
+        else if (c as u32) < 0x20 {
+            for e in f"\\u{hex4(c as u32)}" { cs.push(e); }
+        } else { cs.push(c); }
+    }
+    cs.push('"');
+    out.push(str::from_chars(cs));
+}
+
+/// `n` (below 0x10000) as four lower-case hexadecimal digits.
+fn hex4(n: u32) -> str {
+    let digits = "0123456789abcdef";
+    return str::from_chars([digits[((n >> (12 - 4 * k)) & 0xf) as usize] for k in 0..4]);
+}
+
+/// Reads one JSON text from `s`, from `pos`.
+class Parser {
+    let s: str;
+    pub let pos: usize = 0;
+
+    pub fn new(s: str) -> Self => { s };
+
+    /// Deepest nesting of arrays and objects accepted, so that hostile input cannot exhaust the stack.
+    static let MAX_DEPTH: usize = 512;
+
+    /// A `JsonSyntaxErr` saying `what` at the current position.
+    pub fn fail(self, what: str) -> JsonSyntaxErr {
+        let mut line: usize = 1;
+        let mut col: usize = 1;
+        for i in 0..self.pos {
+            if self.s[i] == '\n' { line += 1; col = 1; } else { col += 1; }
+        }
+        return JsonSyntaxErr::new(what, line, col);
+    }
+
+    /// The error for the character at the current position, or the end of the text.
+    fn unexpected(self) -> JsonSyntaxErr {
+        if self.pos >= self.s.len { return self.fail("unexpected end of text"); }
+        return self.fail(f"unexpected character '{self.s[self.pos]}'");
+    }
+
+    /// The current character, or `null` at the end.
+    fn peek(self) -> char | null => self.s[self.pos] if self.pos < self.s.len else null;
+
+    /// Skips whitespace: space, tab, line feed and carriage return.
+    pub fn space(mut self) {
+        while self.pos < self.s.len {
+            let c = self.s[self.pos];
+            if c != ' ' && c != '\t' && c != '\n' && c != '\r' { return; }
+            self.pos += 1;
+        }
+    }
+
+    /// Consumes `c` if it is next.
+    fn eat(mut self, c: char) -> bool {
+        if self.peek() != c { return false; }
+        self.pos += 1;
+        return true;
+    }
+
+    /// A value starting at the current position, inside `depth` arrays and objects.
+    pub fn value(mut self, depth: usize) -> Json | JsonSyntaxErr {
+        let c = self.peek();
+        if c == '{' { return self.object(depth + 1); }
+        if c == '[' { return self.array(depth + 1); }
+        if c == '"' { return self.string(); }
+        if c == '-' || (c != null && c.is_digit()) { return self.number(); }
+        if self.word("true") { return true; }
+        if self.word("false") { return false; }
+        if self.word("null") { return null; }
+        return self.unexpected();
+    }
+
+    /// Consumes `w` if it is next.
+    fn word(mut self, w: str) -> bool {
+        if self.pos + w.len > self.s.len || self.s[self.pos..self.pos + w.len] != w { return false; }
+        self.pos += w.len;
+        return true;
+    }
+
+    fn array(mut self, depth: usize) -> [Json] | JsonSyntaxErr {
+        if depth > Parser::MAX_DEPTH { return self.fail("nesting too deep"); }
+        self.pos += 1;
+        let mut xs: [Json] = [];
+        self.space();
+        if self.eat(']') { return xs; }
+        loop {
+            self.space();
+            xs.push(self.value(depth)?);
+            self.space();
+            if self.eat(']') { return xs; }
+            if !self.eat(',') { return self.expected("',' or ']'"); }
+        }
+    }
+
+    fn object(mut self, depth: usize) -> Map<str, Json> | JsonSyntaxErr {
+        if depth > Parser::MAX_DEPTH { return self.fail("nesting too deep"); }
+        self.pos += 1;
+        let mut m: Map<str, Json> = [:];
+        self.space();
+        if self.eat('}') { return m; }
+        loop {
+            self.space();
+            if self.peek() != '"' { return self.expected("a string key"); }
+            let k = self.string()?;
+            self.space();
+            if !self.eat(':') { return self.expected("':'"); }
+            self.space();
+            m[k] = self.value(depth)?;
+            self.space();
+            if self.eat('}') { return m; }
+            if !self.eat(',') { return self.expected("',' or '}'"); }
+        }
+    }
+
+    /// The error for something other than `what` at the current position.
+    fn expected(self, what: str) -> JsonSyntaxErr {
+        if self.pos >= self.s.len { return self.fail(f"expected {what}, found the end of text"); }
+        return self.fail(f"expected {what}, found '{self.s[self.pos]}'");
+    }
+
+    /// A string, from its opening quote.
+    fn string(mut self) -> str | JsonSyntaxErr {
+        self.pos += 1;
+        let mut cs: [char] = [];
+        loop {
+            let c = self.peek();
+            if c == null { return self.fail("unterminated string"); }
+            if c == '"' { self.pos += 1; return str::from_chars(cs); }
+            if (c as u32) < 0x20 { return self.fail("control character in string"); }
+            if c != '\\' { cs.push(c); self.pos += 1; continue; }
+            self.pos += 1;
+            let e = self.peek();
+            self.pos += 1;
+            if e == '"' { cs.push('"'); }
+            else if e == '\\' { cs.push('\\'); }
+            else if e == '/' { cs.push('/'); }
+            else if e == 'b' { cs.push('\u{8}'); }
+            else if e == 'f' { cs.push('\u{c}'); }
+            else if e == 'n' { cs.push('\n'); }
+            else if e == 'r' { cs.push('\r'); }
+            else if e == 't' { cs.push('\t'); }
+            else if e == 'u' { cs.push(self.unicode()?); }
+            else { self.pos -= 1; return self.fail("invalid escape"); }
+        }
+    }
+
+    /// The character of a `\u` escape, after the `u`: a surrogate pair is one character, and a
+    /// lone surrogate is U+FFFD.
+    fn unicode(mut self) -> char | JsonSyntaxErr {
+        let hi = self.hex()?;
+        if hi < 0xd800 || hi > 0xdfff { return hi as char; }
+        if hi <= 0xdbff && self.word("\\u") {
+            let at = self.pos;
+            let lo = self.hex()?;
+            if lo >= 0xdc00 && lo <= 0xdfff { return (0x10000 + ((hi - 0xd800) << 10) + (lo - 0xdc00)) as char; }
+            self.pos = at - 2;
+        }
+        return '\u{fffd}';
+    }
+
+    /// Four hexadecimal digits.
+    fn hex(mut self) -> u32 | JsonSyntaxErr {
+        let mut n: u32 = 0;
+        for _ in 0..4 {
+            let c = self.peek();
+            let mut d: u32 = 16;
+            if c != null {
+                if c.is_digit() { d = c as u32 - '0' as u32; }
+                else if c >= 'a' && c <= 'f' { d = c as u32 - 'a' as u32 + 10; }
+                else if c >= 'A' && c <= 'F' { d = c as u32 - 'A' as u32 + 10; }
+            }
+            if d == 16 { return self.fail("invalid \\u escape"); }
+            n = n * 16 + d;
+            self.pos += 1;
+        }
+        return n;
+    }
+
+    /// A number: `-`, then `0` or digits without a leading zero, then optional fraction and exponent.
+    fn number(mut self) -> f64 | JsonSyntaxErr {
+        let start = self.pos;
+        self.eat('-');
+        if self.eat('0') {}
+        else if !self.digits() { return self.unexpected(); }
+        if self.eat('.') && !self.digits() { return self.unexpected(); }
+        if self.eat('e') || self.eat('E') {
+            if !self.eat('+') { self.eat('-'); }
+            if !self.digits() { return self.unexpected(); }
+        }
+        let x = f64::parse(self.s[start..self.pos]);
+        if x == null { self.pos = start; return self.fail("invalid number"); }
+        return x;
+    }
+
+    /// Consumes a run of decimal digits; whether there was one.
+    fn digits(mut self) -> bool {
+        let start = self.pos;
+        while self.pos < self.s.len && self.s[self.pos].is_digit() { self.pos += 1; }
+        return self.pos > start;
+    }
+}
+
+// ---- Conversions ----
+
+/// A type that can be written as JSON.
+pub trait ToJson {
+    fn to_json(self) -> Json;
+}
+
+/// A type that can be read from JSON. Implementations return a `JsonDecodeErr` for a value of
+/// the wrong shape; `field` and `optional` give it the member's path.
+pub trait FromJson {
+    fn from_json(j: Json) -> Self | JsonErr;
+}
+
+/// `x` as JSON text (`stringify(x.to_json(), indent: indent)`).
+pub fn encode<T: ToJson>(x: T, indent: usize = 0) -> str => stringify(x.to_json(), indent: indent);
+
+/// The `T` that the JSON text `s` holds: `json::decode<Config>(text)`.
+pub fn decode<T: FromJson>(s: str) -> T | JsonErr => T::from_json(parse(s)?);
+
+/// `j` as an object, or a `JsonDecodeErr`.
+pub fn object(j: Json) -> Map<str, Json> | JsonDecodeErr {
+    if j is Map<str, Json> { return j; }
+    return mismatch("object", j);
+}
+
+/// `j` as an array, or a `JsonDecodeErr`.
+pub fn array(j: Json) -> [Json] | JsonDecodeErr {
+    if j is List<Json> { return j; }
+    return mismatch("array", j);
+}
+
+/// Member `key` of `o` as a `T`: `json::field<str>(o, "name")?`. A missing member is a
+/// `JsonDecodeErr`, and so is one that `T::from_json` rejects (with `key` added to its path).
+pub fn field<T: FromJson>(o: Map<str, Json>, key: str) -> T | JsonErr {
+    if !(key in o) { return JsonDecodeErr::new(f"missing field \"{key}\""); }
+    return within(T::from_json(o[key]), key);
+}
+
+/// Member `key` of `o` as a `T`, or `null` when it is missing or `null`.
+pub fn optional<T: FromJson>(o: Map<str, Json>, key: str) -> T | null | JsonErr {
+    let j = o.get(key);
+    if j == null { return null; }
+    return within(T::from_json(j), key);
+}
+
+/// `r`, with `key` added to the path of a `JsonDecodeErr`.
+fn within<T>(r: T | JsonErr, key: str) -> T | JsonErr {
+    if r is JsonDecodeErr { return r.in_field(key); }
+    return r;
+}
+
+/// `j` as an integer type `T`, if it is a whole number in `T`'s range.
+fn integer<T: Integer>(j: Json, name: str) -> T | JsonErr {
+    if !(j is f64) { return mismatch(name, j); }
+    // `max + 1` is exact for the narrower types and rounds to `max` for 64 bits, whose
+    // maximum is not an f64: either way, below it is in range.
+    if j.trunc() != j || j < T::min_value() as f64 || j >= T::max_value() as f64 + 1.0 {
+        return JsonDecodeErr::new(f"expected {name}, found {j}");
+    }
+    return j as T;
+}
+
+impl ToJson for bool { pub fn to_json(self) -> Json => self; }
+impl ToJson for str { pub fn to_json(self) -> Json => self; }
+impl ToJson for char { pub fn to_json(self) -> Json => self.to_str(); }
+impl ToJson for f64 { pub fn to_json(self) -> Json => self; }
+impl ToJson for f32 { pub fn to_json(self) -> Json => self as f64; }
+impl ToJson for i8 { pub fn to_json(self) -> Json => self as f64; }
+impl ToJson for i16 { pub fn to_json(self) -> Json => self as f64; }
+impl ToJson for i32 { pub fn to_json(self) -> Json => self as f64; }
+impl ToJson for i64 { pub fn to_json(self) -> Json => self as f64; }
+impl ToJson for isize { pub fn to_json(self) -> Json => self as f64; }
+impl ToJson for u8 { pub fn to_json(self) -> Json => self as f64; }
+impl ToJson for u16 { pub fn to_json(self) -> Json => self as f64; }
+impl ToJson for u32 { pub fn to_json(self) -> Json => self as f64; }
+impl ToJson for u64 { pub fn to_json(self) -> Json => self as f64; }
+impl ToJson for usize { pub fn to_json(self) -> Json => self as f64; }
+
+impl<T: ToJson> ToJson for [T] {
+    pub fn to_json(self) -> Json => [x.to_json() for x in self];
+}
+
+impl<T: ToJson> ToJson for Map<str, T> {
+    pub fn to_json(self) -> Json => [k: v.to_json() for (k, v) in self];
+}
+
+impl FromJson for bool {
+    pub fn from_json(j: Json) -> Self | JsonErr {
+        if j is bool { return j; }
+        return mismatch("bool", j);
+    }
+}
+
+impl FromJson for str {
+    pub fn from_json(j: Json) -> Self | JsonErr {
+        if j is str { return j; }
+        return mismatch("string", j);
+    }
+}
+
+impl FromJson for f64 {
+    pub fn from_json(j: Json) -> Self | JsonErr {
+        if j is f64 { return j; }
+        return mismatch("number", j);
+    }
+}
+
+impl FromJson for f32 {
+    pub fn from_json(j: Json) -> Self | JsonErr {
+        if j is f64 { return j as f32; }
+        return mismatch("number", j);
+    }
+}
+
+impl FromJson for i8 { pub fn from_json(j: Json) -> Self | JsonErr => integer<i8>(j, "i8"); }
+impl FromJson for i16 { pub fn from_json(j: Json) -> Self | JsonErr => integer<i16>(j, "i16"); }
+impl FromJson for i32 { pub fn from_json(j: Json) -> Self | JsonErr => integer<i32>(j, "i32"); }
+impl FromJson for i64 { pub fn from_json(j: Json) -> Self | JsonErr => integer<i64>(j, "i64"); }
+impl FromJson for isize { pub fn from_json(j: Json) -> Self | JsonErr => integer<isize>(j, "isize"); }
+impl FromJson for u8 { pub fn from_json(j: Json) -> Self | JsonErr => integer<u8>(j, "u8"); }
+impl FromJson for u16 { pub fn from_json(j: Json) -> Self | JsonErr => integer<u16>(j, "u16"); }
+impl FromJson for u32 { pub fn from_json(j: Json) -> Self | JsonErr => integer<u32>(j, "u32"); }
+impl FromJson for u64 { pub fn from_json(j: Json) -> Self | JsonErr => integer<u64>(j, "u64"); }
+impl FromJson for usize { pub fn from_json(j: Json) -> Self | JsonErr => integer<usize>(j, "usize"); }
+
+impl<T: FromJson> FromJson for [T] {
+    pub fn from_json(j: Json) -> Self | JsonErr {
+        let xs = array(j)?;
+        let mut out: [T] = [];
+        for (i, e) in xs.enumerate() {
+            let x = T::from_json(e);
+            if x is JsonDecodeErr { return x.in_element(i); }
+            out.push(x?);
+        }
+        return out;
+    }
+}
+
+impl<T: FromJson> FromJson for Map<str, T> {
+    pub fn from_json(j: Json) -> Self | JsonErr {
+        let o = object(j)?;
+        let mut out: Map<str, T> = [:];
+        for (k, v) in o { out[k] = within(T::from_json(v), k)?; }
+        return out;
+    }
+}

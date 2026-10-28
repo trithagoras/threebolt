@@ -1,0 +1,2 @@
+propagate_null_errors.3b:13:13: error[E0212]: `?` would return 'NotFound', which is not assignable to the return type 'i32 | null'
+propagate_null_errors.3b:19:18: error[E0200]: expected 'i32', found 'i32 | null'

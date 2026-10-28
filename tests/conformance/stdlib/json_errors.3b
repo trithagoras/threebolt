@@ -1,0 +1,20 @@
+use std::json;
+use std::json::{Json, FromJson};
+
+struct Point { let x: f64; }
+
+struct Bad : FromJson {
+    // The signature must match the trait's exactly.
+    pub fn from_json(j: Json) -> Self => Bad {};
+}
+
+fn main() -> () | Err {
+    // Point implements neither trait.
+    let p = json::decode<Point>("{}")?;
+    println(json::encode(Point { x: 1.0 }));
+    // A parse result may be an error.
+    json::parse("1");
+    // Json is a union: no ToJson.
+    let j: Json = null;
+    println(json::encode(j));
+}

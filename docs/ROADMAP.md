@@ -240,7 +240,7 @@ the exemption keeps "add `Display` to a dependency's type" a one-liner in apps.
 - **Cross-cutting**: f-string format specifiers (`{x:.2}`, `{n:>5}`) are a language change std would want;
   decide alongside. `StrBuilder`?
 - Also missing from std that programs reach for: sorting (`[T].sort()` with `Ord`, `sort_by`), `min`/`max`
-  over iterators, `zip`, `take`/`skip`, `sum`, string `format`/padding, JSON (std or package?).
+  over iterators, `zip`, `take`/`skip`, `sum`, string `format`/padding. (JSON: decided, `std::json`, spec §16.)
 
 ## 4. Execution backend
 

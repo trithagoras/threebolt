@@ -1,4 +1,5 @@
 use std::thread;
+use std::time::Duration;
 
 type Result<T> = T | Err;
 
@@ -10,7 +11,7 @@ fn main() -> Result<()> {
 fn thrd() -> Result<()> {
     let mut i = 0;
     while i < 10 {
-        thread::sleep(1000);
+        thread::sleep(Duration::from_secs(1));
         i += 1;
         println(f"Counter: {i}");
     }

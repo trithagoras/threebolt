@@ -1,0 +1,23 @@
+struct NotFound : Err { pub fn message(self) -> str => "not found"; }
+
+fn lookup() -> i32 | null | NotFound => null;
+
+// Only the error propagates, so the return type need not accept null.
+fn ok() -> i32 | null | NotFound {
+    let x = lookup()?;
+    return x;
+}
+
+// ...but it must accept the error.
+fn bad() -> i32 | null {
+    let x = lookup()?;
+    return x;
+}
+
+// The result keeps null.
+fn keeps() -> i32 | NotFound {
+    let x: i32 = lookup()?;
+    return x;
+}
+
+fn main() {}
