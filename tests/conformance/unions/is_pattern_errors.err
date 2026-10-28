@@ -1,5 +1,5 @@
 is_pattern_errors.3b:5:53: error[E0231]: 'a' is only bound where the `is` test that binds it holds (§7.3)
 is_pattern_errors.3b:6:13: error[E0231]: 'a' is only bound where the `is` test that binds it holds (§7.3)
 is_pattern_errors.3b:7:24: error[E0231]: 'b' is only bound where the `is` test that binds it holds (§7.3)
-is_pattern_errors.3b:8:16: error[E0226]: 'str' is a type, but here it would be a binding: after `is`, `[` and `(` start a pattern (§7.3); test a list type with `List<T>`, a tuple's element types with `(is A, is B)`
+is_pattern_errors.3b:8:16: error[E0115]: 'str' is a type, so it cannot name a binding; after `is`, `[` and `(` start a pattern (§7.3); test a list type with `List<T>`, a tuple's element types with `(is A, is B)`
 is_pattern_errors.3b:10:14: error[E0226]: a list pattern cannot match 'i32'

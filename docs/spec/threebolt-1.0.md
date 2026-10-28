@@ -470,6 +470,7 @@ Bitwise binds tighter than comparison (no C precedence trap).
 ### 7.7 Literals
 - Tuple `(a, b)`; access `.0`, `.1` (a plain decimal: no suffix, `_` or leading zeros).
 - Collection `[a, b, c]`, repeat `[v; n]`, map `[k: v, k2: v2]`, empty map `[:]`. **Target-typed:** `[...]` builds `[T]`, `Set<T>`, or `[T; N]` according to the expected type (default `[T]`); `[]` is valid for any expected collection type (`Map` included), error without one. `[k: v]` builds `Map<K, V>`. `[v; n]` builds `[T; N]` when the expected type is an array (`n` then must equal `N`), else a `[T]` of `n` copies (`n: usize`, evaluated at runtime).
+  - **Against a union**, the literal's form picks the member it builds: the entry forms (`[k: v]`, `[:]`, `[k: v for …]`) the `Map` member; the element forms (`[a, b]`, `[v; n]`, `[e for …]`) and `[]` a `[T]`, `Set<T>` or `[T; N]` member. `[]` builds a map only when the union's sole collection member is a `Map`. So with `type Json = null | bool | f64 | str | [Json] | Map<str, Json>;`, `["a": [1, 2]]` is a `Map<str, Json>` holding a `[Json]`, `[]` is an empty `[Json]` and `[:]` an empty `Map<str, Json>`. More than one member of the literal's form is an error; pick one with `as` (§7.9): `let xs: [i32] | Set<i32> = [5] as Set<i32>;`.
 - **Comprehension** `[e for p in it if c]`, `[k: v for p in it if c]`: one or more comma-separated **clauses** `p in it`, each with an optional filter `if c`: `[(x, y) for x in xs if x > 0, y in ys if y != x]`. It is equivalent to nested `for` loops (§6.4), the first clause outermost, each filter an `if` around the clauses after it, that add `e` (or the entry `k: v`) to a new collection innermost:
   - Each `it` is iterated as by `for` (`Iterable<T>` or `Iterator<T>`) and evaluated afresh for each iteration of the clause before it; each `p` is an irrefutable pattern bound afresh per iteration, so closures capture per-iteration variables. A clause's iterable and filter, and `e`, see the bindings of the clauses before them: `[cell for row in grid, cell in row]`.
   - A filter follows §6.6 and narrows (§9) the later clauses and `e`; an `is` pattern's bindings are in scope there: `[s.len for s in items if s is str]` is a `[usize]`, `[v for n in nodes if n is Leaf { v }]`.
@@ -609,6 +610,7 @@ Prelude traits for code generic over numbers, after Haskell's numeric classes:
 
 - Patterns appear in `match` arms, `let`, `for`, lambda parameters (§7.8), and after `is` (§7.3).
 - `let`, `for` and lambda parameters require irrefutable patterns (tuples, struct destructure, bindings, `_`).
+- A binding (here, in `let`, or a function or lambda parameter) cannot have the name of a type in scope: a primitive, a type or alias declared or imported in the module, or a type parameter. `let str = s;`, `fn f(T: T)` and `match x { bool => … }` are errors (the last would be a catch-all binding; a type test is `is bool`). Struct shorthand binds the field's name, so a field named like a type is destructured as `Type { str: s }`.
 
 ---
 
@@ -1051,3 +1053,9 @@ Semantics the spec left open, decided while implementing:
 
 ### 2026-10-29 — comprehensions
 - §7.7 Comprehensions `[e for p in it if c, …]` and `[k: v for …]`: comma-separated clauses nesting left to right, each with an optional filter; target-typed to `[T]`, `Set<T>` or `Map<K, V>`; filters narrow (§9); `?` propagates from the enclosing function. §7.9 casts target-type them; §17 note 19.
+
+### 2026-10-29 — collection literals against unions
+- §7.7 Against a union, a collection literal builds the member of its own form (`[k: v]` a `Map`, `[a, b]` and `[]` a list, set or array; was: the first collection member, so a map literal against `Json` was an error). More than one member of that form is an error.
+
+### 2026-10-29 — bindings cannot be named after types
+- §11 A binding cannot have the name of a type in scope (primitives, the module's types, aliases and imported types, type parameters); was unspecified, and `match x { bool => … }` silently bound everything.

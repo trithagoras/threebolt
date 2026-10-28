@@ -12,6 +12,7 @@ import dev.threebolt.ir.Local;
 import dev.threebolt.types.Checker.Typed;
 import java.math.BigInteger;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -29,6 +30,9 @@ final class Patterns {
         this.ts = c.ts;
         this.diag = c.diag;
     }
+
+    /** Added to the error for a binding named after a type (§11), where a type test was likely meant. */
+    private String typeNameHint;
 
     /** A `let`/`for`/lambda-parameter pattern: must match every value of {@code type} (§11). */
     Ir.Pat irrefutable(Pattern p, Type type) {
@@ -64,7 +68,7 @@ final class Patterns {
                     bound = c.exprs.narrowIs(type, t);
                     unbox = TypeSystem.isStruct(bound);
                 }
-                yield new Ir.PBind(bind(b.name().text(), b.isMutable(), TypeSystem.widenInferred(bound), b.span(), bindings, reuse),
+                yield new Ir.PBind(bind(b.name().text(), b.isMutable(), TypeSystem.widenInferred(bound), b.span(), bindings, reuse, typeNameHint),
                         sub, unbox);
             }
             case Pattern.Is is -> {
@@ -123,7 +127,7 @@ final class Patterns {
     }
 
     private Local bind(String name, boolean mutable, Type type, Span span, Map<String, Local> bindings,
-                       Map<String, Local> reuse) {
+                       Map<String, Local> reuse, String hint) {
         if (bindings.containsKey(name)) {
             diag.error(Code.BAD_PATTERN, span, "'" + name + "' is bound twice in this pattern");
         }
@@ -132,7 +136,7 @@ final class Patterns {
             local = reuse.get(name);
             if (!local.type.equals(type)) local.type = TypeSystem.union(local.type, type);
         } else {
-            local = c.declare(name, mutable, type, span);
+            local = c.declare(name, mutable, type, span, hint);
         }
         bindings.put(name, local);
         return local;
@@ -154,21 +158,13 @@ final class Patterns {
      * test's true branch says otherwise.
      */
     Ir.Pat test(Pattern p, Type type, Map<String, Local> bindings) {
+        var saved = typeNameHint;
+        typeNameHint = "after `is`, `[` and `(` start a pattern (§7.3); test a list type with `List<T>`, "
+                + "a tuple's element types with `(is A, is B)`";
         var pat = pattern(p, subject(type), bindings, null);
-        for (Local l : bindings.values()) {
-            l.isConditional = true;
-            if (namesType(l.name())) {
-                diag.error(Code.BAD_PATTERN, l.span(), "'" + l.name() + "' is a type, but here it would be a binding: "
-                        + "after `is`, `[` and `(` start a pattern (§7.3); test a list type with `List<T>`, "
-                        + "a tuple's element types with `(is A, is B)`");
-            }
-        }
+        typeNameHint = saved;
+        for (Local l : bindings.values()) l.isConditional = true;
         return pat;
-    }
-
-    private boolean namesType(String name) {
-        if (Prim.named(name) != null || c.ctx.typeScope.params().containsKey(name)) return true;
-        return c.names.lookup(c.ctx.module, name) instanceof Names.TypeEntity;
     }
 
     /** What {@code x} is known to be when {@code x is pat} holds: the members it may match. */
@@ -234,7 +230,7 @@ final class Patterns {
                 if (rest) diag.error(Code.BAD_PATTERN, r.span(), "only one `..` per list pattern");
                 rest = true;
                 if (r.name() != null) {
-                    restLocal = bind(r.name().text(), false, ts.listOf(element), r.span(), bindings, reuse);
+                    restLocal = bind(r.name().text(), false, ts.listOf(element), r.span(), bindings, reuse, typeNameHint);
                 }
                 continue;
             }
@@ -323,11 +319,22 @@ final class Patterns {
         var unguarded = new ArrayList<Ir.Pat>();
         boolean anyReach = false;
         Type remaining = scrType;
+        var seenLiterals = new ArrayList<Object>();
         for (var arm : m.arms()) {
+            if (!unguarded.isEmpty() && scrType != Type.ERROR && missing(unguarded, scrType) == null) {
+                c.lints.unreachableArm(arm, "the arms before it match every value");
+            }
             var outer = ctx.scope;
             ctx.scope = new Checker.Scope(outer);
             ctx.narrowed = saved;
+            int errors = diag.count() + diag.dropped();
+            var hint = typeNameHint;
+            if (arm.pattern() instanceof Pattern.Binding b && b.isType() == null) {
+                typeNameHint = "to test the type, write `is " + b.name().text() + "`";
+            }
             var pat = pattern(arm.pattern(), remaining == Type.NEVER ? scrType : remaining, new LinkedHashMap<>(), null);
+            typeNameHint = hint;
+            boolean patternOk = diag.count() + diag.dropped() == errors;
             if (subject != null) {
                 var narrowedTo = matchedType(pat, remaining);
                 if (narrowedTo != null) c.narrow(subject, narrowedTo);
@@ -363,7 +370,14 @@ final class Patterns {
             anyReach |= ctx.reachable;
             ctx.scope = outer;
             arms.add(new Ir.Arm(pat, guard, body, value));
+            var literals = literals(pat);
+            if (literals != null && !literals.isEmpty() && seenLiterals.containsAll(literals)
+                    && patternOk
+                    && (unguarded.isEmpty() || missing(unguarded, scrType) != null)) {
+                c.lints.unreachableArm(arm, "earlier arms match " + (literals.size() == 1 ? "this value" : "these values"));
+            }
             if (arm.guard() == null) {
+                if (literals != null) seenLiterals.addAll(literals);
                 unguarded.add(pat);
                 remaining = remainder(pat, remaining);
             }
@@ -382,6 +396,23 @@ final class Patterns {
         if (!statement && !anyReach) type = Type.NEVER;
         if (armTypes.contains(Type.ERROR)) type = Type.ERROR;
         return new Typed(new Ir.Match(scrutinee.ir(), arms, m.span()), type);
+    }
+
+    /** The values a pattern of literals (`1`, `1 | 2`, `Color::Red`) matches; null for any other pattern. */
+    private static List<Object> literals(Ir.Pat pat) {
+        return switch (pat) {
+            case Ir.PLit l -> new ArrayList<>(Collections.singletonList(l.value()));
+            case Ir.POr o -> {
+                var out = new ArrayList<Object>();
+                for (var a : o.alternatives()) {
+                    var ls = literals(a);
+                    if (ls == null) yield null;
+                    out.addAll(ls);
+                }
+                yield out;
+            }
+            default -> null;
+        };
     }
 
     /** What the scrutinee is known to be inside an arm (for narrowing the scrutinee local). */

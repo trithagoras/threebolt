@@ -189,6 +189,10 @@ public final class Checker {
         // A bodyless trait member or abstract method still needs its defaults: calls through it use
         // them (§4.3).
         if (f.ast.body() == null && f.params.stream().allMatch(p -> p.defaultValue() == null)) {
+            in(new Ctx(f.module, decls.scopeOf(f), null, f, 0), () -> {
+                for (var p : f.params) bindingName(p.name(), SymbolIndex.nameIn(p.span(), p.name()), null);
+                return null;
+            });
             for (var p : f.params) f.defaults.add(null);
             return;
         }
@@ -251,14 +255,35 @@ public final class Checker {
     // ---- Locals and narrowing (§9) ----
 
     Local declare(String name, boolean mutable, Type type, Span span) {
+        return declare(name, mutable, type, span, null);
+    }
+
+    /** {@code hint}, if any, follows the error for a name that is a type's (§11). */
+    Local declare(String name, boolean mutable, Type type, Span span, String hint) {
         var local = new Local(name, mutable, type, span);
         ctx.scope.locals.put(name, local);
         localDepth.put(local, ctx.depth);
         ctx.narrowed.remove(local);
         var nameSpan = SymbolIndex.nameIn(span, name);
+        bindingName(name, nameSpan, hint);
         index.decl(nameSpan, local);
         lints.declared(local, nameSpan);
         return local;
+    }
+
+    /** A binding cannot have a type's name (§11). */
+    private void bindingName(String name, Span nameSpan, String hint) {
+        if (namesType(name)) {
+            diag.error(Code.TYPE_NAME_BINDING, nameSpan, "'" + name + "' is a type, so it cannot name a binding"
+                    + (hint == null ? "" : "; " + hint));
+        }
+    }
+
+    /** Whether {@code name} names a type here: a primitive, a type parameter, or a type or alias in scope. */
+    boolean namesType(String name) {
+        if (Prim.named(name) != null || ctx.typeScope.params().containsKey(name)) return true;
+        var symbols = ctx.module.scope().lookup(name);
+        return !symbols.isEmpty() && names.entity(symbols) instanceof Names.TypeEntity;
     }
 
     Local lookupLocal(String name) {

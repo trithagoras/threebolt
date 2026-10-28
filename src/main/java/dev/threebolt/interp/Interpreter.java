@@ -633,13 +633,13 @@ public final class Interpreter implements Callbacks {
                 var rt = typeOf(unbox(v));
                 if (n.decl().isTrait()) {
                     var inst = ts.implementsAs(rt, n.decl());
-                    return inst != null && inst.equals(n);
+                    return inst != null && TypeSystem.same(inst, n);
                 }
                 if (n.decl().isClass() && rt instanceof Type.Nominal rn && rn.decl().isClass()) {
                     var base = TypeSystem.baseInstance(rn, n.decl());
-                    return base != null && base.equals(n);
+                    return base != null && TypeSystem.same(base, n);
                 }
-                return rt.equals(n);
+                return TypeSystem.same(rt, n);
             }
             case Type.Tuple tu -> {
                 if (!(v instanceof TupleVal tv) || tv.items.length != tu.elements().size()) return false;
@@ -647,7 +647,7 @@ public final class Interpreter implements Callbacks {
                 return true;
             }
             case Type.Array a -> {
-                return v instanceof ArrayVal av && av.items.length == a.size() && av.element.equals(a.element());
+                return v instanceof ArrayVal av && av.items.length == a.size() && TypeSystem.same(av.element, a.element());
             }
             case Type.Fn fn -> {
                 return v instanceof FnVal fv && fv.type.params().size() == fn.params().size();

@@ -1,0 +1,5 @@
+arms.3b:7:5: warning[W0004]: unreachable arm: the arms before it match every value
+arms.3b:12:5: warning[W0004]: unreachable arm: the arms before it match every value
+arms.3b:18:5: warning[W0004]: unreachable arm: the arms before it match every value
+arms.3b:25:9: warning[W0004]: unreachable arm: earlier arms match these values
+arms.3b:30:9: warning[W0004]: unreachable arm: earlier arms match this value
