@@ -1,29 +1,51 @@
 // std::collections (spec §16). Map and Set are also in the prelude. Iteration follows insertion
 // order.
 
+/// A hash map from keys to values (reference type), iterated in insertion order. Literals:
+/// `["a": 1, "b": 2]`; `[:]` is empty. `m[k]` panics when `k` is missing; `m.get(k)` does not.
 pub class Map<K: Hash + Eq, V> : Len, Truthy, Iterable<(K, V)>, Contains<K>, Index<K, V>, IndexMut<K, V> {
+    /// The number of entries.
     pub get fn len(self) -> usize;
+    /// Whether it is not empty.
     pub fn truthy(self) -> bool;
+    /// The `(key, value)` pairs, in insertion order.
     pub fn iter(self) -> Iterator<(K, V)>;
+    /// The value for `k` (`m[k]`); panics if there is none.
     pub fn index(self, k: K) -> V;
+    /// Sets the value for `k` (`m[k] = v`), adding the key if it is new.
     pub fn set(mut self, k: K, v: V);
+    /// The value for `k`, or `null` if there is none.
     pub fn get(self, k: K) -> V | null;
+    /// Whether `k` has a value.
     pub fn contains_key(self, k: K) -> bool;
     /// `k in map` tests the keys (§7.3).
     pub fn contains(self, k: K) -> bool => self.contains_key(k);
+    /// Removes `k`; returns its value, or `null` if there was none.
     pub fn remove(mut self, k: K) -> V | null;
+    /// Removes everything.
     pub fn clear(mut self);
+    /// The keys, in insertion order.
     pub get fn keys(self) -> Iterator<K>;
+    /// The values, in insertion order.
     pub get fn values(self) -> Iterator<V>;
 }
 
+/// A hash set (reference type), iterated in insertion order. A list literal builds one where a
+/// `Set<T>` is expected: `let s: Set<i32> = [1, 2];`.
 pub class Set<T: Hash + Eq> : Len, Truthy, Iterable<T>, Contains<T> {
+    /// The number of entries.
     pub get fn len(self) -> usize;
+    /// Whether it is not empty.
     pub fn truthy(self) -> bool;
+    /// The elements, in insertion order.
     pub fn iter(self) -> Iterator<T>;
+    /// Adds `v`; returns whether it was new.
     pub fn insert(mut self, v: T) -> bool;
+    /// Whether `v` is in the set.
     pub fn contains(self, v: T) -> bool;
+    /// Removes `v`; returns whether it was there.
     pub fn remove(mut self, v: T) -> bool;
+    /// Removes everything.
     pub fn clear(mut self);
 }
 

@@ -212,7 +212,7 @@ public final class Server implements LanguageServer, LanguageClientAware, TextDo
         return CompletableFuture.supplyAsync(() -> {
             var at = at(params);
             if (at == null) return null;
-            var text = "```threebolt\n" + SymbolIndex.describe(at.ref()) + "\n```";
+            var text = Docs.hover(SymbolIndex.describe(at.ref()), at.ref().target());
             return new Hover(new MarkupContent(MarkupKind.MARKDOWN, text), Positions.range(at.ref().span()));
         });
     }

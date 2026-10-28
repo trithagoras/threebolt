@@ -3,16 +3,24 @@
 // (§10.1). Floats also have methods for the common ones (`x.sqrt()`); these are the free-function
 // forms, plus the functions floats lack.
 
+/// π, the ratio of a circle's circumference to its diameter.
 pub const PI: f64 = 3.141592653589793;
+/// e, the base of natural logarithms.
 pub const E: f64 = 2.718281828459045;
+/// τ = 2π.
 pub const TAU: f64 = 6.283185307179586;
+/// Positive infinity.
 pub const INF: f64 = f64::INFINITY;
+/// Not a number.
 pub const NAN: f64 = f64::NAN;
 
 // ---- Rounding and parts ----
 
+/// The largest integer value not above `x`.
 pub fn floor(x: f64) -> f64 => x.floor();
+/// The smallest integer value not below `x`.
 pub fn ceil(x: f64) -> f64 => x.ceil();
+/// The integer part of `x`, rounding towards zero.
 pub fn trunc(x: f64) -> f64 => x.trunc();
 /// Rounds half away from zero.
 pub fn round(x: f64) -> f64 => x.round();
@@ -28,8 +36,11 @@ pub fn modf(x: f64) -> (f64, f64) {
 /// `x` limited to `lo..=hi`, for any number type.
 pub fn clamp<T: Num>(x: T, lo: T, hi: T) -> T => lo.max(hi.min(x));
 
+/// Whether `x` is `NaN`.
 pub fn isnan(x: f64) -> bool => x.is_nan();
+/// Whether `x` is positive or negative infinity.
 pub fn isinf(x: f64) -> bool => x.is_infinite();
+/// Whether `x` is neither infinite nor `NaN`.
 pub fn isfinite(x: f64) -> bool => !x.is_nan() && !x.is_infinite();
 
 /// Whether `a` and `b` are within `rel_tol` of each other relative to the larger magnitude, or
@@ -43,10 +54,15 @@ pub fn isclose(a: f64, b: f64, rel_tol: f64 = 1e-9, abs_tol: f64 = 0.0) -> bool 
 
 // ---- Powers and logarithms ----
 
+/// `x` raised to `y`.
 pub fn pow(x: f64, y: f64) -> f64 => x.pow(y);
+/// The square root; `NaN` for negative numbers.
 pub fn sqrt(x: f64) -> f64 => x.sqrt();
+/// The cube root.
 pub fn cbrt(x: f64) -> f64;
+/// `e` raised to `x`.
 pub fn exp(x: f64) -> f64 => x.exp();
+/// `2` raised to `x`.
 pub fn exp2(x: f64) -> f64 => pow(2.0, x);
 /// `exp(x) - 1`, accurate for small `x`.
 pub fn expm1(x: f64) -> f64;
@@ -55,24 +71,34 @@ pub fn log(x: f64, base: f64 = E) -> f64 {
     if base == E { return x.ln(); }
     return x.ln() / base.ln();
 }
+/// The base-2 logarithm.
 pub fn log2(x: f64) -> f64;
+/// The base-10 logarithm.
 pub fn log10(x: f64) -> f64 => x.log10();
 /// `ln(1 + x)`, accurate for small `x`.
 pub fn log1p(x: f64) -> f64;
 
 // ---- Trigonometry (radians) ----
 
+/// The sine of `x` radians.
 pub fn sin(x: f64) -> f64 => x.sin();
+/// The cosine of `x` radians.
 pub fn cos(x: f64) -> f64 => x.cos();
+/// The tangent of `x` radians.
 pub fn tan(x: f64) -> f64 => x.tan();
+/// The arc sine, in radians (`-PI/2..=PI/2`).
 pub fn asin(x: f64) -> f64;
+/// The arc cosine, in radians (`0..=PI`).
 pub fn acos(x: f64) -> f64;
+/// The arc tangent, in radians (`-PI/2..=PI/2`).
 pub fn atan(x: f64) -> f64;
 /// The angle of the point `(x, y)` from the positive x axis, in `-PI..=PI`.
 pub fn atan2(y: f64, x: f64) -> f64;
 /// `sqrt(x*x + y*y)` without intermediate overflow.
 pub fn hypot(x: f64, y: f64) -> f64;
+/// `rad` radians in degrees.
 pub fn degrees(rad: f64) -> f64 => rad * (180.0 / PI);
+/// `deg` degrees in radians.
 pub fn radians(deg: f64) -> f64 => deg * (PI / 180.0);
 
 pub fn sinh(x: f64) -> f64;

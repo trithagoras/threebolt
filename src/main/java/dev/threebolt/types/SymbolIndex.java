@@ -252,6 +252,36 @@ public final class SymbolIndex {
         };
     }
 
+    /**
+     * The whole declaration of {@code target} (its doc comment, if any, sits right before it), or
+     * null for what has no declaration of its own (locals, primitives, modules).
+     */
+    public static Span declaration(Object target) {
+        return switch (target) {
+            case FnInfo f -> f.span();
+            case TypeInfo t -> t.item == null ? null : t.item.span();
+            case FieldInfo f -> f.span();
+            case StaticInfo s -> s.ast.span();
+            case ConstInfo c -> c.ast.span();
+            case EnumMember m -> m.owner().item instanceof Item.Enum e ? e.members().stream()
+                    .filter(x -> x.name().text().equals(m.name())).map(Item.EnumMember::span).findFirst().orElse(null) : null;
+            default -> null;
+        };
+    }
+
+    /**
+     * Where an undocumented method's documentation comes from: the method it overrides, or the
+     * trait member it implements; null if neither.
+     */
+    public static FnInfo inheritsDocsFrom(FnInfo f) {
+        if (f.overrides != null) return f.overrides;
+        if (f.owner instanceof ImplInfo i) {
+            var ms = i.trait.decl().methods(f.name());
+            return ms.isEmpty() ? null : ms.getFirst();
+        }
+        return f.owner instanceof TypeInfo t ? Lints.implementedMember(t, f) : null;
+    }
+
     // ---- Descriptions ----
 
     /** A one-line, source-like description of {@code r}'s target, for hovers. */

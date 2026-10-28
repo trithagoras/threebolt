@@ -1,15 +1,25 @@
 // Members of char.
 
+/// Whether this is an ASCII digit, `'0'` to `'9'`.
 pub fn is_digit(self) -> bool;
+/// Whether this is a letter (Unicode).
 pub fn is_alphabetic(self) -> bool;
+/// Whether this is a letter or a digit (Unicode).
 pub fn is_alphanumeric(self) -> bool;
+/// Whether this is whitespace (Unicode).
 pub fn is_whitespace(self) -> bool;
+/// Whether this is an upper-case letter.
 pub fn is_uppercase(self) -> bool;
+/// Whether this is a lower-case letter.
 pub fn is_lowercase(self) -> bool;
+/// The upper-case form, or the character itself.
 pub fn to_upper(self) -> char;
+/// The lower-case form, or the character itself.
 pub fn to_lower(self) -> char;
 
+/// The one-character string.
 pub fn to_str(self) -> str;
 pub fn eq(self, o: Self) -> bool;
+/// Compares code points.
 pub fn cmp(self, o: Self) -> i32;
 pub fn hash(self) -> u64;

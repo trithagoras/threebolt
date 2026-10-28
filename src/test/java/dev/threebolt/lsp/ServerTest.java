@@ -116,7 +116,7 @@ class ServerTest {
         assertEquals("fn norm(p: Point) -> i32", hover(main, "norm"));
         assertEquals("struct Point", hover(main, "Point::"));
         assertEquals("mod shapes", hover(main, "shapes::norm"));
-        assertEquals("fn println<T: Display>(x: T)", hover(main, "println"));
+        assertEquals("fn println<T: Display>(x: T)\n\n---\n\nWrites `x.to_str()` and a newline to stdout.", hover(main, "println"));
     }
 
     @Test
@@ -208,6 +208,60 @@ class ServerTest {
             if (s.getChildren() != null) s.getChildren().forEach(c -> names.add(s.getName() + "." + c.getName()));
         }
         assertEquals(List.of("Point", "Point.x", "Point.y", "Point.origin", "norm"), names);
+    }
+
+    @Test
+    void hoverShowsDocComments() throws Exception {
+        var text = """
+                /// A shape.
+                /// Has an **area**.
+                trait Shape {
+                    /// The area, in square units.
+                    fn area(self) -> f64;
+                }
+
+                // Not a doc comment.
+                /// A square.
+                @c
+                struct Square : Shape {
+                    /// Length of a side.
+                    pub let side: f64;
+                    fn area(self) -> f64 => self.side * self.side;
+                }
+
+                enum Dir {
+                    /// Up the screen.
+                    Up,
+                    Down,
+                }
+
+                //// Four slashes: an ordinary comment.
+                fn plain() {}
+
+                fn main() {
+                    let s: Shape = Square { side: 2.0 };
+                    println(s.area());
+                    println(Square { side: 1.0 }.side);
+                    println(Dir::Up as i32 + Dir::Down as i32);
+                    plain();
+                    println("ab".upper() + f"{5.abs()}");
+                }
+                """;
+        var file = Files.writeString(dir.resolve("docs.3b"), text);
+        open(file, text);
+        assertEquals("trait Shape\n\n---\n\nA shape.\nHas an **area**.", hover(file, "Shape = "));
+        assertEquals("struct Square : Shape\n\n---\n\nA square.", hover(file, "Square { side: 2"));
+        assertEquals("let Square.side: f64\n\n---\n\nLength of a side.", hover(file, "side);"));
+        // Square::area has no doc of its own: it shows the trait member's.
+        assertEquals("fn Square::area(self) -> f64\n\n---\n\nThe area, in square units.", hover(file, "area(self) -> f64 =>"));
+        assertEquals("fn Shape::area(self) -> f64\n\n---\n\nThe area, in square units.", hover(file, "area());"));
+        assertEquals("Dir::Up\n\n---\n\nUp the screen.", hover(file, "Up as"));
+        assertEquals("Dir::Down", hover(file, "Down as"));
+        assertEquals("fn plain()", hover(file, "plain();"));
+        // Primitive members are documented in std.
+        assertEquals("fn str::upper(self) -> str\n\n---\n\nThe string in upper case.", hover(file, "upper"));
+        assertEquals("fn i32::abs(self) -> i32\n\n---\n\nThe absolute value; `MIN.abs()` overflows and panics (§13.2).",
+                hover(file, "abs()"));
     }
 
     @Test

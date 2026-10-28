@@ -61,7 +61,7 @@ final class Completer {
                 var base = n.decl() == f.owner() ? n : TypeSystem.baseInstance(n, f.owner());
                 var type = TypeSystem.subst(f.type, TypeSystem.bind(f.owner().typeParams, base.args()));
                 var detail = SymbolIndex.describe(new SymbolIndex.Ref(null, f, type, false));
-                items.put(f.name(), new Item(f.name(), Kind.FIELD, detail, f.owner() == n.decl() ? 1 : 2));
+                items.put(f.name(), new Item(f.name(), Kind.FIELD, detail, f.owner() == n.decl() ? 1 : 2, f));
             }
         }
         for (String m : methodNames(t)) {
@@ -71,7 +71,8 @@ final class Completer {
             if (cands.isEmpty()) continue;
             var first = cands.getFirst();
             var kind = first.fn().isGetter() ? Kind.PROPERTY : Kind.METHOD;
-            items.put(m, new Item(m, kind, signature(first.fn(), first.env(), cands.size()), first.fn().owner == own ? 1 : 2));
+            items.put(m, new Item(m, kind, signature(first.fn(), first.env(), cands.size()), first.fn().owner == own ? 1 : 2,
+                    first.fn()));
         }
         record(Site.MEMBER, name, items.values(), null);
     }
@@ -97,14 +98,14 @@ final class Completer {
             if (!quietly(() -> target[0] = c.exprs.memberTarget(owner, decl, argsGiven, probe, false))) continue;
             var item = switch (target[0]) {
                 case Exprs.ValueTarget v when decl != null && decl.isEnum() ->
-                        new Item(n, Kind.ENUM_MEMBER, decl.name() + "::" + n, 1);
+                        new Item(n, Kind.ENUM_MEMBER, decl.name() + "::" + n, 1, new SymbolIndex.EnumMember(decl, n));
                 case Exprs.ValueTarget v -> new Item(n, Kind.CONSTANT, "const " + owner + "::" + n + ": " + v.value().type(), 1);
                 case Exprs.StaticTarget s -> new Item(n, Kind.STATIC, SymbolIndex.describe(new SymbolIndex.Ref(null, s.info(), null, false)),
-                        s.info().owner == decl ? 1 : 2);
+                        s.info().owner == decl ? 1 : 2, s.info());
                 case Exprs.FnTarget f -> {
                     var k = f.candidates().getFirst();
                     yield new Item(n, k.ufcs() ? Kind.METHOD : Kind.FUNCTION, signature(k.fn(), k.env(), f.candidates().size()),
-                            k.fn().owner == decl ? 1 : 2);
+                            k.fn().owner == decl ? 1 : 2, k.fn());
                 }
                 default -> null;
             };
@@ -207,7 +208,7 @@ final class Completer {
             var names = new ArrayList<String>();
             if (k.ufcs()) names.add("self");
             k.fn().params.forEach(p -> names.add(p.name()));
-            sigs.add(new Completion.Signature(label, params, names));
+            sigs.add(new Completion.Signature(label, params, names, k.fn()));
         }
         setCall(e, sigs);
     }
@@ -227,7 +228,7 @@ final class Completer {
         }
         sb.append(')');
         if (f.ret() != Type.UNIT) sb.append(" -> ").append(f.ret());
-        setCall(e, List.of(new Completion.Signature(sb.toString(), params, names)));
+        setCall(e, List.of(new Completion.Signature(sb.toString(), params, names, null)));
     }
 
     /** Calls are checked outside in, so a call within the one recorded is the innermost so far. */
@@ -352,10 +353,10 @@ final class Completer {
                 case ENUM -> Kind.ENUM;
                 case ALIAS -> Kind.TYPE_ALIAS;
                 case PRIMITIVE -> Kind.PRIMITIVE;
-            }, SymbolIndex.describe(new SymbolIndex.Ref(null, t, null, false)), rank);
-            case Names.FnEntity(List<FnInfo> fns) -> new Item(name, Kind.FUNCTION, signature(fns.getFirst(), Map.of(), fns.size()), rank);
-            case Names.ConstEntity(ConstInfo k) -> new Item(name, Kind.CONSTANT, SymbolIndex.describe(new SymbolIndex.Ref(null, k, null, false)), rank);
-            case Names.StaticEntity(StaticInfo s) -> new Item(name, Kind.STATIC, SymbolIndex.describe(new SymbolIndex.Ref(null, s, null, false)), rank);
+            }, SymbolIndex.describe(new SymbolIndex.Ref(null, t, null, false)), rank, t);
+            case Names.FnEntity(List<FnInfo> fns) -> new Item(name, Kind.FUNCTION, signature(fns.getFirst(), Map.of(), fns.size()), rank, fns.getFirst());
+            case Names.ConstEntity(ConstInfo k) -> new Item(name, Kind.CONSTANT, SymbolIndex.describe(new SymbolIndex.Ref(null, k, null, false)), rank, k);
+            case Names.StaticEntity(StaticInfo s) -> new Item(name, Kind.STATIC, SymbolIndex.describe(new SymbolIndex.Ref(null, s, null, false)), rank, s);
         };
     }
 }

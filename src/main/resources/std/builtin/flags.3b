@@ -1,5 +1,6 @@
 // Additional members of @flags enums (spec §4.11).
 
+/// Whether every flag set in `flag` is set in `self`.
 pub fn has(self, flag: Self) -> bool;
 pub fn bitand(self, o: Self) -> Self;
 pub fn bitor(self, o: Self) -> Self;

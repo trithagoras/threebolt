@@ -27,9 +27,14 @@ public final class Completion {
     /**
      * One name that could be written at the cursor. {@code detail} describes it as a hover does;
      * a lower {@code rank} sorts first (locals, then members declared on the type itself, then
-     * inherited and trait members or module items, then the prelude).
+     * inherited and trait members or module items, then the prelude). {@code target} is what it
+     * names (as in {@link SymbolIndex.Ref}), for its documentation; null if unknown.
      */
-    public record Item(String name, Kind kind, String detail, int rank) {}
+    public record Item(String name, Kind kind, String detail, int rank, Object target) {
+        public Item(String name, Kind kind, String detail, int rank) {
+            this(name, kind, detail, rank, null);
+        }
+    }
 
     /** What the cursor is completing. */
     public enum Site { MEMBER, STATIC_MEMBER, MODULE_ITEM, NAME, TYPE }
@@ -37,9 +42,9 @@ public final class Completion {
     /**
      * One overload of the call around the cursor. {@code params} are [start, end) offsets of each
      * parameter in {@code label}, and {@code names} their names; a UFCS call's receiver is
-     * parameter 0, named {@code self}.
+     * parameter 0, named {@code self}. {@code fn} is the overload, or null for a function value.
      */
-    public record Signature(String label, List<int[]> params, List<String> names) {}
+    public record Signature(String label, List<int[]> params, List<String> names, FnInfo fn) {}
 
     final Path file;
     final int offset;
