@@ -213,7 +213,7 @@ writes those methods over them (`pub fn add(self, o: Self) -> Self => self + o;`
 | `bool`, `char`, enums | operators `==`, `< <= > >=` (not `bool`), flags `& \| ^ ~`; intrinsics `hash`, `to_str` (not `bool`) | enum `to_str` is the member name, `A \| B` for flag combinations, the integer for undeclared bits; `~` keeps to the backing type's bits. `eq`, `cmp` and the flags methods are Threebolt over the operators |
 | `char` | `is_alphabetic is_alphanumeric is_whitespace is_uppercase is_lowercase to_upper to_lower` | Unicode properties and simple case mapping (Java `Character`) |
 | `str` (`builtin/str.3b`) | operators `+`, `== < <= > >=`; intrinsics `len`, `index` (`s[i]`), `slice` (`s[a..b]`), `hash` | counts characters (§3.1), O(1) `len`/`index`; out-of-range `index`/`slice` panic `index i out of range for a string of length n` / `slice a..b out of range for a string of length n`; `<` is code-point order; `hash` is FNV-1a over UTF-8 |
-| | `chars bytes upper lower from_chars from_utf8` | `bytes` is UTF-8; `upper`/`lower` are full Unicode case mapping (may change the length: `"ß".upper()` is `"SS"`); `from_utf8` replaces invalid sequences with U+FFFD |
+| | `chars bytes to_utf8 upper lower from_chars from_utf8` | `bytes`/`to_utf8` are UTF-8; `upper`/`lower` are full Unicode case mapping (may change the length: `"ß".upper()` is `"SS"`); `from_utf8` replaces invalid sequences with U+FFFD |
 | `Range` | `iter`, `contains` | over integers (any kind; never overflows, the end may be the type's `MAX`) and `char`s (surrogates skipped); `contains` by `<`/`<=` on the bounds |
 | `Type` | `name to_str eq hash is_subtype_of` | reflection (§15) |
 | prelude | `panic(msg)` | panics with `msg` |

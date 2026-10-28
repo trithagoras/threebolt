@@ -1,4 +1,4 @@
-// §16: str::from_chars and join, the ways back from characters and lists to str.
+// §16: str::from_chars, from_utf8/to_utf8 and join, the ways back from characters and lists to str.
 
 fn main() {
     let s = "héllo😀";
@@ -22,4 +22,9 @@ fn main() {
     let arr: [f64; 2] = [0.5, 2.0];
     println(arr.join(" "));
     println(f"[{([] as [str]).join(", ")}] [{["solo"].join(", ")}]");
+
+    let utf8 = "é😀".to_utf8();
+    println(utf8);
+    println(str::from_utf8(utf8) == "é😀");
+    println("".to_utf8().len);
 }
