@@ -1,0 +1,54 @@
+192.168.0.1 192 false
+127.0.0.1 true true
+0.0.0.0 true
+true
+err: invalid address: 1.2.3
+err: invalid address: 1.2.3.4.5
+err: invalid address: 256.0.0.1
+err: invalid address: 01.2.3.4
+err: invalid address: 1..2.3
+err: invalid address: a.b.c.d
+err: invalid address: 1.2.3.-4
+err: invalid address: 
+::1
+::
+2001:db8::8:800:200c:417a
+2001:db8::1
+1:0:0:2::3
+1::2:0:0:3:4
+0:0:1::
+1:2:3:4:5:6:7:8
+::ffff:a00:1
+fe80::
+1:0:2:3:4:5:6:7
+err: invalid address: 1:2:3:4:5:6:7
+err: invalid address: 1:2:3:4:5:6:7:8:9
+err: invalid address: 1::2::3
+err: invalid address: :1::
+err: invalid address: 12345::
+err: invalid address: g::
+err: invalid address: ::1.2.3
+err: invalid address: 1:2:3:4:5:6:7::8
+err: invalid address: 1.2.3.4::
+true true
+0 0 0 0 0 0 0 1
+10.1.2.3
+::a
+err: invalid address: example.com
+true
+false
+127.0.0.1:8080 port=8080 ip=127.0.0.1
+[::1]:80 port=80 ip=::1
+[2001:db8::1]:65535 port=65535 ip=2001:db8::1
+0.0.0.0:0 port=0 ip=0.0.0.0
+err: invalid address: 127.0.0.1
+err: invalid address: 127.0.0.1:
+err: invalid address: 127.0.0.1:65536
+err: invalid address: 127.0.0.1:08
+err: invalid address: ::1:80
+err: invalid address: [::1]80
+err: invalid address: [127.0.0.1]:80
+err: invalid address: localhost:80
+err: invalid address: [::1:80
+true
+1

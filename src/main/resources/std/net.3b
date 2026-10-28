@@ -1,0 +1,247 @@
+// std::net: IP addresses and TCP and UDP sockets (spec §16).
+//
+// Sockets are blocking; a server serves each connection on a thread. They live in std::io's
+// handle table beside files, so reading, writing and closing go through the same `sys_*` calls,
+// and a `TcpStream` reads through the same buffer as a `File`.
+
+use std::io::IoErr;
+
+// ---- Errors ----
+
+/// A network failure. The subclasses are the failures worth telling apart; any other (an
+/// unknown host, say) is a `NetErr` itself, with the system's description. `path` is the
+/// address the operation was on.
+pub class NetErr : IoErr {
+    pub fn new(msg: str, path: str | null = null) -> Self => { ..IoErr::new(msg, path: path) };
+}
+
+/// Nothing was listening at the address.
+pub class ConnectionRefusedErr : NetErr {
+    pub fn new(path: str | null) -> Self => { ..NetErr::new("connection refused", path: path) };
+}
+
+/// The peer reset the connection, or closed it while it was being written to.
+pub class ConnectionResetErr : NetErr {
+    pub fn new(path: str | null) -> Self => { ..NetErr::new("connection reset", path: path) };
+}
+
+/// A read timeout or connect timeout passed.
+pub class TimedOutErr : NetErr {
+    pub fn new(path: str | null) -> Self => { ..NetErr::new("timed out", path: path) };
+}
+
+/// The address to bind is taken.
+pub class AddrInUseErr : NetErr {
+    pub fn new(path: str | null) -> Self => { ..NetErr::new("address in use", path: path) };
+}
+
+/// Text that is not an address; `path` is the text.
+pub class AddrParseErr : NetErr {
+    pub fn new(text: str) -> Self => { ..NetErr::new("invalid address", path: text) };
+}
+
+// ---- Addresses ----
+
+/// An IPv4 address, printed as four decimal octets: `127.0.0.1`.
+pub struct Ipv4Addr : Display {
+    pub let octets: [u8; 4];
+
+    /// `127.0.0.1`.
+    pub static let LOCALHOST: Ipv4Addr = Ipv4Addr::new(127, 0, 0, 1);
+    /// `0.0.0.0`: every local address, when binding.
+    pub static let UNSPECIFIED: Ipv4Addr = Ipv4Addr::new(0, 0, 0, 0);
+
+    pub fn new(a: u8, b: u8, c: u8, d: u8) -> Self => { octets: [a, b, c, d] };
+
+    /// Four decimal octets separated by `.`, without leading zeros.
+    pub fn parse(s: str) -> Self | AddrParseErr {
+        let parts = s.split(".");
+        if parts.len != 4 { return AddrParseErr::new(s); }
+        let mut octets: [u8; 4] = [0, 0, 0, 0];
+        for i in 0..parts.len {
+            let p = parts[i];
+            if p.len == 0 || p.len > 3 || (p.len > 1 && p[0] == '0') { return AddrParseErr::new(s); }
+            let n = decimal(p);
+            if n == null || n > 255 { return AddrParseErr::new(s); }
+            octets[i] = n as u8;
+        }
+        return Ipv4Addr { octets };
+    }
+
+    /// In `127.0.0.0/8`.
+    pub fn is_loopback(self) -> bool => self.octets[0] == 127;
+    /// `0.0.0.0`.
+    pub fn is_unspecified(self) -> bool => self == Ipv4Addr::UNSPECIFIED;
+
+    pub fn to_str(self) -> str => self.octets.join(".");
+}
+
+/// An IPv6 address, printed in the RFC 5952 form: `::1`, `2001:db8::8a2e:370:7334`.
+pub struct Ipv6Addr : Display {
+    pub let segments: [u16; 8];
+
+    /// `::1`.
+    pub static let LOCALHOST: Ipv6Addr = Ipv6Addr::new(0, 0, 0, 0, 0, 0, 0, 1);
+    /// `::`: every local address, when binding.
+    pub static let UNSPECIFIED: Ipv6Addr = Ipv6Addr::new(0, 0, 0, 0, 0, 0, 0, 0);
+
+    pub fn new(a: u16, b: u16, c: u16, d: u16, e: u16, f: u16, g: u16, h: u16) -> Self
+        => { segments: [a, b, c, d, e, f, g, h] };
+
+    /// Eight groups of up to four hexadecimal digits separated by `:`, where `::` stands for
+    /// one or more zero groups, and the last two groups may be IPv4 text (`::ffff:10.0.0.1`).
+    pub fn parse(s: str) -> Self | AddrParseErr {
+        let halves = s.split("::");
+        if halves.len > 2 { return AddrParseErr::new(s); }
+        let head = groups(halves[0], halves.len == 1);
+        let tail: [u16] | null = groups(halves[1], true) if halves.len == 2 else [];
+        if head == null || tail == null { return AddrParseErr::new(s); }
+        let n = head.len + tail.len;
+        if (halves.len == 1 && n != 8) || (halves.len == 2 && n > 7) { return AddrParseErr::new(s); }
+        let mut segments: [u16; 8] = [0, 0, 0, 0, 0, 0, 0, 0];
+        for i in 0..head.len { segments[i] = head[i]; }
+        for i in 0..tail.len { segments[8 - tail.len + i] = tail[i]; }
+        return Ipv6Addr { segments };
+    }
+
+    /// `::1`.
+    pub fn is_loopback(self) -> bool => self == Ipv6Addr::LOCALHOST;
+    /// `::`.
+    pub fn is_unspecified(self) -> bool => self == Ipv6Addr::UNSPECIFIED;
+
+    /// Lower-case groups without leading zeros, the longest run of two or more zero groups (the
+    /// first, if tied) as `::`.
+    pub fn to_str(self) -> str {
+        let g = self.segments;
+        let mut best: usize = 0;
+        let mut best_len: usize = 0;
+        let mut i: usize = 0;
+        while i < 8 {
+            let mut j = i;
+            while j < 8 && g[j] == 0 { j += 1; }
+            if j - i > best_len { best = i; best_len = j - i; }
+            i = j + 1 if j > i else i + 1;
+        }
+        if best_len < 2 { return hex_groups(g, 0, 8); }
+        return hex_groups(g, 0, best) + "::" + hex_groups(g, best + best_len, 8);
+    }
+}
+
+/// An IPv4 or IPv6 address.
+pub type IpAddr = Ipv4Addr | Ipv6Addr;
+
+/// An IPv4 address's text (four decimal octets), or else an IPv6 address's.
+pub fn parse_ip(s: str) -> IpAddr | AddrParseErr {
+    if s.contains(":") { return Ipv6Addr::parse(s); }
+    return Ipv4Addr::parse(s);
+}
+
+/// An IP address and port, printed as `127.0.0.1:8080` or `[::1]:8080`.
+pub struct SocketAddr : Display {
+    pub let ip: IpAddr;
+    pub let port: u16;
+
+    pub fn new(ip: IpAddr, port: u16) -> Self => { ip, port };
+
+    /// `ip:port`, with an IPv6 address in brackets.
+    pub fn parse(s: str) -> Self | AddrParseErr {
+        let hp = host_port(s)?;
+        let ip = parse_ip(hp.0);
+        if ip is AddrParseErr { return AddrParseErr::new(s); }
+        if (ip is Ipv6Addr) != hp.2 { return AddrParseErr::new(s); }
+        return SocketAddr { ip, port: hp.1 };
+    }
+
+    pub fn to_str(self) -> str {
+        let ip = self.ip;
+        if ip is Ipv6Addr { return f"[{ip}]:{self.port}"; }
+        return f"{ip}:{self.port}";
+    }
+}
+
+/// `host:port` split into the host, the port and whether the host was in brackets.
+fn host_port(s: str) -> (str, u16, bool) | AddrParseErr {
+    let mut host = s;
+    let mut rest = "";
+    let bracketed = s.starts_with("[");
+    if bracketed {
+        let end = s.find("]");
+        if end == null { return AddrParseErr::new(s); }
+        host = s[1..end];
+        rest = s[end + 1..];
+    } else {
+        let parts = s.split(":");
+        if parts.len != 2 { return AddrParseErr::new(s); }
+        host = parts[0];
+        rest = ":" + parts[1];
+    }
+    if host.len == 0 || !rest.starts_with(":") || rest.len < 2 || rest.len > 6 || (rest.len > 2 && rest[1] == '0') {
+        return AddrParseErr::new(s);
+    }
+    let port = decimal(rest[1..]);
+    if port == null || port > 65535 { return AddrParseErr::new(s); }
+    return (host, port as u16, bracketed);
+}
+
+/// The value of `s` if it is only decimal digits (at most 5).
+fn decimal(s: str) -> u32 | null {
+    if s.len == 0 || s.len > 5 { return null; }
+    let mut n: u32 = 0;
+    for c in s.chars() {
+        if !c.is_digit() { return null; }
+        n = n * 10 + (c as u32 - '0' as u32);
+    }
+    return n;
+}
+
+/// The groups of one side of `::`, or null if they are not hex groups. `last`: the side ends
+/// the address, so its last group may be IPv4 text.
+fn groups(s: str, last: bool) -> [u16] | null {
+    let mut out: [u16] = [];
+    if s == "" { return out; }
+    let parts = s.split(":");
+    for i in 0..parts.len {
+        let p = parts[i];
+        if last && i == parts.len - 1 && p.contains(".") {
+            let v4 = Ipv4Addr::parse(p);
+            if v4 is AddrParseErr { return null; }
+            let o = v4.octets;
+            out.push((o[0] as u16) << 8 | o[1] as u16);
+            out.push((o[2] as u16) << 8 | o[3] as u16);
+            return out;
+        }
+        if p.len == 0 || p.len > 4 { return null; }
+        let mut n: u16 = 0;
+        for c in p.chars() {
+            let d = hex_digit(c);
+            if d == null { return null; }
+            n = n << 4 | d;
+        }
+        out.push(n);
+    }
+    return out;
+}
+
+fn hex_digit(c: char) -> u16 | null {
+    if c.is_digit() { return (c as u32 - '0' as u32) as u16; }
+    let l = c.to_lower();
+    if l >= 'a' && l <= 'f' { return (l as u32 - 'a' as u32 + 10) as u16; }
+    return null;
+}
+
+/// `g[from..to]` in lower-case hex without leading zeros, separated by `:`.
+fn hex_groups(g: [u16; 8], from: usize, to: usize) -> str {
+    let digits = "0123456789abcdef";
+    let mut parts: [str] = [];
+    for i in from..to {
+        let mut n = g[i];
+        let mut s = "";
+        loop {
+            s = digits[(n & 15) as usize].to_str() + s;
+            n >>= 4;
+            if n == 0 { break; }
+        }
+        parts.push(s);
+    }
+    return parts.join(":");
+}

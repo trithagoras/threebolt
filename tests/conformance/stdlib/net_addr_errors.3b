@@ -1,0 +1,11 @@
+// std::net address misuse.
+use std::net::{Ipv4Addr, IpAddr, SocketAddr};
+
+fn main() {
+    let a = Ipv4Addr::new(256, 0, 0, 1);
+    let ip: IpAddr = Ipv4Addr::LOCALHOST;
+    println(ip.octets);
+    SocketAddr::parse("127.0.0.1:80");
+    let b: Ipv4Addr = Ipv4Addr::parse("1.2.3.4");
+    let c = SocketAddr::new(ip, 70000);
+}

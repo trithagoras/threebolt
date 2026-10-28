@@ -1,0 +1,55 @@
+// std::net addresses (§16): parsing and printing IPv4, IPv6 and socket addresses.
+use std::net;
+use std::net::{Ipv4Addr, Ipv6Addr, IpAddr, SocketAddr, AddrParseErr};
+
+fn show(r: IpAddr | AddrParseErr) {
+    if r is AddrParseErr { println(f"err: {r.message()}"); } else { println(r); }
+}
+
+fn main() -> () | Err {
+    // IPv4.
+    let a = Ipv4Addr::parse("192.168.0.1")?;
+    println(f"{a} {a.octets[0]} {a.is_loopback()}");
+    println(f"{Ipv4Addr::LOCALHOST} {Ipv4Addr::LOCALHOST.is_loopback()} {Ipv4Addr::new(127, 9, 8, 7).is_loopback()}");
+    println(f"{Ipv4Addr::UNSPECIFIED} {Ipv4Addr::UNSPECIFIED.is_unspecified()}");
+    println(a == Ipv4Addr::new(192, 168, 0, 1));
+    for s in ["1.2.3", "1.2.3.4.5", "256.0.0.1", "01.2.3.4", "1..2.3", "a.b.c.d", "1.2.3.-4", ""] {
+        show(Ipv4Addr::parse(s));
+    }
+
+    // IPv6, printed in the RFC 5952 form.
+    for s in ["::1", "::", "2001:DB8:0:0:8:800:200C:417A", "2001:db8::1", "1:0:0:2:0:0:0:3",
+              "1:0:0:2:0:0:3:4", "0:0:1:0:0:0:0:0", "1:2:3:4:5:6:7:8", "::ffff:10.0.0.1", "fe80::",
+              "1:0:2:3:4:5:6:7"] {
+        show(Ipv6Addr::parse(s));
+    }
+    for s in ["1:2:3:4:5:6:7", "1:2:3:4:5:6:7:8:9", "1::2::3", ":1::", "12345::", "g::", "::1.2.3",
+              "1:2:3:4:5:6:7::8", "1.2.3.4::"] {
+        show(Ipv6Addr::parse(s));
+    }
+    println(f"{Ipv6Addr::LOCALHOST.is_loopback()} {Ipv6Addr::UNSPECIFIED.is_unspecified()}");
+    println(Ipv6Addr::parse("::1")?.segments.join(" "));
+
+    // Either kind.
+    show(net::parse_ip("10.1.2.3"));
+    show(net::parse_ip("::a"));
+    show(net::parse_ip("example.com"));
+    let ip: IpAddr = Ipv6Addr::LOCALHOST;
+    println(ip == net::parse_ip("0::1")?);
+    println(ip == (Ipv4Addr::LOCALHOST as IpAddr));
+
+    // Socket addresses.
+    for s in ["127.0.0.1:8080", "[::1]:80", "[2001:db8::1]:65535", "0.0.0.0:0"] {
+        let sa = SocketAddr::parse(s)?;
+        println(f"{sa} port={sa.port} ip={sa.ip}");
+    }
+    for s in ["127.0.0.1", "127.0.0.1:", "127.0.0.1:65536", "127.0.0.1:08", "::1:80", "[::1]80",
+              "[127.0.0.1]:80", "localhost:80", "[::1:80"] {
+        let r = SocketAddr::parse(s);
+        if r is AddrParseErr { println(f"err: {r.message()}"); } else { println(r); }
+    }
+    let sa = SocketAddr::new(Ipv4Addr::LOCALHOST, 9);
+    println(sa == SocketAddr::parse("127.0.0.1:9")?);
+    let set: Set<SocketAddr> = [sa, SocketAddr::parse("127.0.0.1:9")?];
+    println(set.len);
+}
