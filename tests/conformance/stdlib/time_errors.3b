@@ -1,0 +1,11 @@
+// §16 std::time: operators take Duration on both sides; sleep takes a Duration.
+use std::thread;
+use std::time::{Duration, Instant};
+
+fn main() {
+    let t = Instant::now();
+    let a = t + Duration::ZERO;
+    let b = t - t;
+    let c = Duration::ZERO * 2;
+    thread::sleep(20);
+}

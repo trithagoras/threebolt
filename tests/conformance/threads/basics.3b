@@ -3,13 +3,14 @@ use std::thread;
 use std::thread::Thread;
 use std::sync::Mutex;
 use std::sync::Atomic;
+use std::time::Duration;
 
 static let SLOW: i32 = slow_init();
 static let mut HITS: i32 = 0;
 
 fn slow_init() -> i32 {
     println("initializing SLOW");
-    thread::sleep(20);
+    thread::sleep(Duration::from_millis(20));
     return 42;
 }
 

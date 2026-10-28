@@ -1,0 +1,3 @@
+panic: integer overflow (i64)
+    at Duration::add (std/time.3b:38:51)
+    at main (time_overflow.3b:7:13)

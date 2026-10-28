@@ -222,7 +222,7 @@ the exemption keeps "add `Display` to a dependency's type" a one-liner in apps.
 `std::time`, `std::env`, `std::net`, following the task-1 pattern: Threebolt over thin intrinsics, errors as
 `T | SomeErr` unions, Python-flavoured names. One module (one design section, one session) at a time.
 
-- **`std::time`** (first: `Duration` is needed by sleep and net timeouts): one `Instant` (monotonic) and one
+- **`std::time`** — done 2026-10-28 (`docs/plans/std-time-net.md`): `Duration` as signed `i64` nanoseconds, `Instant` + `Timestamp` (wall clock), `sleep(Duration)`, UTC/zones/formatting left to a later `datetime`. Original questions (first: `Duration` is needed by sleep and net timeouts): one `Instant` (monotonic) and one
   `DateTime` (wall clock), or Python's split (`time.time()`, `time.monotonic()`, `datetime`)? `Duration` as a
   struct of nanoseconds (`i64`)? Time zones: UTC + local only for 1.0? Formatting/parsing (`strftime`-style
   patterns or ISO 8601 only)? Move `thread::sleep(ms)` to take a `Duration`?

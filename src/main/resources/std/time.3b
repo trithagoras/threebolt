@@ -1,0 +1,124 @@
+// std::time: durations and clocks (spec §16).
+//
+// `Duration` is a signed count of nanoseconds, so subtracting times never fails: an earlier
+// time minus a later one is a negative duration. `Instant` reads the monotonic clock (for
+// measuring); `Timestamp` reads the wall clock (for "now", which may jump). Operators need the
+// same type on both sides (§7.3), so mixed arithmetic is by method: `t.add(d)`, `t.since(u)`.
+// Arithmetic that leaves the `i64` range panics, as integer arithmetic does.
+
+/// A span of time in nanoseconds, possibly negative (about ±292 years). `+`, `-` and unary
+/// `-` combine durations; `mul` and `div` scale by an integer.
+pub struct Duration : Ord, Add, Sub, Neg, Display {
+    /// The length in nanoseconds.
+    let nanos: i64;
+
+    pub static let ZERO: Duration = Duration { nanos: 0 };
+    /// The longest duration (and with `MIN`, the shortest), about 292 years.
+    pub static let MAX: Duration = Duration { nanos: i64::MAX };
+    pub static let MIN: Duration = Duration { nanos: i64::MIN };
+
+    pub fn from_secs(s: i64) -> Self => { nanos: s * 1_000_000_000 };
+    pub fn from_millis(ms: i64) -> Self => { nanos: ms * 1_000_000 };
+    pub fn from_micros(us: i64) -> Self => { nanos: us * 1_000 };
+    pub fn from_nanos(ns: i64) -> Self => { nanos: ns };
+    /// `s` seconds, rounded toward zero to a nanosecond; saturates at `MIN`/`MAX` (NaN is zero).
+    pub fn from_secs_f64(s: f64) -> Self => { nanos: (s * 1e9) as i64 };
+
+    /// Whole seconds, rounded toward zero (as are the other `as_*` units).
+    pub fn as_secs(self) -> i64 => self.nanos / 1_000_000_000;
+    pub fn as_millis(self) -> i64 => self.nanos / 1_000_000;
+    pub fn as_micros(self) -> i64 => self.nanos / 1_000;
+    pub fn as_nanos(self) -> i64 => self.nanos;
+    pub fn as_secs_f64(self) -> f64 => self.nanos as f64 / 1e9;
+
+    pub fn is_zero(self) -> bool => self.nanos == 0;
+    pub fn is_negative(self) -> bool => self.nanos < 0;
+    pub fn abs(self) -> Self => { nanos: self.nanos.abs() };
+
+    pub fn add(self, o: Self) -> Self => { nanos: self.nanos + o.nanos };
+    pub fn sub(self, o: Self) -> Self => { nanos: self.nanos - o.nanos };
+    pub fn neg(self) -> Self => { nanos: -self.nanos };
+    /// The duration `n` times over.
+    pub fn mul(self, n: i64) -> Self => { nanos: self.nanos * n };
+    /// The duration divided by `n`, rounded toward zero; `n == 0` panics.
+    pub fn div(self, n: i64) -> Self => { nanos: self.nanos / n };
+    pub fn eq(self, o: Self) -> bool => self.nanos == o.nanos;
+    pub fn cmp(self, o: Self) -> Ordering => self.nanos.cmp(o.nanos);
+
+    /// In the largest unit that keeps a whole part: `1.5s`, `250ms`, `3µs`, `12ns`, `-2s`. Long
+    /// durations stay in seconds (`90s`).
+    pub fn to_str(self) -> str {
+        // The magnitude as u64, so `MIN` has one too.
+        let mut m = self.nanos as u64;
+        let mut sign = "";
+        if self.nanos < 0 { m = self.nanos.wrapping_neg() as u64; sign = "-"; }
+        if m >= 1_000_000_000 { return sign + units(m, 1_000_000_000, 9) + "s"; }
+        if m >= 1_000_000 { return sign + units(m, 1_000_000, 6) + "ms"; }
+        if m >= 1_000 { return sign + units(m, 1_000, 3) + "µs"; }
+        return f"{sign}{m}ns";
+    }
+}
+
+/// `n / unit` with the remainder as up to `digits` decimals, trailing zeros dropped.
+fn units(n: u64, unit: u64, digits: usize) -> str {
+    let whole = n / unit;
+    let frac = n % unit;
+    if frac == 0 { return whole.to_str(); }
+    let mut s = frac.to_str();
+    s = "0".repeat(digits - s.len) + s;
+    let mut end = s.len;
+    while s[end - 1] == '0' { end -= 1; }
+    return f"{whole}.{s[..end]}";
+}
+
+/// A reading of the monotonic clock, which never goes backwards: for measuring elapsed time.
+/// Its value means nothing on its own, only relative to another `Instant`.
+pub struct Instant : Ord {
+    /// Nanoseconds from an arbitrary origin, fixed for the process.
+    let nanos: i64;
+
+    pub fn now() -> Self => { nanos: monotonic_nanos() };
+
+    /// The time since `self`.
+    pub fn elapsed(self) -> Duration => Instant::now().since(self);
+    /// `self - earlier` (negative if `earlier` is later).
+    pub fn since(self, earlier: Instant) -> Duration => Duration { nanos: self.nanos - earlier.nanos };
+    pub fn add(self, d: Duration) -> Self => { nanos: self.nanos + d.nanos };
+    pub fn sub(self, d: Duration) -> Self => { nanos: self.nanos - d.nanos };
+    pub fn eq(self, o: Self) -> bool => self.nanos == o.nanos;
+    pub fn cmp(self, o: Self) -> Ordering => self.nanos.cmp(o.nanos);
+}
+
+/// A reading of the wall clock: a point in time as nanoseconds since the Unix epoch
+/// (1970-01-01 00:00:00 UTC), ignoring leap seconds. The system clock can be changed, so two
+/// readings may go backwards; use `Instant` to measure.
+pub struct Timestamp : Ord {
+    /// Nanoseconds since the Unix epoch; negative before it.
+    let nanos: i64;
+
+    pub static let UNIX_EPOCH: Timestamp = Timestamp { nanos: 0 };
+
+    pub fn now() -> Self => { nanos: wall_nanos() };
+
+    /// The time since the Unix epoch: `Timestamp::now().since_epoch().as_secs()` is Unix time.
+    pub fn since_epoch(self) -> Duration => Duration { nanos: self.nanos };
+    /// The time since `self` (negative if the clock went back or `self` is in the future).
+    pub fn elapsed(self) -> Duration => Timestamp::now().since(self);
+    /// `self - earlier` (negative if `earlier` is later).
+    pub fn since(self, earlier: Timestamp) -> Duration => Duration { nanos: self.nanos - earlier.nanos };
+    pub fn add(self, d: Duration) -> Self => { nanos: self.nanos + d.nanos };
+    pub fn sub(self, d: Duration) -> Self => { nanos: self.nanos - d.nanos };
+    pub fn eq(self, o: Self) -> bool => self.nanos == o.nanos;
+    pub fn cmp(self, o: Self) -> Ordering => self.nanos.cmp(o.nanos);
+}
+
+/// Calls `f` and returns its result with how long it took.
+pub fn measure<R>(f: fn() -> R) -> (R, Duration) {
+    let start = Instant::now();
+    let r = f();
+    return (r, start.elapsed());
+}
+
+// The clocks, in nanoseconds: monotonic from an arbitrary origin, and since the Unix epoch.
+fn monotonic_nanos() -> i64;
+fn wall_nanos() -> i64;

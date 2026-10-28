@@ -1,6 +1,8 @@
 // std::thread (spec §13.4): Threebolt threads are OS threads. A panic on any thread ends the
 // process; when `main` returns, threads still running are stopped.
 
+use std::time::Duration;
+
 /// A running thread whose function returns `R`.
 pub class Thread<R> {
     /// Starts a thread running `f`.
@@ -9,5 +11,7 @@ pub class Thread<R> {
     pub fn join(self) -> R;
 }
 
-/// Blocks the current thread for at least `ms` milliseconds.
-pub fn sleep(ms: u64);
+/// Blocks the current thread for at least `d` (not at all if `d` is zero or negative).
+pub fn sleep(d: Duration) => sleep_nanos(d.nanos);
+
+fn sleep_nanos(ns: i64);

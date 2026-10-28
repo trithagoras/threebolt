@@ -67,6 +67,7 @@ final class Natives {
                 yield io.call(name, a);
             }
             case "random" -> new Int(Prim.U64, ENTROPY.nextLong());
+            case "time" -> new Int(Prim.I64, name.equals("monotonic_nanos") ? System.nanoTime() : wallNanos());
             // Collections lock themselves per operation (§13.4), but not around a callback.
             case "List" -> name.equals("with_ptr") ? ffi.withPtr(recv, (Values.FnVal) a[0])
                     : name.equals("join") ? join(recv, a[0].toString())
@@ -453,6 +454,12 @@ final class Natives {
     }
 
     // ---- std::math, std::random ----
+
+    /** Nanoseconds since the Unix epoch. */
+    private static long wallNanos() {
+        var now = java.time.Instant.now();
+        return now.getEpochSecond() * 1_000_000_000L + now.getNano();
+    }
 
     private static final java.security.SecureRandom ENTROPY = new java.security.SecureRandom();
 
