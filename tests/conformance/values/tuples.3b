@@ -17,4 +17,8 @@ fn main() {
     let (mut a, _) = pair;
     a += 1;
     println(f"{a} {pair == (15, 0)} {() == ()}");
+    // Inferred tuple types widen their literal elements (§3.6).
+    let pairs = [(1, "a"), (2, "b")];
+    let ages = [("x", 30): true];
+    println(f"{pairs.len} {pairs[1].1} {ages[("x", 30)]}");
 }

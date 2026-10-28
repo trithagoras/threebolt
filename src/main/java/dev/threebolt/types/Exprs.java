@@ -1695,9 +1695,10 @@ final class Exprs {
                 irs.add(c.check(e, expectedElems.get(i)));
                 typesOut.add(expectedElems.get(i));
             } else {
+                // Literal element types widen (§3.6), so `[(1, "a")]` is a `[(i32, str)]`.
                 var typed = expr(e, null);
                 irs.add(typed.ir());
-                typesOut.add(typed.type());
+                typesOut.add(TypeSystem.widenInferred(typed.type()));
                 bad |= typed.type() == Type.ERROR;
             }
         }

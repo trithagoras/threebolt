@@ -161,7 +161,7 @@ Generic types are **invariant**: `[Dog]` is not assignable to `[Animal]`. `fn` t
 - Everything else requires `as` (§7.9).
 - Integer literals adopt the expected type if it is an integer or float type and the value fits (error if not). Float literals adopt an expected float type. Against a numeric type parameter, see §10.1. With no expected type: integer → `i32`, float → `f64`.
 - Against a union expected type, an unsuffixed integer literal takes: an equal literal member if there is one; else `i32` if it is a member and the value fits; else the first integer or float member (in declaration order) that the value fits. `let w: i64 | str = 5;` stores an `i64`.
-- Inference widens a literal type to its base type: `let d = "left";` has type `str`; `let d: Direction = "left";` has type `Direction`. A union with literal members is kept, since it comes from a declared type: `let o = a.cmp(b);` has type `Ordering`, and `match o` is exhaustive over its three members. This applies wherever a type is inferred from a value (`let`, `if let`/`while let`, pattern bindings, collection literal elements, lambda returns). Without an expected type, the arms of `if`/`else` and `match` expressions are widened this way before they are joined: `let n = 1 if c else 2;` has type `i32`.
+- Inference widens a literal type to its base type: `let d = "left";` has type `str`; `let d: Direction = "left";` has type `Direction`. A union with literal members is kept, since it comes from a declared type: `let o = a.cmp(b);` has type `Ordering`, and `match o` is exhaustive over its three members. This applies wherever a type is inferred from a value (`let`, `if let`/`while let`, pattern bindings, collection literal elements, the elements of a tuple expression, lambda returns): `[(1, "a")]` is a `[(i32, str)]`. Without an expected type, the arms of `if`/`else` and `match` expressions are widened this way before they are joined: `let n = 1 if c else 2;` has type `i32`.
 
 ---
 
@@ -1039,3 +1039,6 @@ Semantics the spec left open, decided while implementing:
 ### 2026-10-28 — `std::net`
 - §16 New module `std::net`: `Ipv4Addr`, `Ipv6Addr`, `IpAddr`, `SocketAddr` (parsing and printing), `lookup`, `TcpListener` (`accept`, `incoming`, `serve`), `TcpStream` (`Read + Write`), `UdpSocket`, and `NetErr : IoErr` with its subclasses.
 - §16 `ClosedErr`'s message names what is closed (`socket is closed`); files are unchanged.
+
+### 2026-10-29 — tuple elements widen
+- §3.6 A tuple expression without an expected tuple type widens its literal element types, so `[(1, "a"), (2, "b")]` infers `[(i32, str)]` (was: a type error).
