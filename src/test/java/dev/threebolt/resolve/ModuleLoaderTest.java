@@ -172,7 +172,7 @@ class ModuleLoaderTest {
                 fn u8() {}
                 @inline fn f() {}
                 struct P { @c let x: i32; }
-                pub use m::A;
+                prot use m::A;
                 fn main() {}""");
         write("m.3b", "pub struct A;");
         load();
@@ -180,7 +180,57 @@ class ModuleLoaderTest {
                 "main.3b:1:8: error[E0105]: 'i32' is a primitive type name",
                 "main.3b:2:6: error[E0105]: 'str' is a primitive type name",
                 "main.3b:4:1: error[E0004]: unknown attribute '@inline'",
-                "main.3b:6:1: error[E0106]: `use` cannot be `pub`: there are no re-exports in 1.0"), errors());
+                "main.3b:6:1: error[E0407]: `prot` is only allowed in classes"), errors());
+    }
+
+    @Test
+    void reexportsAreImportable() throws IOException {
+        write("main.3b", "use api::{User, make};\nuse api::*;\nfn main() {}");
+        write("api.3b", "pub use model::user::{User, new as make};\npub use model::order::*;\nuse model::user::Secret;");
+        write("model/user.3b", "pub struct User;\npub fn new() -> User => {};\npub struct Secret;");
+        write("model/order.3b", "pub struct Order;\ninternal fn total() {}");
+        var program = load();
+        assertEquals(List.of(), errors());
+        var scope = program.entry().scope();
+        assertInstanceOf(Item.Struct.class, declaration(scope.lookup("User")));
+        assertInstanceOf(Item.Fn.class, declaration(scope.lookup("make")));
+        assertInstanceOf(Item.Struct.class, declaration(scope.lookup("Order")));
+        // A glob re-exports each name at the lesser visibility; in one package internal is still visible.
+        assertInstanceOf(Item.Fn.class, declaration(scope.lookup("total")));
+        // A private `use` is not a re-export.
+        assertEquals(List.of(), scope.lookup("Secret"));
+    }
+
+    @Test
+    void reexportsResolveInAnyOrderAndThroughCycles() throws IOException {
+        write("main.3b", "use a::{x, y};\nfn main() {}");
+        write("a.3b", "pub use b::x;\npub fn y() {}");
+        write("b.3b", "pub use a::y;\npub fn x() {}\npub use c::*;");
+        write("c.3b", "pub use b::*;\npub fn z() {}");
+        var program = load();
+        assertEquals(List.of(), errors());
+        assertInstanceOf(Item.Fn.class, declaration(program.entry().scope().lookup("x")));
+        assertInstanceOf(Item.Fn.class, declaration(program.entry().scope().lookup("y")));
+        assertInstanceOf(Item.Fn.class, declaration(program.module(ModulePath.of("b")).scope().lookup("z")));
+    }
+
+    @Test
+    void reexportErrors() throws IOException {
+        write("main.3b", """
+                pub use m::sub;
+                pub use m::hidden;
+                pub use m::quiet;
+                internal use m::quiet as q;
+                use m::Absent;
+                fn main() {}""");
+        write("m.3b", "fn hidden() {}\ninternal fn quiet() {}");
+        write("m/sub.3b", "pub fn f() {}");
+        load();
+        assertEquals(List.of(
+                "main.3b:1:12: error[E0106]: a module cannot be re-exported",
+                "main.3b:2:12: error[E0102]: 'hidden' is private to module 'm'\nm.3b:1:1: note: declared here without `pub`",
+                "main.3b:3:12: error[E0106]: 'quiet' is internal and cannot be re-exported as `pub`",
+                "main.3b:5:8: error[E0101]: module 'm' has no item named 'Absent'"), errors());
     }
 
     @Test

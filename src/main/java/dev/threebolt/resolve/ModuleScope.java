@@ -1,6 +1,7 @@
 package dev.threebolt.resolve;
 
 import dev.threebolt.ast.Name;
+import dev.threebolt.ast.Visibility;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;
@@ -13,8 +14,11 @@ import java.util.Map;
  * prelude, which both shadow. Primitive type names are not here; they sit below every scope.
  */
 public final class ModuleScope {
-    /** One binding made by a `use`: {@code name} as written (alias or last segment). */
-    public record Import(Name name, List<Symbol> targets) {}
+    /**
+     * One binding made by a `use`: {@code name} as written (alias or last segment). A non-private
+     * {@code visibility} makes it a re-export (§2.2); {@code glob} if bound by a glob import.
+     */
+    public record Import(Name name, List<Symbol> targets, Visibility visibility, boolean glob) {}
 
     private final Map<String, List<Symbol.Decl>> items = new LinkedHashMap<>();
     private final Map<String, Import> imports = new LinkedHashMap<>();
@@ -49,6 +53,12 @@ public final class ModuleScope {
 
     void addItem(String name, Symbol.Decl decl) {
         items.computeIfAbsent(name, k -> new ArrayList<>()).add(decl);
+    }
+
+    /** The re-export (§2.2) named {@code name}, or null. */
+    public Import reexport(String name) {
+        var i = imports.get(name);
+        return i != null && i.visibility() != Visibility.PRIVATE ? i : null;
     }
 
     void addImport(Import i) {

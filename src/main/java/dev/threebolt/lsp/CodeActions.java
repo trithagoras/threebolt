@@ -175,7 +175,7 @@ final class CodeActions {
             if (m.path().toString().equals("std::prelude")) continue;
             if (m.path().last().equals(name)) out.add(m.path().toString());
             for (var d : m.scope().items(name)) {
-                if (d.item().visibility() == Visibility.PUB && !(d.item() instanceof Item.Use)) {
+                if (visibleToUser(m, d.item()) && !(d.item() instanceof Item.Use)) {
                     out.add(m.path() + "::" + name);
                 }
             }
@@ -213,5 +213,10 @@ final class CodeActions {
             else if (!t.isEmpty()) header = false;
         }
         return new Position(lastUse >= 0 ? lastUse : line, 0);
+    }
+
+    /** Whether {@code item} of {@code m} can be imported by the user's (non-std) code (§2.3). */
+    static boolean visibleToUser(Module m, Item item) {
+        return item.visibility() == Visibility.PUB || item.visibility() == Visibility.INTERNAL && !m.isStd();
     }
 }

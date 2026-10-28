@@ -8,6 +8,7 @@ import dev.threebolt.diag.Diagnostic;
 import dev.threebolt.diag.Diagnostics;
 import dev.threebolt.diag.Span;
 import dev.threebolt.resolve.Module;
+import dev.threebolt.resolve.ModuleLoader;
 import dev.threebolt.resolve.ModulePath;
 import dev.threebolt.resolve.Program;
 import dev.threebolt.resolve.Symbol;
@@ -123,6 +124,18 @@ public final class Names {
                 return null;
             }
             var items = m.scope().items(seg.text());
+            var reexport = items.isEmpty() ? m.scope().reexport(seg.text()) : null;
+            if (reexport != null) {
+                // A re-export (§2.2) names items (never a module) of another module.
+                if (!m.exposes(reexport.visibility(), from)) {
+                    diagnostics.add(ModuleLoader.notVisible(seg, m, reexport.visibility(), reexport.name().span()));
+                    return null;
+                }
+                entity = entity(reexport.targets());
+                record(seg, entity);
+                index++;
+                continue;
+            }
             if (items.isEmpty()) {
                 // A submodule: a::b where a/b.3b exists.
                 var sub = program.module(m.path().child(seg.text()));
@@ -139,14 +152,14 @@ public final class Names {
                 return null;
             }
             if (m != from) {
-                var pub = items.stream().filter(d -> d.item().visibility() == Visibility.PUB).toList();
-                if (pub.isEmpty()) {
-                    diagnostics.add(new Diagnostic(Code.PRIVATE_ITEM, seg.span(),
-                            "'" + seg.text() + "' is private to module '" + m.path() + "'",
-                            List.of(new Diagnostic.Note(items.getFirst().item().span(), "declared here without `pub`"))));
+                var owner = m;
+                var visible = items.stream().filter(d -> owner.exposes(d.item().visibility(), from)).toList();
+                if (visible.isEmpty()) {
+                    var first = items.getFirst().item();
+                    diagnostics.add(ModuleLoader.notVisible(seg, m, first.visibility(), first.span()));
                     return null;
                 }
-                items = pub;
+                items = visible;
             }
             entity = entity(items);
             record(seg, entity);

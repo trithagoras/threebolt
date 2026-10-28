@@ -87,7 +87,7 @@ pub fn hash(self) -> u64;
 pub fn add(self, o: Self) -> Self;
 
 /// Whether `s` occurs at character offset `at`; needs `at + s.len <= self.len`.
-fn matches_at(self, s: str, at: usize) -> bool {
+internal fn matches_at(self, s: str, at: usize) -> bool {
     let n = s.len;
     let mut i: usize = 0;
     while i < n {
@@ -98,7 +98,7 @@ fn matches_at(self, s: str, at: usize) -> bool {
 }
 
 /// The offset of the first occurrence of `s` at or after `from`, or `null`.
-fn find_from(self, s: str, from: usize) -> usize | null {
+internal fn find_from(self, s: str, from: usize) -> usize | null {
     let n = s.len;
     if n > self.len { return null; }
     if n == 0 { return from; }

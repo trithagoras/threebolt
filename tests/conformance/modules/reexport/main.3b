@@ -1,0 +1,11 @@
+// Re-exports (§2.2): `api` is a facade over `model`; `internal` (§2.3) is visible within the package.
+use api::{User, greet};
+use api::*;
+
+fn main() {
+    let u = User { name: "ada" };
+    println(greet(u));
+    println(api::count());
+    println(Order { id: 7 }.id);
+    println(helper());
+}

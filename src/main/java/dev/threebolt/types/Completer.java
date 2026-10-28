@@ -127,16 +127,20 @@ final class Completer {
         record(Site.STATIC_MEMBER, seg.name(), items, null);
     }
 
-    /** {@code module::|}: its items ({@code pub} ones from another module) and loaded submodules. */
+    /** {@code module::|}: its items visible from {@code from} (§2.3) and loaded submodules. */
     void moduleItems(Module m, Module from, Name name) {
         var items = new ArrayList<Item>();
         for (var e : m.scope().items().entrySet()) {
-            var decls = m == from ? e.getValue()
-                    : e.getValue().stream().filter(d -> d.item().visibility() == Visibility.PUB).toList();
+            var decls = e.getValue().stream().filter(d -> m.exposes(d.item().visibility(), from)).toList();
             if (decls.isEmpty()) continue;
             var item = entityItem(e.getKey(), c.names.entity(decls), 2);
             if (!typePosition || isTypeLike(item.kind())) items.add(item);
         }
+        m.scope().imports().forEach((bound, i) -> {
+            if (i.visibility() == Visibility.PRIVATE || !m.exposes(i.visibility(), from)) return;
+            var item = entityItem(bound, c.names.entity(i.targets()), 2);
+            if (!typePosition || isTypeLike(item.kind())) items.add(item);
+        });
         items.addAll(submodules(m.path()));
         record(Site.MODULE_ITEM, name, items, m.path());
     }

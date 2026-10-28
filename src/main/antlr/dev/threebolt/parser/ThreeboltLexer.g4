@@ -90,6 +90,7 @@ FOR       : 'for' ;
 IF        : 'if' ;
 IMPL      : 'impl' ;
 IN        : 'in' ;
+INTERNAL  : 'internal' ;
 IS        : 'is' ;
 LET       : 'let' ;
 LOOP      : 'loop' ;

@@ -41,7 +41,7 @@ class LexerTest {
 
     @Test
     void everyKeywordIsItsOwnToken() {
-        String keywords = "abstract as break class const continue defer else enum extern false fn for if impl in"
+        String keywords = "abstract as break class const continue defer else enum extern false fn for if impl in internal"
                 + " is let loop match mut nameof null override prot pub return Self self static struct super"
                 + " trait true type typeof unsafe use virtual while";
         for (String kw : keywords.split(" ")) {

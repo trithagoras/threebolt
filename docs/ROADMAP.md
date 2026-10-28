@@ -194,9 +194,10 @@ the exemption keeps "add `Display` to a dependency's type" a one-liner in apps.
 **Manifest parsing** uses a TOML library (the third dependency, after ANTLR and LSP4J).
 
 ### 2.2 Steps
-1. Spec: §1 keyword `internal`; §2.1 packages and source roots; §2.2 `pub use`; §2.3 `internal`; §4.10 orphan rule
+1. ~~Spec~~ — done (`fdb3b8e`): §1 keyword `internal`; §2.1 packages and source roots; §2.2 `pub use`; §2.3 `internal`; §4.10 orphan rule
    (normative, application exempt); intro's "Not in 1.0" loses re-exports and package manager; changelog entry.
-2. `internal` and `pub use` in grammar and checker (testable without packages); TextMate grammar.
+2. ~~`internal` and `pub use` in grammar and checker (testable without packages); TextMate grammar~~ — done. Std's private
+   `str` helpers are `internal`, replacing the std/builtin visibility special case.
 3. Manifest loading (TOML library), package graph (DAG, key clashes, canonical identity), per-package source
    roots, `internal` across packages, orphan rule. Conformance: multi-package cases (a case directory holding
    `package.toml`s; README extended).

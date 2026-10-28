@@ -363,10 +363,9 @@ final class Calls {
     void checkMethodAccess(FnInfo f, Span span) {
         if (f.visibility() == Visibility.PUB) return;
         if (!(f.owner instanceof TypeInfo owner) || owner.isTrait()) return;
-        // A private member from std/builtin/*.3b is a std helper: other members of std/builtin see
-        // it, but not the owner's own code (a user enum's methods).
-        if (f.module != owner.module && c.ctx.module != f.module) {
-            c.exprs.checkAccess(owner, f.visibility(), "method '" + f.name() + "'", span, null);
+        // An internal member from std/builtin/*.3b belongs to std's package, not the owner's (a user enum).
+        if (f.visibility() == Visibility.INTERNAL) {
+            c.exprs.checkAccess(f.module, owner, f.visibility(), "method '" + f.name() + "'", span, c.ctx.enclosing);
             return;
         }
         for (ImplInfo impl : ts.implsOf(owner)) {

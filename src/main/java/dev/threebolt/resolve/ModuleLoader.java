@@ -151,8 +151,12 @@ public final class ModuleLoader {
                 var target = find(path);
                 if (target != null && target.ast() != null) {
                     for (Item t : target.ast().items()) {
-                        if (t.visibility() == Visibility.PUB) inScope.add(itemName(t));
+                        if (target.exposes(t.visibility(), m)) inScope.add(itemName(t));
                         if (t instanceof Item.Extern x) x.fns().forEach(f -> inScope.add(f.name().text()));
+                        if (t instanceof Item.Use r && !r.glob() && target.exposes(r.visibility(), m)) {
+                            if (r.isGroup()) r.group().forEach(n -> inScope.add((n.alias() != null ? n.alias() : n.name()).text()));
+                            else inScope.add((r.alias() != null ? r.alias() : r.path().getLast()).text());
+                        }
                     }
                 }
             } else if (u.isGroup()) {
@@ -259,8 +263,8 @@ public final class ModuleLoader {
             checkAttributes(item.attributes());
             switch (item) {
                 case Item.Use u -> {
-                    if (u.visibility() == Visibility.PUB) {
-                        diagnostics.error(Code.PUB_USE, u.span(), "`use` cannot be `pub`: there are no re-exports in 1.0");
+                    if (u.visibility() == Visibility.PROT) {
+                        diagnostics.error(Code.BAD_MODIFIER, u.span(), "`prot` is only allowed in classes");
                     }
                 }
                 case Item.Impl i -> i.members().forEach(this::checkMemberAttributes);
@@ -318,81 +322,144 @@ public final class ModuleLoader {
 
     // ---- Imports ----
 
+    /** What a module exports under a name, with the visibility it is exported at (§2.2, §2.3). */
+    private record Exported(Symbol symbol, Visibility visibility) {}
+
+    /** Each `use` being resolved (false) or resolved (true). Re-exports are resolved on demand. */
+    private final Map<Item.Use, Boolean> useState = new HashMap<>();
+
     private void resolveImports(Module m) {
         if (m.ast() == null) return;
-        for (Item item : m.ast().items()) {
-            if (!(item instanceof Item.Use u) || u.glob()) continue;
-            var path = pathOf(u.path());
-            if (!u.isGroup()) {
-                var targets = resolve(m, path, u.path());
-                if (targets != null) bind(m, u.alias() != null ? u.alias() : u.path().getLast(), targets);
-                continue;
-            }
-            boolean reported = false;
-            for (var n : u.group()) {
-                var full = path.child(n.name().text());
-                if (find(path) == null && find(full) == null) {
-                    // One error for the whole group: its common prefix is missing.
-                    if (!reported) moduleNotFound(path, u.path());
-                    reported = true;
-                    continue;
-                }
-                var names = new ArrayList<>(u.path());
-                names.add(n.name());
-                var targets = resolve(m, full, names);
-                if (targets != null) bind(m, n.alias() != null ? n.alias() : n.name(), targets);
-            }
-        }
-        // Glob imports last: the module's items and explicit imports shadow them.
-        var globbed = new java.util.HashSet<String>();
-        for (Item item : m.ast().items()) {
-            if (!(item instanceof Item.Use u) || !u.glob()) continue;
-            var path = pathOf(u.path());
-            var target = find(path);
-            if (target == null) {
-                moduleNotFound(path, u.path());
-                continue;
-            }
-            for (var e : target.scope().items().entrySet()) {
-                var visible = e.getValue().stream()
-                        .filter(d -> target == m || d.item().visibility() == Visibility.PUB).toList();
-                if (visible.isEmpty() || !m.scope().items(e.getKey()).isEmpty()) continue;
-                var previous = m.scope().importNamed(e.getKey());
-                if (previous != null && !globbed.contains(e.getKey())) continue;
-                var name = new Name(e.getKey(), span(u.path()));
-                globbed.add(e.getKey());
-                bind(m, name, List.copyOf(visible));
-            }
-        }
+        for (Item item : m.ast().items()) if (item instanceof Item.Use u) resolveUse(m, u);
     }
 
     /**
-     * What {@code path} names from module {@code from}: a module, or the items of that name in
-     * the parent module (pub only, unless the parent is {@code from}). Null after an error.
+     * Resolves one `use` of {@code m}, once. A glob first needs m's explicit imports, which shadow
+     * it. A `use` reached again while it is being resolved is a cycle of re-exports: the names it
+     * binds are not available yet, so a lookup through it finds nothing.
      */
-    private List<Symbol> resolve(Module from, ModulePath path, List<Name> names) {
+    private void resolveUse(Module m, Item.Use u) {
+        if (useState.containsKey(u)) return;
+        useState.put(u, false);
+        if (u.glob()) {
+            for (Item item : m.ast().items()) if (item instanceof Item.Use e && !e.glob()) resolveUse(m, e);
+            resolveGlob(m, u);
+        } else {
+            resolveExplicit(m, u);
+        }
+        useState.put(u, true);
+    }
+
+    private void resolveExplicit(Module m, Item.Use u) {
+        var path = pathOf(u.path());
+        if (!u.isGroup()) {
+            var targets = resolve(m, path, u.path());
+            if (targets != null) bind(m, u, u.alias() != null ? u.alias() : u.path().getLast(), targets, false);
+            return;
+        }
+        boolean reported = false;
+        for (var n : u.group()) {
+            var full = path.child(n.name().text());
+            if (find(path) == null && find(full) == null) {
+                // One error for the whole group: its common prefix is missing.
+                if (!reported) moduleNotFound(path, u.path());
+                reported = true;
+                continue;
+            }
+            var names = new ArrayList<>(u.path());
+            names.add(n.name());
+            var targets = resolve(m, full, names);
+            if (targets != null) bind(m, u, n.alias() != null ? n.alias() : n.name(), targets, false);
+        }
+    }
+
+    private void resolveGlob(Module m, Item.Use u) {
+        var path = pathOf(u.path());
+        var target = find(path);
+        if (target == null) {
+            moduleNotFound(path, u.path());
+            return;
+        }
+        for (String name : exportedNames(target)) {
+            var visible = visible(target, name, m);
+            if (visible.isEmpty() || !m.scope().items(name).isEmpty()) continue;
+            var previous = m.scope().importNamed(name);
+            if (previous != null && !previous.glob()) continue;
+            bind(m, u, new Name(name, span(u.path())), visible, true);
+        }
+    }
+
+    /** The names module {@code p} declares or re-exports, resolving its re-exports first. */
+    private Set<String> exportedNames(Module p) {
+        var names = new java.util.LinkedHashSet<>(p.scope().items().keySet());
+        if (p.ast() == null) return names;
+        for (Item item : p.ast().items()) {
+            if (item instanceof Item.Use u && u.visibility() != Visibility.PRIVATE) resolveUse(p, u);
+        }
+        p.scope().imports().forEach((name, i) -> {
+            if (i.visibility() != Visibility.PRIVATE) names.add(name);
+        });
+        return names;
+    }
+
+    /** What module {@code p} exports as {@code name} that {@code from} can see: its items, else a re-export. */
+    private List<Exported> visible(Module p, String name, Module from) {
+        var items = p.scope().items(name);
+        if (!items.isEmpty()) {
+            return items.stream().filter(d -> p.exposes(d.item().visibility(), from))
+                    .map(d -> new Exported(d, d.item().visibility())).toList();
+        }
+        var i = reexport(p, name);
+        if (i == null || !p.exposes(i.visibility(), from)) return List.of();
+        return i.targets().stream().map(t -> new Exported(t, i.visibility())).toList();
+    }
+
+    /** The re-export of {@code p} binding {@code name}, resolving the `use`s that may bind it; null if none. */
+    private ModuleScope.Import reexport(Module p, String name) {
+        if (p.ast() == null) return null;
+        for (Item item : p.ast().items()) {
+            if (item instanceof Item.Use u && u.visibility() != Visibility.PRIVATE && (u.glob() || binds(u, name))) {
+                resolveUse(p, u);
+            }
+        }
+        return p.scope().reexport(name);
+    }
+
+    private static boolean binds(Item.Use u, String name) {
+        if (u.isGroup()) {
+            return u.group().stream().anyMatch(n -> (n.alias() != null ? n.alias() : n.name()).text().equals(name));
+        }
+        return (u.alias() != null ? u.alias() : u.path().getLast()).text().equals(name);
+    }
+
+    /**
+     * What {@code path} names from module {@code from}: a module, or what the parent module exports
+     * under that name and {@code from} can see. Null after an error.
+     */
+    private List<Exported> resolve(Module from, ModulePath path, List<Name> names) {
         Name last = names.getLast();
         Module asModule = find(path);
         Module parent = path.parent() == null ? null : find(path.parent());
         var items = parent == null ? List.<Symbol.Decl>of() : parent.scope().items(path.last());
-        if (asModule != null && !items.isEmpty()) {
+        var reexport = parent == null || !items.isEmpty() ? null : reexport(parent, path.last());
+        Span declared = !items.isEmpty() ? items.getFirst().item().span() : reexport != null ? reexport.name().span() : null;
+        if (asModule != null && declared != null) {
             diagnostics.add(new Diagnostic(Code.AMBIGUOUS_IMPORT, span(names),
                     "'" + path + "' names both a module and an item of module '" + parent.path() + "'",
-                    List.of(new Diagnostic.Note(items.getFirst().item().span(), "the item is defined here"))));
+                    List.of(new Diagnostic.Note(declared, "the item is defined here"))));
             return null;
         }
-        if (asModule != null) return List.of(new Symbol.ModuleRef(asModule));
+        if (asModule != null) return List.of(new Exported(new Symbol.ModuleRef(asModule), Visibility.PUB));
         // A module with syntax errors has no known items; its errors were already reported.
         if (parent != null && parent.ast() == null) return null;
-        if (!items.isEmpty()) {
-            var visible = items.stream().filter(d -> parent == from || d.item().visibility() == Visibility.PUB).toList();
+        if (declared != null) {
+            var visible = visible(parent, path.last(), from);
             if (visible.isEmpty()) {
-                diagnostics.add(new Diagnostic(Code.PRIVATE_ITEM, last.span(),
-                        "'" + last.text() + "' is private to module '" + parent.path() + "'",
-                        List.of(new Diagnostic.Note(items.getFirst().item().span(), "declared here without `pub`"))));
+                var vis = !items.isEmpty() ? items.getFirst().item().visibility() : reexport.visibility();
+                diagnostics.add(notVisible(last, parent, vis, declared));
                 return null;
             }
-            return List.copyOf(visible);
+            return visible;
         }
         if (parent != null) {
             diagnostics.error(Code.ITEM_NOT_FOUND, last.span(),
@@ -404,11 +471,45 @@ public final class ModuleLoader {
         return null;
     }
 
+    /** E0102 for a name of {@code m}, declared at {@code declared} with {@code vis}, that the user cannot see (§2.3). */
+    public static Diagnostic notVisible(Name name, Module m, Visibility vis, Span declared) {
+        boolean internal = vis == Visibility.INTERNAL;
+        return new Diagnostic(Code.PRIVATE_ITEM, name.span(),
+                "'" + name.text() + "' is " + (internal ? "internal to the package of" : "private to") + " module '" + m.path() + "'",
+                List.of(new Diagnostic.Note(declared, internal ? "declared here as `internal`" : "declared here without `pub`")));
+    }
+
     private void moduleNotFound(ModulePath path, List<Name> names) {
         diagnostics.error(Code.MODULE_NOT_FOUND, span(names), "module '" + path + "' not found");
     }
 
-    private void bind(Module m, Name name, List<Symbol> targets) {
+    /**
+     * Binds {@code name} in {@code m} by `use` {@code u}. A re-export (§2.2) cannot name a module;
+     * an explicit one cannot be more visible than what it names, and a glob re-exports each name
+     * at the lesser of the two visibilities.
+     */
+    private void bind(Module m, Item.Use u, Name name, List<Exported> targets, boolean glob) {
+        var vis = u.visibility() == Visibility.PROT ? Visibility.PRIVATE : u.visibility();
+        if (vis != Visibility.PRIVATE) {
+            if (targets.stream().anyMatch(t -> t.symbol() instanceof Symbol.ModuleRef)) {
+                diagnostics.error(Code.PUB_USE, name.span(), "a module cannot be re-exported");
+                vis = Visibility.PRIVATE;
+            } else {
+                var least = targets.stream().map(Exported::visibility).min(ModuleLoader::compare).orElseThrow();
+                if (compare(least, vis) < 0) {
+                    if (glob) {
+                        vis = least;
+                    } else {
+                        diagnostics.add(new Diagnostic(Code.PUB_USE, name.span(),
+                                "'" + name.text() + "' is " + describe(least) + " and cannot be re-exported as `"
+                                        + vis.name().toLowerCase(Locale.ROOT) + "`",
+                                List.of()));
+                        vis = Visibility.PRIVATE;
+                    }
+                }
+            }
+        }
+        var symbols = targets.stream().map(Exported::symbol).toList();
         var items = m.scope().items(name.text());
         if (!items.isEmpty()) {
             duplicate(name, items.getFirst().item().span(), "previously defined here");
@@ -416,11 +517,33 @@ public final class ModuleLoader {
         }
         var previous = m.scope().importNamed(name.text());
         if (previous != null) {
+            // An explicit import resolved after a glob (in a re-export cycle) still shadows it.
+            if (previous.glob() && !glob) {
+                m.scope().addImport(new ModuleScope.Import(name, symbols, vis, false));
+                return;
+            }
             // Importing the same thing twice is harmless.
-            if (!sameTargets(previous.targets(), targets)) duplicate(name, previous.name().span(), "previously imported here");
+            if (!sameTargets(previous.targets(), symbols)) duplicate(name, previous.name().span(), "previously imported here");
             return;
         }
-        m.scope().addImport(new ModuleScope.Import(name, targets));
+        m.scope().addImport(new ModuleScope.Import(name, symbols, vis, glob));
+    }
+
+    /** Orders visibilities by reach: private (and prot) < internal < pub. */
+    private static int compare(Visibility a, Visibility b) {
+        return Integer.compare(reach(a), reach(b));
+    }
+
+    private static int reach(Visibility v) {
+        return switch (v) {
+            case PRIVATE, PROT -> 0;
+            case INTERNAL -> 1;
+            case PUB -> 2;
+        };
+    }
+
+    private static String describe(Visibility v) {
+        return v == Visibility.INTERNAL ? "internal" : "private";
     }
 
     private static boolean sameTargets(List<Symbol> a, List<Symbol> b) {

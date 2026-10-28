@@ -260,6 +260,7 @@ public final class AstPrinter {
     private void visibility(Visibility v) {
         switch (v) {
             case PUB -> out.append("pub ");
+            case INTERNAL -> out.append("internal ");
             case PROT -> out.append("prot ");
             case PRIVATE -> {}
         }

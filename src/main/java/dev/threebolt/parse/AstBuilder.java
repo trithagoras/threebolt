@@ -143,7 +143,8 @@ public final class AstBuilder {
 
     private static Visibility visibility(VisibilityContext ctx) {
         if (ctx == null) return Visibility.PRIVATE;
-        return ctx.PUB() != null ? Visibility.PUB : Visibility.PROT;
+        if (ctx.PUB() != null) return Visibility.PUB;
+        return ctx.INTERNAL() != null ? Visibility.INTERNAL : Visibility.PROT;
     }
 
     private Item.Fn fn(List<Attribute> attrs, Visibility vis, Dispatch dispatch, boolean isUnsafe, boolean isGetter,

@@ -113,7 +113,7 @@ itemKind
 
 attribute : AT IDENTIFIER (LPAREN (literal (COMMA literal)* COMMA?)? RPAREN)? ;
 
-visibility : PUB | PROT ;
+visibility : PUB | INTERNAL | PROT ;
 
 // use a::b::C;  use a::b::{C, D as E};  use a::b as c;  use a::b::*;
 useDecl : USE IDENTIFIER (COLON_COLON IDENTIFIER)* (AS IDENTIFIER | COLON_COLON useGroup | COLON_COLON STAR)? SEMI ;
@@ -461,7 +461,7 @@ literal
 
 keyword
     : ABSTRACT | AS | BREAK | CLASS | CONST | CONTINUE | DEFER | ELSE | ENUM | EXTERN | FALSE
-    | FN | FOR | IF | IMPL | IN | IS | LET | LOOP | MATCH | MUT | NAMEOF | NULL | OVERRIDE
+    | FN | FOR | IF | IMPL | IN | INTERNAL | IS | LET | LOOP | MATCH | MUT | NAMEOF | NULL | OVERRIDE
     | PROT | PUB | RETURN | SELF_TYPE | SELF | STATIC | STRUCT | SUPER | TRAIT | TRUE | TYPE
     | TYPEOF | UNSAFE | USE | VIRTUAL | WHILE
     ;

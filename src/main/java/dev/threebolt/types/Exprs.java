@@ -544,15 +544,25 @@ final class Exprs {
 
     /** {@link #checkAccess} from code enclosed by {@code here}. */
     boolean checkAccess(TypeInfo owner, Visibility vis, String what, Span span, TypeInfo here) {
+        return checkAccess(owner.module, owner, vis, what, span, here);
+    }
+
+    /** {@link #checkAccess} for a member declared in module {@code declaring}. */
+    boolean checkAccess(Module declaring, TypeInfo owner, Visibility vis, String what, Span span, TypeInfo here) {
         if (vis == Visibility.PUB) return true;
         boolean ok = switch (vis) {
             case PRIVATE -> here == owner;
             case PROT -> here != null && here.isSubclassOf(owner);
+            case INTERNAL -> declaring.samePackage(c.ctx.module);
             case PUB -> true;
         };
         if (!ok) {
-            diag.error(Code.PRIVATE_MEMBER, span, what + " is " + (vis == Visibility.PROT ? "protected" : "private")
-                    + " in '" + owner.name() + "'");
+            String how = switch (vis) {
+                case PROT -> "protected in '" + owner.name() + "'";
+                case INTERNAL -> declaring.isStd() ? "internal to the standard library" : "internal to the package of '" + owner.name() + "'";
+                default -> "private in '" + owner.name() + "'";
+            };
+            diag.error(Code.PRIVATE_MEMBER, span, what + " is " + how);
         }
         return ok;
     }

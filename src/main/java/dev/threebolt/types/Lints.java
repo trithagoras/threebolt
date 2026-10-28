@@ -191,7 +191,8 @@ final class Lints {
 
     private void imports(Module m) {
         for (Item item : m.ast().items()) {
-            if (!(item instanceof Item.Use u)) continue;
+            // A re-export is used by other modules.
+            if (!(item instanceof Item.Use u) || u.visibility() != dev.threebolt.ast.Visibility.PRIVATE) continue;
             if (u.glob()) {
                 var span = Names.span(u.path());
                 boolean any = false;

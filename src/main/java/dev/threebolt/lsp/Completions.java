@@ -217,7 +217,7 @@ final class Completions {
             if (m != null && m.ast() != null) {
                 boolean own = at.file.equals(m.file());
                 m.scope().items().forEach((name, decls) -> {
-                    if (own || decls.stream().anyMatch(d -> d.item().visibility() == Visibility.PUB)) {
+                    if (own || decls.stream().anyMatch(d -> CodeActions.visibleToUser(m, d.item()))) {
                         add(out, prefix, name, kind(decls.getFirst()), 1);
                     }
                 });

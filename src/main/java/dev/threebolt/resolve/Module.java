@@ -1,6 +1,7 @@
 package dev.threebolt.resolve;
 
 import dev.threebolt.ast.CompilationUnit;
+import dev.threebolt.ast.Visibility;
 import dev.threebolt.diag.Source;
 import java.nio.file.Path;
 
@@ -42,6 +43,20 @@ public final class Module {
 
     public boolean isStd() {
         return path.isStd();
+    }
+
+    /** Whether {@code other} is in this module's package (§2.5): std, or the program's own code. */
+    public boolean samePackage(Module other) {
+        return isStd() == other.isStd();
+    }
+
+    /** Whether an item of this module with visibility {@code v} is visible from {@code from} (§2.3). */
+    public boolean exposes(Visibility v, Module from) {
+        return switch (v) {
+            case PUB -> true;
+            case INTERNAL -> samePackage(from);
+            case PRIVATE, PROT -> this == from;
+        };
     }
 
     @Override
