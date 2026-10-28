@@ -45,7 +45,12 @@ other backend and for dogfooding the language.)
 3. ~~**Bodied members in `builtin/*.3b`**~~ — done (`81244d2`): bodied members are checked once per owner type;
    private members are visible only within std/builtin. Moved: integer `abs`/`min`/`max`, `char::is_digit`,
    `flags::has`. No measurable slowdown.
-4. **`str` representation** (§1.1), then move the derivable `str` members.
+4. ~~**`str` representation** (§1.1), then move the derivable `str` members~~ — done (`f4a2af9`, `fe52fbf`):
+   `Values.Str` (O(1) `len`/`s[i]`, spec §3.1 changed); `trim`, `split`, `replace`, `repeat`, `starts_with`,
+   `ends_with`, `find`, `contains`, `truthy`, `to_str` are Threebolt. **Slowdown:** the `strings` benchmark goes
+   from ~1.9 s to ~31 s (~16×): searching now runs character by character in the tree-walker. The other
+   benchmarks are unchanged. Candidates if it matters before a backend: a faster evaluator (slot-indexed locals
+   instead of `HashMap` environments, no exception per `return`), or keeping `find_from` as an intrinsic.
 5. **Literal defaulting to `f64`** (§5.2, decided): spec, checker and conformance cases, before `std::math` moves,
    so its float functions can become generic over `Float` as they move.
 6. **Move the rest** module by module (prelude collections, `int`/`float`, `sync`), each with the conformance
