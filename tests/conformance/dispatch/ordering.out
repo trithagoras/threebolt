@@ -1,0 +1,14 @@
+less equal greater
+less greater equal
+greater less greater
+less equal
+1.9 < 2.0
+2.0 > 1.9
+1.9 == 1.9
+true false true
+3 == 3
+pear > apple
+9 2.0 null
+4 7 -1
+7
+-1 less 6 zz

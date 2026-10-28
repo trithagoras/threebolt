@@ -81,7 +81,7 @@ pub fn to_str(self) -> str => self;
 /// Whether the strings have the same characters.
 pub fn eq(self, o: Self) -> bool;
 /// Compares character by character (by code point).
-pub fn cmp(self, o: Self) -> i32;
+pub fn cmp(self, o: Self) -> Ordering;
 pub fn hash(self) -> u64;
 /// `a + b`: the concatenation.
 pub fn add(self, o: Self) -> Self;

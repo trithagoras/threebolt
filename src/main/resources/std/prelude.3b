@@ -51,10 +51,13 @@ pub trait Eq {
     fn eq(self, o: Self) -> bool;
 }
 
+/// How two values compare: the result of `Ord::cmp`.
+pub type Ordering = "less" | "equal" | "greater";
+
 /// Ordering: `<`, `<=`, `>` and `>=` call `cmp`.
 pub trait Ord : Eq {
-    /// Negative if `self` is less than `o`, zero if equal, positive if greater.
-    fn cmp(self, o: Self) -> i32;
+    /// Whether `self` is less than, equal to or greater than `o`.
+    fn cmp(self, o: Self) -> Ordering;
 }
 
 /// Hashing, for `Map` keys and `Set` elements. Values that are `eq` must hash the same.
@@ -101,12 +104,12 @@ pub trait Num : Eq + Ord + Display + Add + Sub + Mul + Div + Rem {
     fn abs(self) -> Self;
     /// The smaller of `self` and `o`.
     fn min(self, o: Self) -> Self {
-        if self.cmp(o) <= 0 { return self; }
+        if self.cmp(o) != "greater" { return self; }
         return o;
     }
     /// The larger of `self` and `o`.
     fn max(self, o: Self) -> Self {
-        if self.cmp(o) >= 0 { return self; }
+        if self.cmp(o) != "less" { return self; }
         return o;
     }
 }

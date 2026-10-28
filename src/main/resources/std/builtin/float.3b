@@ -56,7 +56,7 @@ pub fn parse(s: str) -> Self | null;
 pub fn to_str(self) -> str;
 pub fn eq(self, o: Self) -> bool;
 /// A total order: `-0` sorts before `0`, and `NaN` after every other value.
-pub fn cmp(self, o: Self) -> i32;
+pub fn cmp(self, o: Self) -> Ordering;
 
 pub fn add(self, o: Self) -> Self;
 pub fn sub(self, o: Self) -> Self;

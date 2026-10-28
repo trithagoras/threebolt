@@ -1057,7 +1057,7 @@ final class Exprs {
     private Typed coalesce(Expr.Binary b, Type expected) {
         var l = expr(b.left(), expected == null ? null : TypeSystem.union(expected, Type.NULL));
         var nonNull = ts.minus(l.type(), Type.NULL);
-        var r = expr(b.right(), expected != null ? expected : TypeSystem.widen(nonNull));
+        var r = expr(b.right(), expected != null ? expected : TypeSystem.widenInferred(nonNull));
         var type = TypeSystem.union(nonNull, r.type());
         if (l.type() == Type.ERROR || r.type() == Type.ERROR) type = Type.ERROR;
         return new Typed(new Ir.Coalesce(l.ir(), r.ir()), type);
@@ -1242,7 +1242,10 @@ final class Exprs {
         ctx.narrowed = Checker.with(saved, cond.whenFalse());
         var b = expr(e.otherwise(), expected);
         ctx.narrowed = saved;
-        var type = a.type() == Type.ERROR || b.type() == Type.ERROR ? Type.ERROR : TypeSystem.union(a.type(), b.type());
+        // Without an expected type, literal arms join as their base types (§3.6): `1 if c else 2` is `i32`.
+        var type = a.type() == Type.ERROR || b.type() == Type.ERROR ? Type.ERROR
+                : expected == null ? TypeSystem.union(TypeSystem.widenInferred(a.type()), TypeSystem.widenInferred(b.type()))
+                : TypeSystem.union(a.type(), b.type());
         return new Typed(new Ir.Cond(cond.ir(), a.ir(), b.ir()), type);
     }
 
@@ -1347,7 +1350,7 @@ final class Exprs {
                         var t = expr(e, null);
                         value = t.ir();
                         var all = new ArrayList<>(ctx.inferredReturns);
-                        all.add(TypeSystem.widen(t.type()));
+                        all.add(TypeSystem.widenInferred(t.type()));
                         inferred = TypeSystem.union(all);
                     }
                 }
@@ -1591,7 +1594,7 @@ final class Exprs {
                 return error();
             }
             var typed = l.elements().stream().map(e -> expr(e, null)).toList();
-            element = TypeSystem.union(typed.stream().map(t -> TypeSystem.widen(t.type())).toList());
+            element = TypeSystem.union(typed.stream().map(t -> TypeSystem.widenInferred(t.type())).toList());
             for (int i = 0; i < typed.size(); i++) irs.add(c.coerce(typed.get(i), element, l.elements().get(i).span()));
         }
         if (target != null && target.want() == Want.ARRAY) {
@@ -1624,7 +1627,7 @@ final class Exprs {
         var value = element != null ? c.check(r.value(), element) : null;
         if (element == null) {
             var t = expr(r.value(), null);
-            element = TypeSystem.widen(t.type());
+            element = TypeSystem.widenInferred(t.type());
             value = t.ir();
         }
         if (target != null && target.want() == Want.ARRAY) {
@@ -1663,8 +1666,8 @@ final class Exprs {
             }
             var ks = m.entries().stream().map(e -> expr(e.key(), null)).toList();
             var vs = m.entries().stream().map(e -> expr(e.value(), null)).toList();
-            key = TypeSystem.union(ks.stream().map(t -> TypeSystem.widen(t.type())).toList());
-            value = TypeSystem.union(vs.stream().map(t -> TypeSystem.widen(t.type())).toList());
+            key = TypeSystem.union(ks.stream().map(t -> TypeSystem.widenInferred(t.type())).toList());
+            value = TypeSystem.union(vs.stream().map(t -> TypeSystem.widenInferred(t.type())).toList());
             for (int i = 0; i < ks.size(); i++) {
                 keys.add(c.coerce(ks.get(i), key, m.entries().get(i).key().span()));
                 values.add(c.coerce(vs.get(i), value, m.entries().get(i).value().span()));

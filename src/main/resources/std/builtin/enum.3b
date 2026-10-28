@@ -4,5 +4,5 @@
 pub fn to_str(self) -> str;
 pub fn eq(self, o: Self) -> bool;
 /// Compares the members' values.
-pub fn cmp(self, o: Self) -> i32;
+pub fn cmp(self, o: Self) -> Ordering;
 pub fn hash(self) -> u64;

@@ -387,7 +387,7 @@ public final class Checker {
         Type declared = l.type() == null ? null : types.resolve(l.type(), ctx.typeScope);
         Typed value = exprs.expr(l.value(), declared);
         Ir.Expr ir = declared == null ? value.ir() : coerce(value, declared, l.value().span());
-        Type type = declared != null ? declared : TypeSystem.widen(value.type());
+        Type type = declared != null ? declared : TypeSystem.widenInferred(value.type());
         if (value.type() == Type.NEVER) ctx.reachable = false;
         if (l.pattern() instanceof Pattern.Binding b && b.isType() == null) {
             var local = declare(b.name().text(), b.isMutable(), type, b.span());
@@ -434,7 +434,7 @@ public final class Checker {
             }
             ctx.scope = new Scope(outer);
             bound = declare(s.binder().name().text(), s.binder().isMutable(),
-                    TypeSystem.widen(ts.minus(value.type(), Type.NULL)), s.binder().span());
+                    TypeSystem.widenInferred(ts.minus(value.type(), Type.NULL)), s.binder().span());
             whenTrue = Map.of();
             whenFalse = Map.of();
         } else {
@@ -500,7 +500,7 @@ public final class Checker {
             }
             ctx.scope = new Scope(outer);
             bound = declare(w.binder().name().text(), w.binder().isMutable(),
-                    TypeSystem.widen(ts.minus(value.type(), Type.NULL)), w.binder().span());
+                    TypeSystem.widenInferred(ts.minus(value.type(), Type.NULL)), w.binder().span());
             whenTrue = Map.of();
             whenFalse = Map.of();
         } else {
@@ -597,7 +597,7 @@ public final class Checker {
                 value = new Ir.Lit(Values.Unit.UNIT);
             } else {
                 var t = exprs.expr(r.value(), null);
-                ctx.inferredReturns.add(TypeSystem.widen(t.type()));
+                ctx.inferredReturns.add(TypeSystem.widenInferred(t.type()));
                 value = t.ir();
             }
         } else if (r.value() == null) {

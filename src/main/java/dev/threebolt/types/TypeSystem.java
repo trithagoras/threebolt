@@ -155,6 +155,21 @@ public final class TypeSystem {
     }
 
     /**
+     * The type inference gives a binding whose value has type {@code t} (§3.6): a lone literal
+     * type widens to its base, but a union with literal members is kept, as it comes from a
+     * declared type (`Ordering`, `Direction | null`).
+     */
+    public static Type widenInferred(Type t) {
+        return switch (t) {
+            case Type.Lit l -> l.base();
+            case Type.Union u when u.members().stream().anyMatch(m -> m instanceof Type.Lit) -> u;
+            case Type.Union u -> union(u.members().stream().map(TypeSystem::widenInferred).toList());
+            case Type.Tuple tu -> new Type.Tuple(tu.elements().stream().map(TypeSystem::widenInferred).toList());
+            default -> t;
+        };
+    }
+
+    /**
      * A type's name as `nameof` and `Type.name` report it (§15): declared names with type
      * arguments, `List<i32>` rather than `[i32]`.
      */

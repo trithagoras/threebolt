@@ -16,7 +16,7 @@ pub class Money : Eq, Ord, Display {
     pub let cents: i64;
     pub fn new(cents: i64) -> Self => { cents };
     pub fn eq(self, o: Self) -> bool => self.cents == o.cents;
-    pub fn cmp(self, o: Self) -> i32 => -1 if self.cents < o.cents else (1 if self.cents > o.cents else 0);
+    pub fn cmp(self, o: Self) -> Ordering => "less" if self.cents < o.cents else ("greater" if self.cents > o.cents else "equal");
     pub fn to_str(self) -> str => f"${self.cents / 100}.{self.cents % 100}";
 }
 

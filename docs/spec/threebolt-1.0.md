@@ -161,7 +161,7 @@ Generic types are **invariant**: `[Dog]` is not assignable to `[Animal]`. `fn` t
 - Everything else requires `as` (§7.9).
 - Integer literals adopt the expected type if it is an integer or float type and the value fits (error if not). Float literals adopt an expected float type. Against a numeric type parameter, see §10.1. With no expected type: integer → `i32`, float → `f64`.
 - Against a union expected type, an unsuffixed integer literal takes: an equal literal member if there is one; else `i32` if it is a member and the value fits; else the first integer or float member (in declaration order) that the value fits. `let w: i64 | str = 5;` stores an `i64`.
-- Inference widens literal types: `let d = "left";` has type `str`; `let d: Direction = "left";` has type `Direction`.
+- Inference widens a literal type to its base type: `let d = "left";` has type `str`; `let d: Direction = "left";` has type `Direction`. A union with literal members is kept, since it comes from a declared type: `let o = a.cmp(b);` has type `Ordering`, and `match o` is exhaustive over its three members. This applies wherever a type is inferred from a value (`let`, `if let`/`while let`, pattern bindings, collection literal elements, lambda returns). Without an expected type, the arms of `if`/`else` and `match` expressions are widened this way before they are joined: `let n = 1 if c else 2;` has type `i32`.
 
 ---
 
@@ -707,7 +707,7 @@ Implicitly imported names:
 
 **Functions:** from `std::io`: `print<T: Display>(x: T)`, `println<T: Display>(x: T)`, `eprint<T: Display>(x: T)`, `eprintln<T: Display>(x: T)` (write `x.to_str()` to stdout, or stderr for the `e` forms; the `ln` forms add a newline), `readln() -> str | null` and `readln(prompt: str) -> str | null` (write `prompt` to stdout, flush stdout, then read one line from stdin as UTF-8, invalid bytes becoming U+FFFD; the result excludes the terminating `\n` or `\r\n`; a final line without a terminator is still returned; `null` at end of input; an I/O error panics); `panic(msg: str) -> !`, `error(msg: str) -> Err`, `len<T: Len>(x: T) -> usize`.
 
-**Types:** `MsgErr`, `Done`, `Type`, `List<T>` (`[T]`), `Map<K: Hash + Eq, V>`, `Set<T: Hash + Eq>`, `Range<T>`, `Ptr<T>`, module alias `c`.
+**Types:** `MsgErr`, `Done`, `Type`, `Ordering`, `List<T>` (`[T]`), `Map<K: Hash + Eq, V>`, `Set<T: Hash + Eq>`, `Range<T>`, `Ptr<T>`, module alias `c`.
 
 **Traits:**
 
@@ -719,7 +719,7 @@ Implicitly imported names:
 | `Err` | `fn message(self) -> str` | §12; `Err` (as a trait reference) and `MsgErr` implement `Display` |
 | `Default` | `fn default() -> Self` | static |
 | `Eq` | `fn eq(self, o: Self) -> bool` | `==`/`!=` |
-| `Ord : Eq` | `fn cmp(self, o: Self) -> i32` | `<0`, `0`, `>0` |
+| `Ord : Eq` | `fn cmp(self, o: Self) -> Ordering` | `<`/`<=`/`>`/`>=`; `type Ordering = "less" \| "equal" \| "greater"` |
 | `Hash` | `fn hash(self) -> u64` | Map/Set keys |
 | `Add Sub Mul Div Rem` | `fn add(self, o: Self) -> Self` etc. | binary operators (RHS and result `Self`) |
 | `Neg` | `fn neg(self) -> Self` | unary `-` |
@@ -1012,3 +1012,7 @@ Semantics the spec left open, decided while implementing:
 
 ### 2026-10-28 — nested packages
 - §2.5 A subdirectory holding a `package.toml` is not part of the enclosing package (was: unspecified, so its files were modules of both packages).
+
+### 2026-10-28 — `Ordering`
+- §3.6 Inference widens only a lone literal type; a union with literal members is kept (was: every literal member widened, so `let o = a.cmp(b);` was `str`). Literal arms of `if`/`else` and `match` without an expected type still join as their base types.
+- §16 `Ord::cmp` returns the new prelude alias `Ordering = "less" | "equal" | "greater"` (was: `i32`, negative/zero/positive). `match` on it is exhaustive without `_`.

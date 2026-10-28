@@ -39,7 +39,7 @@ struct Mod7 : Num, Display {
     pub fn from_i64(n: i64) -> Self => { v: ((n % 7 + 7) % 7) as i32 };
     pub fn abs(self) -> Self => self;
     pub fn eq(self, o: Self) -> bool => self.v == o.v;
-    pub fn cmp(self, o: Self) -> i32 => self.v.cmp(o.v);
+    pub fn cmp(self, o: Self) -> Ordering => self.v.cmp(o.v);
     pub fn to_str(self) -> str => f"{self.v} (mod 7)";
     pub fn add(self, o: Self) -> Self => Mod7::from_i64((self.v + o.v) as i64);
     pub fn sub(self, o: Self) -> Self => Mod7::from_i64((self.v - o.v) as i64);

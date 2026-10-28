@@ -379,7 +379,7 @@ final class Natives {
         return switch (name) {
             case "to_str" -> Str.of(x.toString());
             case "eq" -> x.equals(a[0]);
-            case "cmp" -> new Int(Prim.I32, Ops.compare(x, (Int) a[0]));
+            case "cmp" -> Ops.ordering(Ops.compare(x, (Int) a[0]));
             case "hash" -> new Int(Prim.U64, Ops.mix(x.v()));
             case "add" -> Ops.add(x, (Int) a[0]);
             case "sub" -> Ops.sub(x, (Int) a[0]);
@@ -465,7 +465,7 @@ final class Natives {
             case "is_infinite" -> Double.isInfinite(v);
             case "to_str" -> Str.of(Ops.display(x));
             case "eq" -> v == o;
-            case "cmp" -> new Int(Prim.I32, Double.compare(v, o));
+            case "cmp" -> Ops.ordering(Double.compare(v, o));
             case "add" -> Ops.flt(k, v + o);
             case "sub" -> Ops.flt(k, v - o);
             case "mul" -> Ops.flt(k, v * o);
@@ -528,7 +528,7 @@ final class Natives {
             case "upper" -> Str.of(s.toString().toUpperCase(Locale.ROOT));
             case "lower" -> Str.of(s.toString().toLowerCase(Locale.ROOT));
             case "eq" -> s.equals(a[0]);
-            case "cmp" -> new Int(Prim.I32, Integer.signum(s.compareTo((Str) a[0])));
+            case "cmp" -> Ops.ordering(s.compareTo((Str) a[0]));
             case "hash" -> new Int(Prim.U64, Ops.hashStr(s.toString()));
             case "add" -> s.concat((Str) a[0]);
             default -> unknown("str." + name);
@@ -547,7 +547,7 @@ final class Natives {
             case "to_lower" -> new Char(Character.toLowerCase(cp));
             case "to_str" -> Str.of(Character.toString(cp));
             case "eq" -> c.equals(a[0]);
-            case "cmp" -> new Int(Prim.I32, Integer.compare(cp, ((Char) a[0]).cp()));
+            case "cmp" -> Ops.ordering(Integer.compare(cp, ((Char) a[0]).cp()));
             case "hash" -> new Int(Prim.U64, Ops.mix(cp));
             default -> unknown("char." + name);
         };
@@ -557,7 +557,7 @@ final class Natives {
         return switch (name) {
             case "to_str" -> Str.of(Ops.display(e));
             case "eq" -> e.equals(a[0]);
-            case "cmp" -> new Int(Prim.I32, Long.compare(e.v(), ((EnumVal) a[0]).v()));
+            case "cmp" -> Ops.ordering(Long.compare(e.v(), ((EnumVal) a[0]).v()));
             case "hash" -> new Int(Prim.U64, Ops.mix(e.v()));
             case "bitand" -> new EnumVal(e.decl(), e.v() & ((EnumVal) a[0]).v());
             case "bitor" -> new EnumVal(e.decl(), e.v() | ((EnumVal) a[0]).v());

@@ -509,7 +509,7 @@ public final class Interpreter implements Callbacks {
             case "eq" -> valueEquals(recv, args[0]);
             case "hash" -> new Int(Prim.U64, hashOf(recv));
             case "to_str" -> Str.of(display(recv));
-            case "cmp" -> new Int(Prim.I32, compare(recv, args[0]));
+            case "cmp" -> Ops.ordering(compare(recv, args[0]));
             default -> throw new Panic("'" + typeOf(recv) + "' does not implement '" + fn.qualifiedName() + "'");
         };
     }
@@ -813,8 +813,7 @@ public final class Interpreter implements Callbacks {
         b = unbox(b);
         if (a instanceof EnumVal x && b instanceof EnumVal y) return Long.compare(x.v(), y.v());
         if (a instanceof Obj o) {
-            var r = (Int) callTrait(a, ts.ord, "cmp", b);
-            return Long.signum(r.v());
+            return Ops.fromOrdering(callTrait(a, ts.ord, "cmp", b));
         }
         return Ops.comparePrim(a, b);
     }

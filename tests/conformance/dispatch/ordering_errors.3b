@@ -1,0 +1,16 @@
+// cmp's result is an Ordering, not a number.
+
+fn main() {
+    let a = 1.cmp(2) < 0;
+    let b = 1.cmp(2) == "lesser";
+    let c = match 1.cmp(2) {
+        "less" => 1,
+        "greater" => 2,
+    };
+}
+
+struct Old : Eq, Ord {
+    let v: i32;
+    pub fn eq(self, o: Self) -> bool => self.v == o.v;
+    pub fn cmp(self, o: Self) -> i32 => self.v - o.v;
+}

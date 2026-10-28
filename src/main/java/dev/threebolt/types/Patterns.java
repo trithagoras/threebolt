@@ -64,7 +64,7 @@ final class Patterns {
                     bound = c.exprs.narrowIs(type, t);
                     unbox = TypeSystem.isStruct(bound);
                 }
-                yield new Ir.PBind(bind(b.name().text(), b.isMutable(), TypeSystem.widen(bound), b.span(), bindings, reuse),
+                yield new Ir.PBind(bind(b.name().text(), b.isMutable(), TypeSystem.widenInferred(bound), b.span(), bindings, reuse),
                         sub, unbox);
             }
             case Pattern.Is is -> {
@@ -377,7 +377,8 @@ final class Patterns {
             }
         }
         ctx.reachable = anyReach;
-        Type type = statement ? Type.UNIT : TypeSystem.union(armTypes);
+        Type type = statement ? Type.UNIT
+                : TypeSystem.union(expected == null ? armTypes.stream().map(TypeSystem::widenInferred).toList() : armTypes);
         if (!statement && !anyReach) type = Type.NEVER;
         if (armTypes.contains(Type.ERROR)) type = Type.ERROR;
         return new Typed(new Ir.Match(scrutinee.ir(), arms, m.span()), type);

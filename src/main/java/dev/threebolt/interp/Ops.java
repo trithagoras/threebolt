@@ -265,6 +265,19 @@ public final class Ops {
         };
     }
 
+    private static final Str LESS = Str.of("less"), EQUAL = Str.of("equal"), GREATER = Str.of("greater");
+
+    /** The {@code Ordering} (§16) for a Java comparison result. */
+    public static Str ordering(int c) {
+        return c < 0 ? LESS : c > 0 ? GREATER : EQUAL;
+    }
+
+    /** The comparison result for an {@code Ordering}: -1, 0 or 1. */
+    public static int fromOrdering(Object o) {
+        var s = o.toString();
+        return s.equals("less") ? -1 : s.equals("greater") ? 1 : 0;
+    }
+
     public static Object negate(Object v) {
         return switch (v) {
             case Int a -> neg(a);

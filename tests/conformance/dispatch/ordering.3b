@@ -1,0 +1,65 @@
+// Ord::cmp returns Ordering ("less" | "equal" | "greater", §16).
+
+enum Size { Small, Large }
+
+struct Version : Eq, Ord, Display {
+    let major: i32;
+    let minor: i32;
+    pub fn eq(self, o: Self) -> bool => self.major == o.major && self.minor == o.minor;
+    pub fn cmp(self, o: Self) -> Ordering {
+        let c = self.major.cmp(o.major);
+        if c != "equal" { return c; }
+        return self.minor.cmp(o.minor);
+    }
+    pub fn to_str(self) -> str => f"{self.major}.{self.minor}";
+}
+
+fn describe<T: Ord + Display>(a: T, b: T) -> str {
+    let rel = match a.cmp(b) {
+        "less" => "<",
+        "equal" => "==",
+        "greater" => ">",
+    };
+    return f"{a} {rel} {b}";
+}
+
+fn largest<T: Ord>(xs: [T]) -> T | null {
+    let mut best: T | null = null;
+    for x in xs {
+        if best is T && x.cmp(best) != "greater" { continue; }
+        best = x;
+    }
+    return best;
+}
+
+fn main() {
+    println(f"{1.cmp(2)} {2_u64.cmp(2_u64)} {(-1_i8).cmp(-2_i8)}");
+    let (b, ab, e) = ("b", "ab", "");
+    println(f"{'a'.cmp('b')} {b.cmp(ab)} {e.cmp(e)}");
+    println(f"{1.5.cmp(0.5)} {(-0.0).cmp(0.0)} {f64::NAN.cmp(f64::INFINITY)}");
+    println(f"{Size::Small.cmp(Size::Large)} {Size::Large.cmp(Size::Large)}");
+    let v1 = Version { major: 1, minor: 9 };
+    let v2 = Version { major: 2, minor: 0 };
+    println(describe(v1, v2));
+    println(describe(v2, v1));
+    println(describe(v1, v1));
+    println(f"{v1 < v2} {v2 <= v1} {v1 >= v1}");
+    println(describe(3, 3));
+    println(describe("pear", "apple"));
+    println(f"{largest([3, 9, 2])} {largest([v1, v2, v1])} {largest([] as [i32])}");
+    println(f"{4.min(7)} {4.max(7)} {2.5.min(-1.0)}");
+    let o: Ordering = 5.cmp(1);
+    println(o.len);
+
+    // Inference keeps a union of literals (§3.6), so matching a bound result needs no `_`.
+    let c = 2.cmp(3);
+    let sign = match c { "less" => -1, "equal" => 0, "greater" => 1 };
+    let cs = [c, 3.cmp(2)];
+    let first: Ordering = cs[0];
+    // A lone literal, or literal arms joined without an expected type, widens to the base type.
+    let mut n = 1 if sign < 0 else 2;
+    n += 5;
+    let mut w = "a" if sign < 0 else "b";
+    w = "zz";
+    println(f"{sign} {first} {n} {w}");
+}
