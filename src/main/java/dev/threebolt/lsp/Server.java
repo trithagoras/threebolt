@@ -122,7 +122,10 @@ public final class Server implements LanguageServer, LanguageClientAware, TextDo
         caps.setRenameProvider(new RenameOptions(true));
         caps.setCodeActionProvider(new CodeActionOptions(List.of(CodeActionKind.QuickFix)));
         caps.setInlayHintProvider(true);
-        caps.setSemanticTokensProvider(new SemanticTokensWithRegistrationOptions(SemanticTokens.LEGEND, false, true));
+        var tokens = new SemanticTokensWithRegistrationOptions(SemanticTokens.LEGEND);
+        tokens.setFull(true);   // whole documents only: no `range` requests
+        tokens.setRange(false);
+        caps.setSemanticTokensProvider(tokens);
         caps.setWorkspaceSymbolProvider(true);
         caps.setImplementationProvider(true);
         caps.setCompletionProvider(new CompletionOptions(false, List.of(".", ":")));

@@ -344,6 +344,14 @@ class ServerTest {
     }
 
     @Test
+    void advertisesOnlyWhatItImplements() throws Exception {
+        var caps = new Server().initialize(new InitializeParams()).get().getCapabilities();
+        var tokens = caps.getSemanticTokensProvider();
+        assertTrue(tokens.getFull().getLeft(), "full-document semantic tokens");
+        assertTrue(tokens.getRange() == null || !tokens.getRange().getLeft(), "no range requests: not implemented");
+    }
+
+    @Test
     void semanticTokensClassifyNames() throws Exception {
         var text = """
                 struct P { pub let x: i32; }
