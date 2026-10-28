@@ -1,0 +1,1 @@
+../ext/impls.3b:3:6: error[E0412]: orphan impl: package 'ext' declares neither 'Default' (package 'std') nor 'Point' (package 'model'), so it cannot be a dependency of 'app'

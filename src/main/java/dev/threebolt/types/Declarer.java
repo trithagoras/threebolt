@@ -16,6 +16,7 @@ import dev.threebolt.diag.Span;
 import dev.threebolt.parse.AstParser;
 import dev.threebolt.resolve.Module;
 import dev.threebolt.resolve.ModulePath;
+import dev.threebolt.resolve.Package;
 import dev.threebolt.resolve.Program;
 import java.io.IOException;
 import java.io.InputStream;
@@ -551,6 +552,7 @@ public final class Declarer {
 
     private void register(ImplInfo impl, Span span) {
         impl.headSpan = span;
+        checkOrphan(impl);
         var existing = ts.addImpl(impl);
         if (existing != null) {
             // Std is declared after user modules; a clash with std is always the user's impl's fault.
@@ -563,6 +565,27 @@ public final class Declarer {
             return;
         }
         userImpls.add(impl);
+    }
+
+    /**
+     * §4.10: an impl must be in the package declaring the trait or the target's type constructor,
+     * unless it is in the application package. Primitives and collections belong to std.
+     */
+    private void checkOrphan(ImplInfo impl) {
+        var pkg = impl.module.pkg();
+        if (pkg.isApplication() || pkg.isStd()) return;
+        var trait = impl.trait.decl();
+        if (owner(trait) == pkg || owner(impl.targetDecl) == pkg) return;
+        var dependent = program.packages().stream().filter(p -> p.dependencies().containsValue(pkg)).findFirst();
+        diagnostics.add(new Diagnostic(Code.ORPHAN_IMPL, impl.headSpan,
+                "orphan impl: package '" + pkg.name() + "' declares neither '" + trait.name() + "' (package '" + owner(trait).name()
+                        + "') nor '" + impl.targetDecl.name() + "' (package '" + owner(impl.targetDecl).name() + "')"
+                        + dependent.map(d -> ", so it cannot be a dependency of '" + d.name() + "'").orElse(""),
+                List.of()));
+    }
+
+    private static Package owner(TypeInfo t) {
+        return t.module == null ? Package.STD : t.module.pkg();
     }
 
     /** Classes after their base classes, so base impls are known when checking subclasses. */

@@ -1,0 +1,10 @@
+[package]
+name = "app"
+
+[[bin]]
+name = "app"
+entry = "main.3b"
+
+[dependencies]
+ext = { path = "../ext" }
+model = { path = "../model" }
