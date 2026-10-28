@@ -26,6 +26,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.Supplier;
 
 /** Expression typing (§7) and lowering. Calls are in {@link Calls}, `match` in {@link Patterns}. */
 final class Exprs {
@@ -112,6 +113,8 @@ final class Exprs {
             case Expr.ListLit l -> listLit(l, expected);
             case Expr.RepeatLit r -> repeat(r, expected);
             case Expr.MapLit m -> mapLit(m, expected);
+            case Expr.ListComp l -> listComp(l, expected);
+            case Expr.MapComp m -> mapComp(m, expected);
             case Expr.Tuple t -> tuple(t, expected);
             case Expr.Typeof t -> new Typed(new Ir.TypeOf(types.resolve(t.type(), c.ctx.typeScope)), typeType());
             case Expr.Nameof n -> {
@@ -1255,7 +1258,8 @@ final class Exprs {
         var target = types.resolve(e.type(), c.ctx.typeScope);
         // Collection literals take the cast's type as their expected type (§7.9): `[] as [i32]`.
         boolean literal = e.operand() instanceof Expr.ListLit || e.operand() instanceof Expr.MapLit
-                || e.operand() instanceof Expr.RepeatLit;
+                || e.operand() instanceof Expr.RepeatLit || e.operand() instanceof Expr.ListComp
+                || e.operand() instanceof Expr.MapComp;
         var t = expr(e.operand(), literal && target != Type.ERROR ? target : null);
         var resultType = e.isChecked() ? TypeSystem.union(target, Type.NULL) : target;
         if (t.type() == Type.ERROR || target == Type.ERROR) return new Typed(t.ir(), target == Type.ERROR ? Type.ERROR : resultType);
@@ -1677,6 +1681,105 @@ final class Exprs {
         return new Typed(new Ir.NewMap(key, value, keys, values), new Type.Nominal(ts.map, List.of(key, value)));
     }
 
+    // ---- Comprehensions (§7.7) ----
+
+    private Typed listComp(Expr.ListComp l, Type expected) {
+        var target = collectionTarget(expected);
+        if (target != null && (target.want() == Want.ARRAY || target.want() == Want.MAP)) {
+            diag.error(Code.TYPE_MISMATCH, l.span(), "a comprehension cannot create a '" + expected + "'"
+                    + (target.want() == Want.MAP ? "; write `[k: v for ...]`" : ": its length is not known"));
+            return comprehension(l.clauses(), new ArrayList<>(), () -> {
+                expr(l.element(), null);
+                return error();
+            });
+        }
+        var want = target == null ? Want.LIST : target.want();
+        var element = target == null ? null : target.element();
+        var clauses = new ArrayList<Ir.CompClause>();
+        return comprehension(l.clauses(), clauses, () -> {
+            Ir.Expr value;
+            Type type = element;
+            if (type != null) {
+                value = c.check(l.element(), type);
+            } else {
+                var t = expr(l.element(), null);
+                if (t.type() == Type.ERROR) return error();
+                type = TypeSystem.widenInferred(t.type());
+                value = c.coerce(t, type, l.element().span());
+            }
+            if (want == Want.SET) {
+                requireHashEq(type, l.span());
+                return new Typed(new Ir.ListComp(Ir.CollectionKind.SET, type, clauses, value), new Type.Nominal(ts.set, List.of(type)));
+            }
+            return new Typed(new Ir.ListComp(Ir.CollectionKind.LIST, type, clauses, value), ts.listOf(type));
+        });
+    }
+
+    private Typed mapComp(Expr.MapComp m, Type expected) {
+        var target = collectionTarget(expected);
+        if (target != null && target.want() != Want.MAP) {
+            diag.error(Code.TYPE_MISMATCH, m.span(), "a map comprehension cannot create a '" + expected + "'");
+            return comprehension(m.clauses(), new ArrayList<>(), () -> {
+                expr(m.entry().key(), null);
+                expr(m.entry().value(), null);
+                return error();
+            });
+        }
+        var known = target;
+        var clauses = new ArrayList<Ir.CompClause>();
+        return comprehension(m.clauses(), clauses, () -> {
+            var entry = m.entry();
+            Type key;
+            Type value;
+            Ir.Expr keyIr;
+            Ir.Expr valueIr;
+            if (known != null) {
+                key = known.key();
+                value = known.value();
+                keyIr = c.check(entry.key(), key);
+                valueIr = c.check(entry.value(), value);
+            } else {
+                var k = expr(entry.key(), null);
+                var v = expr(entry.value(), null);
+                if (k.type() == Type.ERROR || v.type() == Type.ERROR) return error();
+                key = TypeSystem.widenInferred(k.type());
+                value = TypeSystem.widenInferred(v.type());
+                keyIr = c.coerce(k, key, entry.key().span());
+                valueIr = c.coerce(v, value, entry.value().span());
+            }
+            requireHashEq(key, m.span());
+            return new Typed(new Ir.MapComp(key, value, clauses, keyIr, valueIr), new Type.Nominal(ts.map, List.of(key, value)));
+        });
+    }
+
+    /**
+     * Checks the clauses into {@code out}, each in a scope nested in the previous one's, with the
+     * filters' narrowing applied to what follows them, then the element ({@code body}) inside them all.
+     */
+    private Typed comprehension(List<Expr.CompClause> clauses, List<Ir.CompClause> out, Supplier<Typed> body) {
+        var ctx = c.ctx;
+        var outer = ctx.scope;
+        var saved = ctx.narrowed;
+        try {
+            for (var clause : clauses) {
+                var iteration = c.iteration(clause.iterable());
+                ctx.scope = new Checker.Scope(ctx.scope);
+                var pattern = c.patterns.irrefutable(clause.pattern(), iteration.element());
+                Ir.Expr filter = null;
+                if (clause.filter() != null) {
+                    var cond = condition(clause.filter());
+                    filter = cond.ir();
+                    ctx.narrowed = Checker.with(ctx.narrowed, cond.whenTrue());
+                }
+                out.add(new Ir.CompClause(pattern, iteration.iterator(), filter));
+            }
+            return body.get();
+        } finally {
+            ctx.scope = outer;
+            ctx.narrowed = saved;
+        }
+    }
+
     private Typed tuple(Expr.Tuple t, Type expected) {
         List<Type> expectedElems = null;
         if (expected != null) {
@@ -1695,9 +1798,10 @@ final class Exprs {
                 irs.add(c.check(e, expectedElems.get(i)));
                 typesOut.add(expectedElems.get(i));
             } else {
+                // Literal element types widen (§3.6), so `[(1, "a")]` is a `[(i32, str)]`.
                 var typed = expr(e, null);
                 irs.add(typed.ir());
-                typesOut.add(typed.type());
+                typesOut.add(TypeSystem.widenInferred(typed.type()));
                 bad |= typed.type() == Type.ERROR;
             }
         }

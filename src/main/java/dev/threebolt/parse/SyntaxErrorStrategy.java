@@ -29,7 +29,24 @@ final class SyntaxErrorStrategy extends DefaultErrorStrategy {
         if (startsInitializer(recognizer, t)) {
             message += " (an initializer in an if/while/for/match head must be parenthesized)";
         }
-        report(recognizer, t, message);
+        report(recognizer, t, message + comprehensionHint(recognizer, t));
+    }
+
+    /** A hint for an `else` after a comprehension's `for`: a conditional iterable or filter (§17.19). */
+    private static String comprehensionHint(Parser recognizer, Token t) {
+        if (t.getType() != ELSE) return "";
+        for (var ctx = recognizer.getContext(); ctx != null; ctx = ctx.getParent()) {
+            if (ctx instanceof ThreeboltParser.CollectionLiteralContext c) {
+                var in = recognizer.getInputStream();
+                for (int i = c.getStart().getTokenIndex(); i < t.getTokenIndex(); i++) {
+                    if (in.get(i).getType() == FOR) {
+                        return " (a conditional in a comprehension's iterable or filter must be parenthesized)";
+                    }
+                }
+                return "";
+            }
+        }
+        return "";
     }
 
     /** {@code t} begins `{...}` or `Name {...}` where §6.3 forbids initializers. */
@@ -42,7 +59,8 @@ final class SyntaxErrorStrategy extends DefaultErrorStrategy {
 
     @Override
     protected void reportInputMismatch(Parser recognizer, InputMismatchException e) {
-        report(recognizer, e.getOffendingToken(), mismatch(e.getOffendingToken(), e.getExpectedTokens()));
+        report(recognizer, e.getOffendingToken(), mismatch(e.getOffendingToken(), e.getExpectedTokens())
+                + comprehensionHint(recognizer, e.getOffendingToken()));
     }
 
     @Override
@@ -59,7 +77,7 @@ final class SyntaxErrorStrategy extends DefaultErrorStrategy {
         if (inErrorRecoveryMode(recognizer)) return;
         beginErrorCondition(recognizer);
         Token t = recognizer.getCurrentToken();
-        report(recognizer, t, mismatch(t, getExpectedTokens(recognizer)));
+        report(recognizer, t, mismatch(t, getExpectedTokens(recognizer)) + comprehensionHint(recognizer, t));
     }
 
     @Override

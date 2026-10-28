@@ -215,6 +215,24 @@ class CompletionTest {
     }
 
     @Test
+    void comprehensionBindingsBeforeTheirClause() throws Exception {
+        // The element comes first in the source but is checked after the clauses that bind it.
+        var names = names(complete("""
+                use shapes::Point;
+                fn pick(vs: [Point | str]) -> [i32] {
+                    return [v.‸ for v in vs if v is Point];
+                }
+                fn main() {}
+                """));
+        assertTrue(names.containsAll(List.of("x", "dist")), names.toString());
+        var locals = names(complete("""
+                fn f(xs: [i32]) -> [i32] => [ite‸ for item in xs];
+                fn main() {}
+                """));
+        assertTrue(locals.contains("item"), locals.toString());
+    }
+
+    @Test
     void genericReceiverIsInstantiated() throws Exception {
         var items = complete("""
                 fn main() {

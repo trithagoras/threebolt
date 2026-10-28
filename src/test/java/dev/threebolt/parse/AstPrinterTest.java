@@ -105,6 +105,16 @@ class AstPrinterTest {
     }
 
     @Test
+    void comprehensions() {
+        assertEquals("[x + 1 for x in xs if x % 2 == 0]", expr("[(x + 1) for x in xs if (x % 2 == 0)]"));
+        assertEquals("[(x, y) for x in xs, y in ys if x != y]", expr("[(x, y) for x in xs, y in ys if x != y]"));
+        assertEquals("[k: v for (k, v) in m]", expr("[k: v for (k, v) in m]"));
+        assertEquals("[a if c else b for x in (p if q else r) if (s if t else u)]",
+                expr("[a if c else b for x in (p if q else r) if (s if t else u)]"));
+        assertEquals("[f for x in xs if (y => y)(x)]", expr("[f for x in xs if (y => y)(x)]"));
+    }
+
+    @Test
     void orPatternsWithIsTypes() {
         assertEquals("match x {\n    (a is A) | b => 1,\n    a is A | B => 2,\n}",
                 expr("match x { (a is A) | b => 1, a is A | B => 2 }"));

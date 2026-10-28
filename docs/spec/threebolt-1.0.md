@@ -161,7 +161,7 @@ Generic types are **invariant**: `[Dog]` is not assignable to `[Animal]`. `fn` t
 - Everything else requires `as` (§7.9).
 - Integer literals adopt the expected type if it is an integer or float type and the value fits (error if not). Float literals adopt an expected float type. Against a numeric type parameter, see §10.1. With no expected type: integer → `i32`, float → `f64`.
 - Against a union expected type, an unsuffixed integer literal takes: an equal literal member if there is one; else `i32` if it is a member and the value fits; else the first integer or float member (in declaration order) that the value fits. `let w: i64 | str = 5;` stores an `i64`.
-- Inference widens a literal type to its base type: `let d = "left";` has type `str`; `let d: Direction = "left";` has type `Direction`. A union with literal members is kept, since it comes from a declared type: `let o = a.cmp(b);` has type `Ordering`, and `match o` is exhaustive over its three members. This applies wherever a type is inferred from a value (`let`, `if let`/`while let`, pattern bindings, collection literal elements, lambda returns). Without an expected type, the arms of `if`/`else` and `match` expressions are widened this way before they are joined: `let n = 1 if c else 2;` has type `i32`.
+- Inference widens a literal type to its base type: `let d = "left";` has type `str`; `let d: Direction = "left";` has type `Direction`. A union with literal members is kept, since it comes from a declared type: `let o = a.cmp(b);` has type `Ordering`, and `match o` is exhaustive over its three members. This applies wherever a type is inferred from a value (`let`, `if let`/`while let`, pattern bindings, collection literal elements, the elements of a tuple expression, lambda returns): `[(1, "a")]` is a `[(i32, str)]`. Without an expected type, the arms of `if`/`else` and `match` expressions are widened this way before they are joined: `let n = 1 if c else 2;` has type `i32`.
 
 ---
 
@@ -470,6 +470,11 @@ Bitwise binds tighter than comparison (no C precedence trap).
 ### 7.7 Literals
 - Tuple `(a, b)`; access `.0`, `.1` (a plain decimal: no suffix, `_` or leading zeros).
 - Collection `[a, b, c]`, repeat `[v; n]`, map `[k: v, k2: v2]`, empty map `[:]`. **Target-typed:** `[...]` builds `[T]`, `Set<T>`, or `[T; N]` according to the expected type (default `[T]`); `[]` is valid for any expected collection type (`Map` included), error without one. `[k: v]` builds `Map<K, V>`. `[v; n]` builds `[T; N]` when the expected type is an array (`n` then must equal `N`), else a `[T]` of `n` copies (`n: usize`, evaluated at runtime).
+- **Comprehension** `[e for p in it if c]`, `[k: v for p in it if c]`: one or more comma-separated **clauses** `p in it`, each with an optional filter `if c`: `[(x, y) for x in xs if x > 0, y in ys if y != x]`. It is equivalent to nested `for` loops (§6.4), the first clause outermost, each filter an `if` around the clauses after it, that add `e` (or the entry `k: v`) to a new collection innermost:
+  - Each `it` is iterated as by `for` (`Iterable<T>` or `Iterator<T>`) and evaluated afresh for each iteration of the clause before it; each `p` is an irrefutable pattern bound afresh per iteration, so closures capture per-iteration variables. A clause's iterable and filter, and `e`, see the bindings of the clauses before them: `[cell for row in grid, cell in row]`.
+  - A filter follows §6.6 and narrows (§9) the later clauses and `e`; an `is` pattern's bindings are in scope there: `[s.len for s in items if s is str]` is a `[usize]`, `[v for n in nodes if n is Leaf { v }]`.
+  - The bindings are scoped to the comprehension. It is not a lambda: `?` inside it propagates from the enclosing function (§7.10).
+  - Target-typed like a literal: `[T]` (the default) or `Set<T>` (duplicates dropped); the entry form builds `Map<K, V>` (a later duplicate key replaces the value). An array or map target for the element form, or a non-map target for the entry form, is an error. Without an expected type, the element type is `e`'s type with literal types widened (§3.6).
 - Initializers per §4.7.
 
 ### 7.8 Lambdas
@@ -498,7 +503,7 @@ x => { let y = x * 2; return y; }
   - upcast: always succeeds (redundant but permitted).
 - `x as? T`: same checks for non-numeric conversions, yielding `T | null` instead of panicking (integer → `char` yields `null` for a non-scalar value). It is also accepted on numeric casts, which never yield `null`. If `T` already contains `null`, a null `x` is indistinguishable from failure.
 - A cast that can never succeed statically ⇒ error.
-- A collection literal operand (`[...]`, `[v; n]`, `[k: v]`, `[]`, `[:]`) takes `T` as its expected type (§7.7): `[] as [i32]`, `[:] as Map<str, i32>`.
+- A collection literal or comprehension operand (`[...]`, `[v; n]`, `[k: v]`, `[]`, `[:]`, `[e for …]`) takes `T` as its expected type (§7.7): `[] as [i32]`, `[:] as Map<str, i32>`.
 
 ### 7.10 `?` propagation
 - Postfix `e?` where `e: U`. Let `F` = members of `U` that are `null` or implement `Err`. If `F` is empty ⇒ error.
@@ -551,7 +556,7 @@ For `x.m(...)`: inherent methods of `x`'s static type (and base classes), then m
 ## 9. Narrowing
 
 - Applies to: locals, parameters, and `self`. Not to fields (always potentially mutable through aliases), statics, indexers, or getter results — bind first: `if let p = self.parent { p.x }`.
-- Narrowing sources: `x is pattern` (bindings as §7.3; in the true branch `x` also narrows to the types the pattern can match, e.g. `[T]` for a list pattern on `[T] | null`), `x is T` (true branch → `x: T` if `T` is a member or subtype of `x`'s type, else narrowed to `T` itself; false branch removes `T`'s members from a union), `x == null` / `x != null`, `x == literal` (literal unions), truthy test (§6.6), `if let`, match arms, `&&`/`||` composition, `!`.
+- Narrowing sources: `x is pattern` (bindings as §7.3; in the true branch `x` also narrows to the types the pattern can match, e.g. `[T]` for a list pattern on `[T] | null`), `x is T` (true branch → `x: T` if `T` is a member or subtype of `x`'s type, else narrowed to `T` itself; false branch removes `T`'s members from a union), `x == null` / `x != null`, `x == literal` (literal unions), truthy test (§6.6), `if let`, match arms, comprehension filters (§7.7), `&&`/`||` composition, `!`.
 - **Flow sensitivity:** narrowing persists after an `if` whose branch diverges (`return`, `break`, `continue`, panic): `if x == null { return; } x.use();`.
 - Assignment to a narrowed `let mut` local resets its type to the assigned value's type.
 - Inside a lambda, captured `let mut` variables are not narrowed.
@@ -790,6 +795,7 @@ Implicitly imported names:
 16. The assembled operators `>=`, `>>`, `>>=` may not contain whitespace (`a > = b` is an error).
 17. Inside index brackets, a range may omit either bound or both (`xs[1..]`, `xs[..n]`, `xs[..]`, §7.6); `..=` requires an upper bound.
 18. After `is`, a pattern follows iff the next tokens are `[`, `(`, a path followed by `{` (where initializers are allowed, §6.3), or a literal (optionally negated) followed by `..`/`..=`; otherwise a type follows (§7.3).
+19. In a comprehension (§7.7) each iterable and filter is an expression at `??` precedence or tighter, like a match guard (note 14), so after an iterable `if` starts its filter and `,` the next clause: `[x for x in (a if c else b)]`. The element (or entry) is any expression; `for` ends it.
 
 ---
 
@@ -1039,3 +1045,9 @@ Semantics the spec left open, decided while implementing:
 ### 2026-10-28 — `std::net`
 - §16 New module `std::net`: `Ipv4Addr`, `Ipv6Addr`, `IpAddr`, `SocketAddr` (parsing and printing), `lookup`, `TcpListener` (`accept`, `incoming`, `serve`), `TcpStream` (`Read + Write`), `UdpSocket`, and `NetErr : IoErr` with its subclasses.
 - §16 `ClosedErr`'s message names what is closed (`socket is closed`); files are unchanged.
+
+### 2026-10-29 — tuple elements widen
+- §3.6 A tuple expression without an expected tuple type widens its literal element types, so `[(1, "a"), (2, "b")]` infers `[(i32, str)]` (was: a type error).
+
+### 2026-10-29 — comprehensions
+- §7.7 Comprehensions `[e for p in it if c, …]` and `[k: v for …]`: comma-separated clauses nesting left to right, each with an optional filter; target-typed to `[T]`, `Set<T>` or `Map<K, V>`; filters narrow (§9); `?` propagates from the enclosing function. §7.9 casts target-type them; §17 note 19.

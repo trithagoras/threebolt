@@ -539,8 +539,16 @@ public final class AstBuilder {
             case MapCollectionContext c -> new Expr.MapLit(map(c.mapEntry(), e ->
                     new Expr.MapEntry(expr(e.expr(0)), expr(e.expr(1)), span(e))), span);
             case ListCollectionContext c -> new Expr.ListLit(map(c.expr(), this::expr), span);
+            case MapComprehensionContext c -> new Expr.MapComp(new Expr.MapEntry(expr(c.mapEntry().expr(0)),
+                    expr(c.mapEntry().expr(1)), span(c.mapEntry())), compClauses(c.compClauses()), span);
+            case ListComprehensionContext c -> new Expr.ListComp(expr(c.expr()), compClauses(c.compClauses()), span);
             default -> throw unexpected(ctx);
         };
+    }
+
+    private List<Expr.CompClause> compClauses(CompClausesContext ctx) {
+        return map(ctx.compClause(), c -> new Expr.CompClause(pattern(c.pattern()), coalesce(c.coalesceExpr(0)),
+                c.coalesceExpr().size() > 1 ? coalesce(c.coalesceExpr(1)) : null, span(c)));
     }
 
     private Expr.Match match(MatchExprContext ctx) {

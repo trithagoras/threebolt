@@ -155,6 +155,16 @@ public final class Ir {
     /** {@code [value; count]}. */
     public record Repeat(CollectionKind kind, Type element, Expr value, Expr count, Span span) implements Expr {}
 
+    /** A comprehension clause: {@code iterator} as for {@link For}; {@code filter} is null without {@code if}. */
+    public record CompClause(Pat pattern, Expr iterator, Expr filter) {}
+
+    /** {@code [value for ...]} (§7.7): the clauses as nested loops, adding {@code value} innermost. */
+    public record ListComp(CollectionKind kind, Type element, List<CompClause> clauses, Expr value) implements Expr {}
+
+    /** {@code [keyValue: valueValue for ...]} (§7.7). */
+    public record MapComp(Type key, Type value, List<CompClause> clauses, Expr keyValue, Expr valueValue)
+            implements Expr {}
+
     public record Tuple(List<Expr> elements) implements Expr {}
 
     public record TypeOf(Type type) implements Expr {}

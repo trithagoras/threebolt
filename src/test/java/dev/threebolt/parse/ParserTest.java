@@ -210,6 +210,22 @@ class ParserTest {
     }
 
     @Test
+    void comprehensions() {
+        assertEquals("(listComprehension [ x (compClauses for (compClause x in xs if (comparisonExpr x > 0))) ])",
+                expr("[x for x in xs if x > 0]"));
+        assertEquals("(listComprehension [ c (compClauses for (compClause r in g) , (compClause c in r)) ])",
+                expr("[c for r in g, c in r]"));
+        assertEquals("(mapComprehension [ (mapEntry k : v) (compClauses for (compClause (tuplePattern ( k , v )) in m)) ])",
+                expr("[k: v for (k, v) in m]"));
+        // The element may be a conditional; iterables and filters stop below it (§17.19).
+        assertEquals("(listComprehension [ (conditionalExpr a if c else b) (compClauses for (compClause x in xs)) ])",
+                expr("[a if c else b for x in xs]"));
+        assertEquals(new ParseError(1, 20,
+                        "unexpected 'else' (a conditional in a comprehension's iterable or filter must be parenthesized)"),
+                errors("[x for x in a if c else b]", ThreeboltParser::exprOnly).getFirst());
+    }
+
+    @Test
     void initializerWithSpread() {
         assertEquals("(namedInitExpr Vec2 (initializer { (namedField x : 1.0) , (spreadField .. base) }))",
                 expr("Vec2 { x: 1.0, ..base }"));
