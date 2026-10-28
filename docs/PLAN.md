@@ -18,10 +18,11 @@ threebolt/
   settings.gradle.kts, build.gradle.kts, gradlew
   src/main/antlr/dev/threebolt/parser/ThreeboltLexer.g4, ThreeboltParser.g4
   src/main/java/dev/threebolt/
-    Main.java                 // CLI: `threebolt run <file.3b> [args]`, `threebolt parse|tokens <file>`
+    Main.java                 // CLI `bolt`: new, add, run [bin | file.3b] [-- args], check, debug tokens|parse|ast|print, lsp
+    project/                  // package.toml / workspace.toml (night-config), finding the project, `bolt new`/`add`
     ast/                      // sealed-interface + record AST, Span
     parse/                    // ParseTree -> AST builder, error listener
-    resolve/                  // modules, `use`, scopes, symbol tables
+    resolve/                  // packages, modules, `use`, scopes, symbol tables
     types/                    // type representations, checker, narrowing, overloads
     interp/                   // tree-walking evaluator, runtime values
     runtime/                  // stdlib/prelude natives, FFI (FFM), threads

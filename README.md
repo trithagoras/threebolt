@@ -34,10 +34,10 @@ Build the interpreter once:
 ./gradlew installDist
 ```
 
-This puts a launcher at `build/install/threebolt/bin/threebolt`. Put that directory on your `PATH` or alias it:
+This puts the `bolt` launcher at `build/install/bolt/bin/bolt`. Put that directory on your `PATH` or alias it:
 
 ```sh
-alias threebolt="$PWD/build/install/threebolt/bin/threebolt"
+alias bolt="$PWD/build/install/bolt/bin/bolt"
 ```
 
 Rerun `./gradlew installDist` after changing the interpreter or the standard library.
@@ -47,17 +47,43 @@ Rerun `./gradlew installDist` after changing the interpreter or the standard lib
 Save the example above as `hello.3b`, then:
 
 ```sh
-threebolt run hello.3b           # Hello, world!
-threebolt run hello.3b bolt      # Hello, bolt!
+bolt run hello.3b              # Hello, world!
+bolt run hello.3b -- bolt      # Hello, bolt!
 ```
 
-Everything after the file name goes to `main(args: [str])`. The program is the file you name plus every module it reaches through `use` or a fully-qualified path. Modules are found relative to the entry file's directory (`use game::entity;` loads `game/entity.3b`):
+Everything after `--` goes to `main(args: [str])`. The program is the file you name plus every module it reaches through `use` or a fully-qualified path. Without a `package.toml` in the current directory, modules are found relative to the entry file's directory (`use game::entity;` loads `game/entity.3b`):
 
 ```sh
-threebolt run examples/arena/main.3b          # 5 rounds
-threebolt run examples/arena/main.3b quick    # 3 rounds
-threebolt run examples/arena/main.3b 7
+bolt run examples/arena/main.3b             # 5 rounds
+bolt run examples/arena/main.3b -- quick    # 3 rounds
+bolt run examples/arena/main.3b -- 7
 ```
+
+### Packages
+
+A directory holding a `package.toml` is a package (spec §2.5): its modules are named from that directory, and it can depend on other packages by path. `bolt` looks for `package.toml` (or a `workspace.toml` listing member packages) in the current directory only, or in `--project <dir>`:
+
+```sh
+bolt new game                  # game/package.toml with a hello-world [[bin]] and main.3b
+bolt new shared --lib          # a package with no bin, to depend on
+cd game && bolt add ../shared  # [dependencies] shared = { path = "../shared" }
+bolt run                       # the only bin; or `bolt run game`, or `bolt run scripts/seed.3b`
+bolt check                     # every bin (a library: every module)
+```
+
+```toml
+[package]
+name = "game"
+
+[[bin]]
+name = "game"
+entry = "main.3b"
+
+[dependencies]
+shared = { path = "../shared" }   # then: use shared::model::User;
+```
+
+`bolt new <name> --workspace` creates a `workspace.toml`; `bolt new` run inside one adds the new package to its `members`.
 
 Exit codes:
 
@@ -69,16 +95,16 @@ Exit codes:
 | `n` | `std::process::exit(n)` |
 | 2 | bad command line |
 
-You can also skip the install step and run through Gradle (slower to start): `./gradlew run --args="run examples/arena/main.3b quick"`.
+You can also skip the install step and run through Gradle (slower to start): `./gradlew run --args="run examples/arena/main.3b -- quick"`.
 
 ### Other commands
 
 ```sh
-threebolt check  file.3b   # load and type-check without running; prints diagnostics
-threebolt tokens file.3b   # token stream
-threebolt parse  file.3b   # parse tree
-threebolt ast    file.3b   # AST
-threebolt print  file.3b   # AST printed back as source
+bolt check file.3b          # load and type-check without running; prints diagnostics
+bolt debug tokens file.3b   # token stream
+bolt debug parse  file.3b   # parse tree
+bolt debug ast    file.3b   # AST
+bolt debug print  file.3b   # AST printed back as source
 ```
 
 Diagnostics have stable codes (`error[E0200]: expected 'i32', found 'str'`) and point at the source with a caret.

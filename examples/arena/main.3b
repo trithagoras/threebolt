@@ -1,5 +1,5 @@
 // main.3b — two fighters slug it out.
-//   threebolt run main.3b [quick | full | <rounds>]
+//   bolt run main.3b -- [quick | full | <rounds>]
 
 use config::{parse_rounds, BadRounds};
 use dice;

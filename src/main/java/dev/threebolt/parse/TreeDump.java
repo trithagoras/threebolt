@@ -7,7 +7,7 @@ import org.antlr.v4.runtime.tree.ParseTree;
 import org.antlr.v4.runtime.tree.TerminalNode;
 
 /**
- * Compact s-expression rendering of a parse tree, used by `threebolt parse` and the parser tests.
+ * Compact s-expression rendering of a parse tree, used by `bolt debug parse` and the parser tests.
  * Rule nodes with a single child are elided, so {@code 1 + 2 * 3} renders as
  * {@code (additiveExpr 1 + (multiplicativeExpr 2 * 3))}. Labeled alternatives show their label.
  */

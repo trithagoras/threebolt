@@ -3,7 +3,7 @@
 Support for `.3b` files:
 
 - **Syntax highlighting**: a TextMate grammar (`syntaxes/threebolt.tmLanguage.json`) that follows `ThreeboltLexer.g4`, plus comment toggling, bracket matching and auto-closing (`language-configuration.json`).
-- **Language server** (`threebolt lsp`, bundled as `server/threebolt.jar`): errors as you type, across every file of the program; outline; hover with types and signatures; go to definition (including into std); find references; highlight uses; rename; completion after `.`, `::` and on names (including `use` paths); signature help in calls.
+- **Language server** (`bolt lsp`, bundled as `server/threebolt.jar`): errors as you type, across every file of the program; outline; hover with types and signatures; go to definition (including into std); find references; highlight uses; rename; completion after `.`, `::` and on names (including `use` paths); signature help in calls.
 
 Not published; install it locally.
 

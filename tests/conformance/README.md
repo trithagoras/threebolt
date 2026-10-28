@@ -25,7 +25,7 @@ Threebolt programs with their expected results, run by `ConformanceTest` (`./gra
 - `./gradlew test -PupdateGolden` rewrites the `.err` files from the current output. Review the
   diff: a changed expectation is a deliberate decision.
 
-A case without errors (warnings are fine) is then run (its `main`, as `threebolt run` would):
+A case without errors (warnings are fine) is then run (its `main`, as `bolt run` would):
 
 - `<case>.out` is the expected stdout and `<case>.stderr` the expected stderr (panic messages and
   traces, `main`'s error message); a missing file means empty.
