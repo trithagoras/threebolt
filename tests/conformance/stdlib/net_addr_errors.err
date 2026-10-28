@@ -1,0 +1,5 @@
+net_addr_errors.3b:5:27: error[E0201]: literal 256 does not fit in 'u8' (range 0..255)
+net_addr_errors.3b:7:16: error[E0214]: cannot access 'octets' on a value of union type 'Ipv4Addr | Ipv6Addr': no union-safe trait that every member implements has it (§3.4); narrow it first (§9)
+net_addr_errors.3b:8:5: error[E0211]: this value of type 'SocketAddr | AddrParseErr' may be an error; handle it, propagate it with `?`, or discard it with `_ = ...;`
+net_addr_errors.3b:9:23: error[E0200]: expected 'Ipv4Addr', found 'Ipv4Addr | AddrParseErr'
+net_addr_errors.3b:10:33: error[E0201]: literal 70000 does not fit in 'u16' (range 0..65535)

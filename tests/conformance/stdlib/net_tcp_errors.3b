@@ -1,0 +1,14 @@
+// std::net TCP misuse.
+use std::net::{TcpListener, TcpStream};
+use std::time::Duration;
+
+fn main() -> () | Err {
+    let s = TcpStream::connect(8080);
+    let mut l = TcpListener::bind("127.0.0.1:0")?;
+    l.accept().read_line();
+    let mut c = TcpStream::connect(l.local_addr)?;
+    c.set_read_timeout(500)?;
+    c.write_line("x");
+    let t = TcpStream::connect(l.local_addr, Duration::from_secs(1));
+    c.local_addr = l.local_addr;
+}

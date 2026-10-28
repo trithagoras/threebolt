@@ -1,0 +1,4 @@
+io_traits_errors.3b:4:14: error[E0403]: 'Half' is missing 'read_bytes()' required by trait 'Read'
+io_traits_errors.3b:4:14: error[E0403]: 'Half' is missing 'read_bytes(usize)' required by trait 'Read'
+io_traits_errors.3b:10:12: error[E0403]: 'write' does not match the signature required by trait 'Write'
+io_traits_errors.3b:15:19: error[E0200]: expected 'Read', found 'i32'

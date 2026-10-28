@@ -35,9 +35,9 @@ final class Threads {
 
     Object call(String owner, String name, Object self, Object[] a, Map<TypeParamInfo, Type> typeEnv, FnInfo fn) {
         return switch (owner + "." + name) {
-            case "thread.sleep" -> {
+            case "thread.sleep_nanos" -> {
                 try {
-                    Thread.sleep(((Int) a[0]).v());
+                    Thread.sleep(java.time.Duration.ofNanos(Math.max(0, ((Int) a[0]).v())));
                 } catch (InterruptedException e) {
                     throw new Callbacks.Abort();
                 }

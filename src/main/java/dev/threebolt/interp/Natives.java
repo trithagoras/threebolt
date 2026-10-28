@@ -66,7 +66,12 @@ final class Natives {
                 rt.checkAbort();
                 yield io.call(name, a);
             }
+            case "net" -> {
+                rt.checkAbort();
+                yield io.callNet(name, a);
+            }
             case "random" -> new Int(Prim.U64, ENTROPY.nextLong());
+            case "time" -> new Int(Prim.I64, name.equals("monotonic_nanos") ? System.nanoTime() : wallNanos());
             // Collections lock themselves per operation (§13.4), but not around a callback.
             case "List" -> name.equals("with_ptr") ? ffi.withPtr(recv, (Values.FnVal) a[0])
                     : name.equals("join") ? join(recv, a[0].toString())
@@ -79,7 +84,8 @@ final class Natives {
             case "float" -> floating(name, recv, a, fn);
             case "str" -> name.equals("from_cstr") || name.equals("to_cstr") ? ffi.intrinsic("str", name, recv, a, typeEnv, fn)
                     : name.equals("from_chars") ? fromChars(a[0], fn)
-                    : name.equals("from_utf8") ? fromUtf8((ListVal) a[0]) : str(name, (Str) recv, a);
+                    : name.equals("from_utf8") ? fromUtf8((ListVal) a[0])
+                    : name.equals("to_utf8") ? toUtf8((Str) recv) : str(name, (Str) recv, a);
             case "char" -> character(name, (Char) recv, a);
             case "bool" -> switch (name) {
                 case "hash" -> new Int(Prim.U64, Ops.mix(((Boolean) recv) ? 1 : 0));
@@ -107,6 +113,13 @@ final class Natives {
             for (int i = 0; i < b.length; i++) b[i] = (byte) ((Int) bytes.items.get(i)).v();
         }
         return Str.of(new String(b, StandardCharsets.UTF_8));
+    }
+
+    /** {@code s.to_utf8()}. */
+    private static ListVal toUtf8(Str s) {
+        var items = new ArrayList<Object>();
+        for (byte b : s.toString().getBytes(StandardCharsets.UTF_8)) items.add(new Int(Prim.U8, b & 0xff));
+        return new ListVal(Prim.U8, items);
     }
 
     /** {@code xs.join(sep)}: `to_str` runs user code, so it is called outside the list's lock. */
@@ -453,6 +466,12 @@ final class Natives {
     }
 
     // ---- std::math, std::random ----
+
+    /** Nanoseconds since the Unix epoch. */
+    private static long wallNanos() {
+        var now = java.time.Instant.now();
+        return now.getEpochSecond() * 1_000_000_000L + now.getNano();
+    }
 
     private static final java.security.SecureRandom ENTROPY = new java.security.SecureRandom();
 

@@ -44,7 +44,7 @@ import java.util.function.Function;
 public final class ModuleLoader {
     /** The std modules that exist; `std::a::b` is the resource `std/a/b.3b`. */
     public static final Set<String> STD_MODULES = Set.of(
-            "prelude", "collections", "c", "process", "thread", "sync", "math", "random", "io");
+            "prelude", "collections", "c", "process", "thread", "sync", "math", "random", "io", "time", "net");
 
     private static final ModulePath PRELUDE = ModulePath.of("prelude");
     private static final ModulePath COLLECTIONS = ModulePath.of("collections");

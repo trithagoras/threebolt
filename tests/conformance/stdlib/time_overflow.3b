@@ -1,0 +1,8 @@
+// §16 std::time: Duration arithmetic outside the i64 range panics.
+//! exit: 101
+use std::time::Duration;
+
+fn main() {
+    println(Duration::MAX - Duration::from_nanos(1));
+    println(Duration::MAX + Duration::from_nanos(1));
+}

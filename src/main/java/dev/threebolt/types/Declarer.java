@@ -696,6 +696,14 @@ public final class Declarer {
 
     // ---- Declaration checks ----
 
+    /** A trait member's name, with its parameter types when it is one of several overloads. */
+    private static String overloadName(String name, FnInfo f, int overloads) {
+        if (overloads == 1) return name;
+        var params = new ArrayList<String>();
+        for (var p : f.params) params.add(p.type().toString());
+        return name + "(" + String.join(", ", params) + ")";
+    }
+
     /** An impl provides each required member of its trait with the exact signature (§4.9). */
     private void checkImpl(ImplInfo impl) {
         var trait = impl.trait.decl();
@@ -711,13 +719,14 @@ public final class Declarer {
                 }
                 if (match != null) {
                     provided.computeIfAbsent(name, k -> new ArrayList<>()).add(match);
-                } else if (!impl.methods.getOrDefault(name, List.of()).isEmpty()) {
+                } else if (!impl.methods.getOrDefault(name, List.of()).isEmpty() && e.getValue().size() == 1) {
                     var c = impl.methods.get(name).getFirst();
                     diagnostics.error(Code.MISSING_TRAIT_MEMBER, c.ast.name().span(),
                             "'" + name + "' does not match the signature required by trait '" + trait.name() + "'");
                 } else if (!required.hasBody()) {
                     diagnostics.error(Code.MISSING_TRAIT_MEMBER, implSpan(impl),
-                            "'" + impl.targetDecl.name() + "' is missing '" + name + "' required by trait '" + trait.name() + "'");
+                            "'" + impl.targetDecl.name() + "' is missing '" + overloadName(name, required, e.getValue().size())
+                                    + "' required by trait '" + trait.name() + "'");
                 }
             }
         }

@@ -76,9 +76,9 @@ pub class NotEmptyErr : IoErr {
     pub fn new(path: str | null) -> Self => { ..IoErr::new("directory not empty", path: path) };
 }
 
-/// The file has been closed.
+/// The file (or socket, ...) has been closed.
 pub class ClosedErr : IoErr {
-    pub fn new(path: str | null) -> Self => { ..IoErr::new("file is closed", path: path) };
+    pub fn new(path: str | null, what: str = "file") -> Self => { ..IoErr::new(f"{what} is closed", path: path) };
 }
 
 /// The file's mode does not allow the operation: reading a file opened only for writing (or the
@@ -97,7 +97,7 @@ const E_NOT_EMPTY: i64 = 7;
 const E_BAD_HANDLE: i64 = 8;
 
 /// The error for `r`, the negative result of a `sys_*` call on `path`.
-fn failure(r: i64, path: str | null) -> IoErr {
+internal fn failure(r: i64, path: str | null) -> IoErr {
     let code = -r;
     if code == E_NOT_FOUND { return NotFoundErr::new(path); }
     if code == E_PERMISSION { return PermissionErr::new(path); }
@@ -140,93 +140,78 @@ const O_CREATE_NEW: u32 = 32;
 /// How many bytes a read asks the system for.
 const CHUNK: usize = 65536;
 
-/// An open file. A text file has `read`, `read_line`, `lines`, `read_lines`, `write` and
-/// `write_line`; a binary one (mode `b`) has `read_bytes` and `write_bytes`. Text is UTF-8:
-/// invalid bytes read as U+FFFD, and line endings are kept as they are, except that line reads
-/// drop the `\n` or `\r\n`.
-///
-/// Writes go straight to the system, but the file stays open until `close` (or the end of the
-/// program), so close it when done: `defer f.close();`.
-pub class File {
-    let handle: i64;          // -1 once closed
-    let _path: str;
-    let readable: bool;
-    let writable: bool;
-    let text: bool;
-    let binary: bool;
-    // Bytes read ahead of the position: `buf[pos..]`.
+// ---- Reading and writing ----
+
+/// A source of bytes and text: `File`, `std::net::TcpStream`. Text is UTF-8, invalid bytes
+/// reading as U+FFFD.
+pub trait Read {
+    /// The rest of the input.
+    fn read(mut self) -> str | IoErr;
+    /// The next line without its `\n` or `\r\n`, or null at the end. A last line without a line
+    /// ending still counts.
+    fn read_line(mut self) -> str | null | IoErr;
+    /// The rest of the input.
+    fn read_bytes(mut self) -> [u8] | IoErr;
+    /// Up to `n` bytes; fewer only at the end.
+    fn read_bytes(mut self, n: usize) -> [u8] | IoErr;
+
+    /// The rest of the lines, as `read_line` reads them. An error ends the iteration, after
+    /// being returned as an element: `for line in f.lines() { let line = line?; ... }`.
+    fn lines(mut self) -> Iterator<str | IoErr> => LinesIter::new(self);
+
+    /// The rest of the lines, as `read_line` reads them.
+    fn read_lines(mut self) -> [str] | IoErr {
+        let mut lines: [str] = [];
+        loop {
+            let line = self.read_line();
+            if line is IoErr { return line; }
+            if line == null { return lines; }
+            lines.push(line);
+        }
+    }
+}
+
+/// A sink of bytes and text: `File`, `std::net::TcpStream`. Text is written as UTF-8.
+pub trait Write {
+    fn write(mut self, s: str) -> () | IoErr;
+    fn write_bytes(mut self, bytes: [u8]) -> () | IoErr;
+
+    /// Writes `s` and a `\n`.
+    fn write_line(mut self, s: str) -> () | IoErr => self.write(s + "\n");
+    /// Sends on anything buffered; by default there is nothing to send.
+    fn flush(mut self) -> () | IoErr => ();
+}
+
+/// A handle's read-ahead: the bytes read past the reader's position, `buf[pos..]`. The readers in
+/// std hold one, check their own state and delegate to it.
+internal class Buffered {
+    internal let handle: i64;     // -1 once closed
+    let path: str | null;        // for errors
+    /// The error for a failed `sys_read` (std::net has its own codes).
+    let failure: fn(i64, str | null) -> IoErr;
     let buf: [u8] = [];
     let pos: usize = 0;
 
-    static let mut STDIN: File = File::stream(0, "<stdin>", readable: true);
-    static let mut STDOUT: File = File::stream(1, "<stdout>");
-    static let mut STDERR: File = File::stream(2, "<stderr>");
+    internal fn new(handle: i64, path: str | null, failure: fn(i64, str | null) -> IoErr = failure) -> Self
+        => { handle, path, failure };
 
-    fn stream(handle: i64, path: str, readable: bool = false) -> File
-        => File { handle, _path: path, readable, writable: !readable, text: true, binary: true };
+    /// How many bytes were read ahead.
+    internal get fn ahead(self) -> usize => self.buf.len - self.pos;
 
-    pub fn stdin() -> File => File::STDIN;
-    pub fn stdout() -> File => File::STDOUT;
-    pub fn stderr() -> File => File::STDERR;
-
-    /// Opens `path` for reading text.
-    pub fn open(path: str) -> File | IoErr => File::open(path, "r");
-
-    pub fn open(path: str, mode: Mode) -> File | IoErr {
-        let base = mode[0];
-        let mut flags = O_READ;
-        if base == 'w' { flags = O_WRITE | O_CREATE | O_TRUNCATE; }
-        if base == 'a' { flags = O_WRITE | O_APPEND | O_CREATE; }
-        if base == 'x' { flags = O_WRITE | O_CREATE_NEW; }
-        if mode.contains("+") { flags |= O_READ | O_WRITE; }
-        let handle = sys_open(path, flags);
-        if handle < 0 { return failure(handle, path); }
-        let binary = mode.contains("b");
-        return File {
-            handle,
-            _path: path,
-            readable: (flags & O_READ) != 0,
-            writable: (flags & O_WRITE) != 0,
-            text: !binary,
-            binary,
-        };
-    }
-
-    /// The path the file was opened with.
-    pub get fn path(self) -> str => self._path;
-    pub get fn closed(self) -> bool => self.handle < 0;
-
-    /// Closes the file; closing it again does nothing. Closing a standard stream only closes
-    /// this `File`, not the stream.
-    pub fn close(mut self) {
-        if self.handle < 0 { return; }
-        sys_close(self.handle);
-        self.handle = -1;
+    /// Forgets what was read ahead.
+    internal fn clear(mut self) {
         self.buf = [];
         self.pos = 0;
     }
 
-    // ---- Reading ----
-
-    /// The rest of the file.
-    pub fn read(mut self) -> str | IoErr {
-        self.demand(reading: true, text: true)?;
+    internal fn read_all(mut self) -> [u8] | IoErr {
         while self.fill()? {}
-        let s = str::from_utf8(self.buf[self.pos..]);
-        self.buf = [];
-        self.pos = 0;
-        return s;
+        let bytes = self.buf[self.pos..];
+        self.clear();
+        return bytes;
     }
 
-    /// The next line without its `\n` or `\r\n`, or null at the end of the file. A last line
-    /// without a line ending still counts.
-    pub fn read_line(mut self) -> str | null | IoErr {
-        self.demand(reading: true, text: true)?;
-        return self.next_line();
-    }
-
-    /// `read_line` without checking the mode.
-    fn next_line(mut self) -> str | null | IoErr {
+    internal fn read_line(mut self) -> str | null | IoErr {
         let mut i = self.pos;
         loop {
             let buf = self.buf;
@@ -250,40 +235,115 @@ pub class File {
         }
     }
 
-    /// The rest of the lines, as `read_line` reads them. An error ends the iteration, after
-    /// being returned as an element: `for line in f.lines() { let line = line?; ... }`.
-    pub fn lines(mut self) -> Iterator<str | IoErr> => LinesIter::new(self, close: false);
+    internal fn read_bytes(mut self, n: usize) -> [u8] | IoErr {
+        while self.ahead < n && self.fill()? {}
+        let end = self.buf.len.min(self.pos + n);
+        let bytes = self.buf[self.pos..end];
+        self.pos = end;
+        return bytes;
+    }
 
-    /// The rest of the lines, as `read_line` reads them.
-    pub fn read_lines(mut self) -> [str] | IoErr {
-        self.demand(reading: true, text: true)?;
-        let mut lines: [str] = [];
-        loop {
-            let line = self.next_line();
-            if line is IoErr { return line; }
-            if line == null { return lines; }
-            lines.push(line);
+    /// Reads more into `buf`; false at the end.
+    fn fill(mut self) -> bool | IoErr {
+        if self.pos > 0 {
+            self.buf = self.buf[self.pos..];
+            self.pos = 0;
         }
+        let n = sys_read(self.handle, self.buf, CHUNK);
+        if n < 0 { return (self.failure)(n, self.path); }
+        return n > 0;
+    }
+}
+
+// ---- Files ----
+
+/// An open file. A text file has `read`, `read_line`, `lines`, `read_lines`, `write` and
+/// `write_line`; a binary one (mode `b`) has `read_bytes` and `write_bytes`. Text is UTF-8:
+/// invalid bytes read as U+FFFD, and line endings are kept as they are, except that line reads
+/// drop the `\n` or `\r\n`.
+///
+/// Writes go straight to the system, but the file stays open until `close` (or the end of the
+/// program), so close it when done: `defer f.close();`.
+pub class File : Read, Write {
+    let io: Buffered;
+    let _path: str;
+    let readable: bool;
+    let writable: bool;
+    let text: bool;
+    let binary: bool;
+
+    static let mut STDIN: File = File::stream(0, "<stdin>", readable: true);
+    static let mut STDOUT: File = File::stream(1, "<stdout>");
+    static let mut STDERR: File = File::stream(2, "<stderr>");
+
+    fn stream(handle: i64, path: str, readable: bool = false) -> File
+        => File { io: Buffered::new(handle, path), _path: path, readable, writable: !readable, text: true, binary: true };
+
+    pub fn stdin() -> File => File::STDIN;
+    pub fn stdout() -> File => File::STDOUT;
+    pub fn stderr() -> File => File::STDERR;
+
+    /// Opens `path` for reading text.
+    pub fn open(path: str) -> File | IoErr => File::open(path, "r");
+
+    pub fn open(path: str, mode: Mode) -> File | IoErr {
+        let base = mode[0];
+        let mut flags = O_READ;
+        if base == 'w' { flags = O_WRITE | O_CREATE | O_TRUNCATE; }
+        if base == 'a' { flags = O_WRITE | O_APPEND | O_CREATE; }
+        if base == 'x' { flags = O_WRITE | O_CREATE_NEW; }
+        if mode.contains("+") { flags |= O_READ | O_WRITE; }
+        let handle = sys_open(path, flags);
+        if handle < 0 { return failure(handle, path); }
+        let binary = mode.contains("b");
+        return File {
+            io: Buffered::new(handle, path),
+            _path: path,
+            readable: (flags & O_READ) != 0,
+            writable: (flags & O_WRITE) != 0,
+            text: !binary,
+            binary,
+        };
+    }
+
+    /// The path the file was opened with.
+    pub get fn path(self) -> str => self._path;
+    pub get fn closed(self) -> bool => self.handle < 0;
+
+    /// Closes the file; closing it again does nothing. Closing a standard stream only closes
+    /// this `File`, not the stream.
+    pub fn close(mut self) {
+        if self.handle < 0 { return; }
+        sys_close(self.handle);
+        self.io.handle = -1;
+        self.io.clear();
+    }
+
+    // ---- Reading ----
+
+    /// The rest of the file.
+    pub fn read(mut self) -> str | IoErr {
+        self.demand(reading: true, text: true)?;
+        return str::from_utf8(self.io.read_all()?);
+    }
+
+    /// The next line without its `\n` or `\r\n`, or null at the end of the file. A last line
+    /// without a line ending still counts.
+    pub fn read_line(mut self) -> str | null | IoErr {
+        self.demand(reading: true, text: true)?;
+        return self.io.read_line();
     }
 
     /// The rest of the file.
     pub fn read_bytes(mut self) -> [u8] | IoErr {
         self.demand(reading: true, text: false)?;
-        while self.fill()? {}
-        let bytes = self.buf[self.pos..];
-        self.buf = [];
-        self.pos = 0;
-        return bytes;
+        return self.io.read_all();
     }
 
     /// Up to `n` bytes; fewer only at the end of the file.
     pub fn read_bytes(mut self, n: usize) -> [u8] | IoErr {
         self.demand(reading: true, text: false)?;
-        while self.buf.len - self.pos < n && self.fill()? {}
-        let end = self.buf.len.min(self.pos + n);
-        let bytes = self.buf[self.pos..end];
-        self.pos = end;
-        return bytes;
+        return self.io.read_bytes(n);
     }
 
     // ---- Writing ----
@@ -293,9 +353,6 @@ pub class File {
         self.unread()?;
         check(sys_write_str(self.handle, s), self._path)?;
     }
-
-    /// Writes `s` and a `\n`.
-    pub fn write_line(mut self, s: str) -> () | IoErr => self.write(s + "\n");
 
     pub fn write_bytes(mut self, bytes: [u8]) -> () | IoErr {
         self.demand(reading: false, text: false)?;
@@ -316,11 +373,10 @@ pub class File {
     pub fn seek(mut self, offset: i64, from: SeekFrom = SeekFrom::Start) -> u64 | IoErr {
         if self.handle < 0 { return ClosedErr::new(self._path); }
         let mut by = offset;
-        if from == SeekFrom::Current { by -= (self.buf.len - self.pos) as i64; }
+        if from == SeekFrom::Current { by -= self.io.ahead as i64; }
         let r = sys_seek(self.handle, by, from as i32);
         check(r, self._path)?;
-        self.buf = [];
-        self.pos = 0;
+        self.io.clear();
         return r as u64;
     }
 
@@ -329,10 +385,12 @@ pub class File {
         if self.handle < 0 { return ClosedErr::new(self._path); }
         let r = sys_seek(self.handle, 0, SeekFrom::Current as i32);
         check(r, self._path)?;
-        return (r - (self.buf.len - self.pos) as i64) as u64;
+        return (r - self.io.ahead as i64) as u64;
     }
 
     // ---- Internals ----
+
+    get fn handle(self) -> i64 => self.io.handle;
 
     /// `()` if the file is open and its mode allows the operation.
     fn demand(self, reading: bool = false, text: bool = false) -> () | IoErr {
@@ -343,40 +401,29 @@ pub class File {
         if !text && !self.binary { return ModeErr::new("text file has no byte methods", self._path); }
     }
 
-    /// Reads more into `buf`; false at the end of the file.
-    fn fill(mut self) -> bool | IoErr {
-        if self.pos > 0 {
-            self.buf = self.buf[self.pos..];
-            self.pos = 0;
-        }
-        let n = sys_read(self.handle, self.buf, CHUNK);
-        check(n, self._path)?;
-        return n > 0;
-    }
-
     /// Drops what was read ahead, moving the system's position back to the file's own, so that
     /// a write lands there.
     fn unread(mut self) -> () | IoErr {
-        let ahead = self.buf.len - self.pos;
+        let ahead = self.io.ahead;
         if ahead > 0 { check(sys_seek(self.handle, -(ahead as i64), SeekFrom::Current as i32), self._path)?; }
-        self.buf = [];
-        self.pos = 0;
+        self.io.clear();
     }
 }
 
+/// The lines of a reader; `owner`, if any, is closed when they end.
 class LinesIter : Iterator<str | IoErr> {
-    let file: File;
-    let close: bool;
+    let src: Read;
+    let owner: File | null;
     let done: bool = false;
 
-    pub fn new(file: File, close: bool = false) -> Self => { file, close };
+    pub fn new(src: Read, owner: File | null = null) -> Self => { src, owner };
 
     pub fn next(mut self) -> str | IoErr | Done {
         if self.done { return Done; }
-        let line = self.file.read_line();
+        let line = self.src.read_line();
         if line is str { return line; }
         self.done = true;
-        if self.close { self.file.close(); }
+        if let mut f = self.owner { f.close(); }
         if line is IoErr { return line; }
         return Done;
     }
@@ -405,7 +452,10 @@ pub fn read_lines(path: str) -> [str] | IoErr {
 
 /// The lines of the file at `path`, read as the loop goes; the file closes at the end or on an
 /// error (but stays open until the program ends if the loop stops early). See `File::lines`.
-pub fn lines(path: str) -> Iterator<str | IoErr> | IoErr => LinesIter::new(open(path)?, close: true);
+pub fn lines(path: str) -> Iterator<str | IoErr> | IoErr {
+    let f = open(path)?;
+    return LinesIter::new(f, owner: f);
+}
 
 /// The bytes of the file at `path`.
 pub fn read_bytes(path: str) -> [u8] | IoErr {
@@ -490,17 +540,17 @@ pub fn temp_dir() -> str => sys_temp_dir();
 
 /// Opens `path` with `O_*` flags; a new handle.
 fn sys_open(path: str, flags: u32) -> i64;
-fn sys_close(handle: i64) -> i64;
+internal fn sys_close(handle: i64) -> i64;
 /// Appends up to `max` bytes to `buf`; how many, 0 at the end of the file.
 fn sys_read(handle: i64, buf: [u8], max: usize) -> i64;
-fn sys_write(handle: i64, bytes: [u8]) -> i64;
+internal fn sys_write(handle: i64, bytes: [u8]) -> i64;
 /// Writes `s` in UTF-8.
-fn sys_write_str(handle: i64, s: str) -> i64;
+internal fn sys_write_str(handle: i64, s: str) -> i64;
 fn sys_flush(handle: i64) -> i64;
 /// Moves to `offset` from the start (0), the current position (1) or the end (2); the new position.
 fn sys_seek(handle: i64, offset: i64, whence: i32) -> i64;
 /// The description of this thread's last failed call.
-fn sys_error() -> str;
+internal fn sys_error() -> str;
 /// What is at `path`: 0 nothing, 1 a file, 2 a directory, 3 something else.
 fn sys_kind(path: str) -> i32;
 fn sys_size(path: str) -> i64;
