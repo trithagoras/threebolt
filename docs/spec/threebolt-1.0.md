@@ -567,6 +567,7 @@ Prelude traits for code generic over numbers, after Haskell's numeric classes:
 
 - Every integer and float type implements `Num`; the signed integers and floats `Signed`; the integers `Integer`; `f32`/`f64` `Float`. User types may implement them like any trait.
 - **Literals:** an unsuffixed integer literal whose expected type is a type parameter `T` with `T: Num` is `T::from_i64(n)` (the literal must fit in `i64`, else error); a float literal whose expected type is a `T: Float` is `T::from_f64(x)`. So `fn double<T: Num>(x: T) -> T => x * 2;` works for every number type, and a literal that does not fit the type argument panics at runtime (`double` cannot overflow-check `2` against `u8` statically).
+- **Defaulting to `f64`:** when every argument that determines a type parameter `T` is an unsuffixed integer literal passed for a parameter of type `T` (so inference would give `i32`), and `i32` does not meet `T`'s bounds but `f64` does, `T` is `f64` and the literals are `f64` values: with `fn sqrt<T: Float>(x: T) -> T`, `sqrt(2)` is `sqrt<f64>(2.0)`. An expected type takes precedence (§10: `let r: f32 = sqrt(2);` is `sqrt<f32>`). A variable of type `i32` is never converted: `sqrt(n)` with `n: i32` is still an error.
 - **Conversions:** `x as U` where `x` or `U` involves a type parameter converts numerically (§7.9) when, after substitution, the value is a primitive number and `U` a primitive numeric type; otherwise it is the ordinary checked cast.
 - Unions never implement these traits (§3.4).
 
@@ -983,3 +984,6 @@ Semantics the spec left open, decided while implementing:
 
 ### 2026-10-28 — constant-time `str` indexing
 - §3.1 `.len` and `s[i]` take constant time, and slicing time proportional to the slice (was: operations by index may take time linear in the string's length). Semantics are unchanged: lengths, indices and offsets still count characters. Implementations keep a character count per string and, for strings with characters outside the BMP, an offset table (as Python's PEP 393 does with its flexible layout).
+
+### 2026-10-28 — literals default to `f64` for `Float` parameters
+- §10.1 A type parameter determined only by unsuffixed integer literals is `f64`, not `i32`, when its bounds exclude `i32` and admit `f64` (`sqrt(2)` for `sqrt<T: Float>`), so float functions can be generic over `Float` without breaking calls with integer literals. Narrow by design: variables are never converted, and other bounds (`T: Num`) still infer `i32`.

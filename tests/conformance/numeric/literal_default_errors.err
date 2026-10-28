@@ -1,0 +1,2 @@
+literal_default_errors.3b:7:13: error[E0216]: 'i32' does not implement 'Float' (required by 'T')
+literal_default_errors.3b:8:13: error[E0216]: 'i32' does not implement 'Float' (required by 'T')

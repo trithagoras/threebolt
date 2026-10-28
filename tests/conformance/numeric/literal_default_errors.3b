@@ -1,0 +1,9 @@
+// §10.1: only literals default to `f64`; an `i32` variable is never converted.
+fn half<T: Float>(x: T) -> T => x / T::from_f64(2.0);
+fn scale<T: Float>(x: T, k: T) -> T => x * k;
+
+fn main() {
+    let n = 3;
+    println(half(n));
+    println(scale(n, 2));
+}

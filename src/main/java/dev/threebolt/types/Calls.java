@@ -729,6 +729,7 @@ final class Calls {
             ts.unify(paramType[idx], typed[idx].type(), env, vars);
         }
         literalOnly(f, k, vars, env, argOf, paramType, typed, fixed, expected);
+        literalDefault(vars, env, argOf, paramType, typed, fixed);
         // An argument that failed to type has been reported; inferring from it is no news.
         boolean argError = java.util.Arrays.stream(typed).anyMatch(t -> t != null && t.type() == Type.ERROR);
         for (var v : vars) {
@@ -777,21 +778,52 @@ final class Calls {
         if (expected == null || TypeSystem.expand(expected) instanceof Type.Union || expected == Type.ERROR) return;
         if (!(TypeSystem.expand(TypeSystem.subst(f.ret, k.env())) instanceof Type.Param ret) || !vars.contains(ret.param())) return;
         var v = ret.param();
-        for (var b : v.bounds) if (ts.implementsAs(expected, b.decl()) == null) return;
+        if (!meetsBounds(v, expected)) return;
+        retypeLiterals(v, expected, env, literalArgs(v, argOf, paramType, fixed), argOf, typed);
+    }
+
+    /**
+     * §10.1: a type parameter that only unsuffixed integer literals determine is `f64` when its
+     * bounds rule out `i32` but admit `f64`: `math::sqrt(2)` with `sqrt<T: Float>` is `sqrt<f64>`.
+     */
+    private void literalDefault(Set<TypeParamInfo> vars, Map<TypeParamInfo, Type> env, Expr.Arg[] argOf,
+                                Type[] paramType, Typed[] typed, int fixed) {
+        for (var v : vars) {
+            if (env.get(v) != Prim.I32 || meetsBounds(v, Prim.I32) || !meetsBounds(v, Prim.F64)) continue;
+            retypeLiterals(v, Prim.F64, env, literalArgs(v, argOf, paramType, fixed), argOf, typed);
+        }
+    }
+
+    private boolean meetsBounds(TypeParamInfo v, Type t) {
+        for (var b : v.bounds) if (ts.implementsAs(t, b.decl()) == null) return false;
+        return true;
+    }
+
+    /**
+     * The indices of the arguments that determine {@code v}, if each is an unsuffixed numeric
+     * literal passed for a parameter of type exactly {@code v}; else null.
+     */
+    private static List<Integer> literalArgs(TypeParamInfo v, Expr.Arg[] argOf, Type[] paramType, int fixed) {
         var literals = new ArrayList<Integer>();
         for (int i = 0; i < fixed; i++) {
             if (argOf[i] == null || !TypeSystem.mentions(paramType[i], Set.of(v))) continue;
-            if (!(TypeSystem.expand(paramType[i]) instanceof Type.Param p && p.param() == v)) return;
-            if (!unsuffixedLiteral(argOf[i].value())) return;
+            if (!(TypeSystem.expand(paramType[i]) instanceof Type.Param p && p.param() == v)) return null;
+            if (!unsuffixedLiteral(argOf[i].value())) return null;
             literals.add(i);
         }
-        if (literals.isEmpty()) return;
+        return literals.isEmpty() ? null : literals;
+    }
+
+    /** Binds {@code v} to {@code t} and retypes its literal arguments as {@code t}, if every one fits. */
+    private void retypeLiterals(TypeParamInfo v, Type t, Map<TypeParamInfo, Type> env, List<Integer> literals,
+                                Expr.Arg[] argOf, Typed[] typed) {
+        if (literals == null) return;
         for (int i : literals) {
             var arg = argOf[i].value();
-            if (!ts.assignable(diag.muted(() -> c.exprs.expr(arg, expected)).type(), expected)) return;
+            if (!ts.assignable(diag.muted(() -> c.exprs.expr(arg, t)).type(), t)) return;
         }
-        for (int i : literals) typed[i] = c.exprs.expr(argOf[i].value(), expected);
-        env.put(v, expected);
+        for (int i : literals) typed[i] = c.exprs.expr(argOf[i].value(), t);
+        env.put(v, t);
     }
 
     private static boolean unsuffixedLiteral(Expr e) {

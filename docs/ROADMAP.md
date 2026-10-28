@@ -195,7 +195,7 @@ so `mut` is not required to mutate through it.
 - **Recommendation:** A, and decide separately whether `with_ptr` on a value should require a `mut` place
   (it does write the value), which would be a new compile error for array/struct receivers.
 
-### 5.2 Literal defaulting to `f64` — **decided 2026-10-28: yes, narrowly** (implemented in task 1, step 5)
+### 5.2 Literal defaulting to `f64` — **decided 2026-10-28: yes, narrowly**; implemented (spec §10.1)
 A literal-only type argument whose bounds `i32` does not satisfy (`T: Float`) could default to
 `f64` (Haskell-style). With it, `std::math`'s float functions and `random::uniform` could be generic
 over `Float` without breaking `math::sqrt(2)`. Worth settling before task 1 moves `std::math`, since it
