@@ -23,7 +23,21 @@ the PLAN runtime-boundary table, and a VS Code extension bump.
 - Intrinsics: private `monotonic_nanos() -> i64`, `wall_nanos() -> i64`; `thread::sleep` takes nanoseconds.
 - Out of scope: calendars, time zones, formatting/parsing — a later `datetime` module (std or package: undecided).
 
-## Session 2 — std::net (and io's Read/Write traits)
+## Session 2 — std::net (and io's Read/Write traits) ✅ (done 2026-10-28)
+
+**As built** (see spec §16 `std::io` traits and `std::net`):
+- `Read`/`Write` are **pure contracts** (user decision): no hook or buffer members. `Read` requires `read`,
+  `read_line`, `read_bytes()`, `read_bytes(n)` and provides `lines`/`read_lines`; `Write` requires `write`,
+  `write_bytes` and provides `write_line`/`flush`. Read-ahead lives in an `internal class Buffered` in `io`
+  that `File` and `TcpStream` hold and delegate to (it takes the error mapper, so `io` doesn't load `net`).
+  `File` keeps its mode checks and seek-back-before-write as private methods.
+- New `str::to_utf8() -> [u8]` intrinsic (the inverse of `from_utf8`).
+- Targets are `SocketAddr | str` (one parameter, not overloads); connect/bind return `| NetErr`, operations on
+  an existing socket `| IoErr` (a closed one is `ClosedErr`, message `socket is closed`). `serve` returns `()`
+  once the listener is closed. A non-positive timeout panics. `parse_ip` parses either address kind.
+- Not done: a "read what is available" call on `TcpStream` (only `read_bytes(n)`, which waits for `n`).
+
+The plan as agreed:
 
 **Decided:**
 - **`Read`/`Write` traits in `std::io`, done in this session**, implemented by `File` and `TcpStream`.

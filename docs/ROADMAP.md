@@ -229,7 +229,10 @@ the exemption keeps "add `Display` to a dependency's type" a one-liner in apps.
 - **`std::env`**: `args()` (today only via `main(args)`), `var(name) -> str | null`, `set_var`, `vars()`,
   `cwd()`/`set_cwd()`, `exit` (currently `std::process::exit`: merge `process` into `env`, or keep both?).
   Running subprocesses (`process::run(cmd, args) -> Output | IoErr`)?
-- **`std::net`**: blocking TCP (`TcpListener::bind`, `accept`, `TcpStream::connect`, `read`/`write` like
+- **`std::net`** — done 2026-10-28 (`docs/plans/std-time-net.md`): addresses parsed in Threebolt, blocking TCP
+  (`serve` spawns a thread per connection) and UDP, `lookup`; `NetErr : IoErr`; `File` and `TcpStream` share
+  `std::io`'s `Read`/`Write` traits (pure contracts, buffering shared by composition). HTTP/TLS: later packages.
+  Original questions: blocking TCP (`TcpListener::bind`, `accept`, `TcpStream::connect`, `read`/`write` like
   `File`) and UDP. With no async (non-negotiable), concurrency is threads; is that the story, with a
   `serve(addr, handler)` helper that spawns per connection? DNS lookup? HTTP client in std or a package?
   TLS: out of scope for 1.0? Decide here whether `TcpStream` and `File` share `Read`/`Write` traits (affects
