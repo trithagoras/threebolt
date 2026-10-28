@@ -552,7 +552,7 @@ final class Ffi {
                 return Unit.UNIT;
             }
             case "str.to_cstr" -> {
-                var bytes = ((String) self).getBytes(StandardCharsets.UTF_8);
+                var bytes = self.toString().getBytes(StandardCharsets.UTF_8);
                 long addr = malloc(bytes.length + 1);
                 var seg = MemorySegment.ofAddress(addr).reinterpret(bytes.length + 1);
                 MemorySegment.copy(bytes, 0, seg, ValueLayout.JAVA_BYTE, 0, bytes.length);
@@ -561,7 +561,7 @@ final class Ffi {
             }
             case "str.from_cstr" -> {
                 var p = nonNull((PtrVal) a[0]);
-                return MemorySegment.ofAddress(p.addr()).reinterpret(Long.MAX_VALUE).getString(0);
+                return Values.Str.of(MemorySegment.ofAddress(p.addr()).reinterpret(Long.MAX_VALUE).getString(0));
             }
             default -> throw new IllegalStateException("unknown intrinsic " + owner + "." + name);
         }

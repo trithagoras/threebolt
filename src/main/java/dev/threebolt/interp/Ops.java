@@ -5,6 +5,7 @@ import dev.threebolt.interp.Values.Char;
 import dev.threebolt.interp.Values.EnumVal;
 import dev.threebolt.interp.Values.Flt;
 import dev.threebolt.interp.Values.Int;
+import dev.threebolt.interp.Values.Str;
 import dev.threebolt.types.Prim;
 import java.math.BigDecimal;
 import java.math.BigInteger;
@@ -245,7 +246,7 @@ public final class Ops {
                 default -> throw new IllegalStateException(op.toString());
             };
         }
-        if (op == BinaryOp.ADD && prim == Prim.STR) return (String) l + r;
+        if (op == BinaryOp.ADD && prim == Prim.STR) return ((Str) l).concat((Str) r);
         int c = comparePrim(l, r);
         return switch (op) {
             case EQ -> l.equals(r);
@@ -264,24 +265,10 @@ public final class Ops {
             case Int a -> compare(a, (Int) r);
             case Flt a -> Double.compare(a.v(), ((Flt) r).v());
             case Char a -> Integer.compare(a.cp(), ((Char) r).cp());
-            case String a -> compareStr(a, (String) r);
+            case Str a -> a.compareTo((Str) r);
             case Boolean a -> Boolean.compare(a, (Boolean) r);
             default -> throw new IllegalStateException("not ordered: " + l);
         };
-    }
-
-    /** Byte-lexicographic over UTF-8, which is code-point order. */
-    public static int compareStr(String a, String b) {
-        int i = 0;
-        int j = 0;
-        while (i < a.length() && j < b.length()) {
-            int x = a.codePointAt(i);
-            int y = b.codePointAt(j);
-            if (x != y) return Integer.compare(x, y);
-            i += Character.charCount(x);
-            j += Character.charCount(y);
-        }
-        return Integer.compare(a.length() - i, b.length() - j);
     }
 
     public static Object negate(Object v) {
@@ -355,7 +342,7 @@ public final class Ops {
 
     public static String display(Object v) {
         return switch (v) {
-            case String s -> s;
+            case Str s -> s.toString();
             case Int i -> i.toString();
             case Flt f -> formatFloat(f.v(), f.kind() == Prim.F32);
             case Char c -> Character.toString(c.cp());
@@ -424,11 +411,5 @@ public final class Ops {
         h *= 0xc4ceb9fe1a85ec53L;
         h ^= h >>> 33;
         return h;
-    }
-
-    /** Characters {@code [start, end)} of {@code s}, counted in code points (§3.1); the range must be valid. */
-    public static String substring(String s, long start, long end) {
-        int from = s.offsetByCodePoints(0, (int) start);
-        return s.substring(from, s.offsetByCodePoints(from, (int) (end - start)));
     }
 }

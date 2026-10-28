@@ -17,6 +17,7 @@ import dev.threebolt.interp.Values.MapVal;
 import dev.threebolt.interp.Values.Obj;
 import dev.threebolt.interp.Values.PtrVal;
 import dev.threebolt.interp.Values.SetVal;
+import dev.threebolt.interp.Values.Str;
 import dev.threebolt.interp.Values.TupleVal;
 import dev.threebolt.interp.Values.TypeVal;
 import dev.threebolt.interp.Values.Unit;
@@ -168,7 +169,7 @@ public final class Interpreter implements Callbacks {
         var main = program.main();
         running.add(Thread.currentThread());
         try {
-            var list = new ListVal(Prim.STR, new ArrayList<>(args));
+            var list = new ListVal(Prim.STR, new ArrayList<>(args.stream().map(Str::of).toList()));
             Object[] a = main.params.isEmpty() ? new Object[0] : new Object[] {list};
             var result = invoke(main, null, a, List.of(), null, null, null);
             if (result != Unit.UNIT && result != null) {
@@ -507,7 +508,7 @@ public final class Interpreter implements Callbacks {
         return switch (fn.name()) {
             case "eq" -> valueEquals(recv, args[0]);
             case "hash" -> new Int(Prim.U64, hashOf(recv));
-            case "to_str" -> display(recv);
+            case "to_str" -> Str.of(display(recv));
             case "cmp" -> new Int(Prim.I32, compare(recv, args[0]));
             default -> throw new Panic("'" + typeOf(recv) + "' does not implement '" + fn.qualifiedName() + "'");
         };
@@ -527,7 +528,7 @@ public final class Interpreter implements Callbacks {
             case Flt fl -> ts.prims.get(fl.kind());
             case Char ch -> ts.prims.get(Prim.CHAR);
             case Boolean b -> ts.prims.get(Prim.BOOL);
-            case String s -> ts.prims.get(Prim.STR);
+            case Str s -> ts.prims.get(Prim.STR);
             case null, default -> null;
         };
     }
@@ -566,7 +567,7 @@ public final class Interpreter implements Callbacks {
         return switch (v) {
             case null -> Type.NULL;
             case Boolean b -> Prim.BOOL;
-            case String s -> Prim.STR;
+            case Str s -> Prim.STR;
             case Int i -> i.kind();
             case Flt fl -> fl.kind();
             case Char ch -> Prim.CHAR;
@@ -611,7 +612,7 @@ public final class Interpreter implements Callbacks {
             case Type.Lit l -> {
                 return switch (v) {
                     case Int i -> l.value() instanceof java.math.BigInteger b && i.big().equals(b);
-                    case String s -> s.equals(l.value());
+                    case Str s -> s.toString().equals(l.value());
                     case Boolean b -> b.equals(l.value());
                     case Char ch -> l.value() instanceof Integer cp && ch.cp() == cp;
                     case null, default -> false;
@@ -623,7 +624,7 @@ public final class Interpreter implements Callbacks {
                     case Flt fl -> fl.kind() == p;
                     case Char ch -> p == Prim.CHAR;
                     case Boolean b -> p == Prim.BOOL;
-                    case String s -> p == Prim.STR;
+                    case Str s -> p == Prim.STR;
                     case null, default -> false;
                 };
             }
@@ -824,9 +825,9 @@ public final class Interpreter implements Callbacks {
         Object lowV = sl.low() == null ? null : eval(sl.low(), f);
         Object highV = sl.high() == null ? null : eval(sl.high(), f);
         f.at = sl.span();
-        if (target instanceof String s) {
-            long[] r = sliceBounds(lowV, highV, sl.isInclusive(), s.codePointCount(0, s.length()));
-            return Ops.substring(s, r[0], r[1]);
+        if (target instanceof Str s) {
+            long[] r = sliceBounds(lowV, highV, sl.isInclusive(), s.len());
+            return s.slice((int) r[0], (int) r[1]);
         }
         if (target instanceof ArrayVal a) return sliceItems(a.element, Arrays.asList(a.items), lowV, highV, sl.isInclusive());
         var l = (ListVal) target;
@@ -861,7 +862,7 @@ public final class Interpreter implements Callbacks {
     @Override
     public String display(Object v) {
         return switch (v) {
-            case String s -> s;
+            case Str s -> s.toString();
             case Int i -> i.toString();
             case Flt fl -> Ops.display(fl);
             case Char ch -> Ops.display(ch);
@@ -869,7 +870,7 @@ public final class Interpreter implements Callbacks {
             case EnumVal e -> Ops.display(e);
             case TypeVal t -> TypeSystem.name(t.type());
             case null -> "null";
-            default -> (String) callTrait(v, ts.display, "to_str");
+            default -> callTrait(v, ts.display, "to_str").toString();
         };
     }
 
@@ -877,7 +878,7 @@ public final class Interpreter implements Callbacks {
         return switch (v) {
             case null -> false;
             case Boolean b -> b;
-            case String s -> !s.isEmpty();
+            case Str s -> !s.isEmpty();
             case ListVal l -> !l.items.isEmpty();
             case MapVal m -> !m.entries.isEmpty();
             case SetVal s -> !s.entries.isEmpty();
@@ -1018,7 +1019,7 @@ public final class Interpreter implements Callbacks {
 
     @Override
     public String debug(Object v) {
-        if (v instanceof String s) return '"' + s + '"';
+        if (v instanceof Str s) return "\"" + s + '"';
         try {
             return display(v);
         } catch (RuntimeException e) {
@@ -1290,7 +1291,7 @@ public final class Interpreter implements Callbacks {
                     if (part instanceof String text) sb.append(text);
                     else sb.append(display(eval((Ir.Expr) part, f)));
                 }
-                yield sb.toString();
+                yield Str.of(sb.toString());
             }
             case Ir.New n -> construct(n, f);
             case Ir.Slice sl -> slice(sl, f);
@@ -1332,7 +1333,7 @@ public final class Interpreter implements Callbacks {
                 yield new TupleVal(items);
             }
             case Ir.TypeOf t -> new TypeVal(subst(t.type(), f));
-            case Ir.NameOf n -> TypeSystem.name(subst(n.type(), f));
+            case Ir.NameOf n -> Str.of(TypeSystem.name(subst(n.type(), f)));
             case Ir.TypeOfValue t -> new TypeVal(typeOf(unbox(eval(t.operand(), f))));
             case Ir.Match m -> match(m, f);
         };

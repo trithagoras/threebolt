@@ -15,7 +15,7 @@ import java.util.Map;
 
 /**
  * Runtime values. Threebolt {@code null} is Java {@code null}, {@code bool} is {@link Boolean},
- * {@code str} is {@link String}. Every value knows its runtime type (§3.4: union values carry it).
+ * {@code str} is {@link Str}. Every value knows its runtime type (§3.4: union values carry it).
  */
 public final class Values {
     private Values() {}
@@ -39,6 +39,96 @@ public final class Values {
         @Override
         public String toString() {
             return isUnsigned64() ? Long.toUnsignedString(v) : Long.toString(v);
+        }
+    }
+
+    /**
+     * A {@code str} (§3.1): a sequence of characters (Unicode scalar values) with constant-time
+     * length, indexing and slicing. Kept as UTF-16 plus its character count; a string with
+     * characters outside the BMP also keeps the UTF-16 offset of each character.
+     */
+    public static final class Str {
+        public static final Str EMPTY = new Str("", 0, null);
+
+        private final String s;
+        private final int len;
+        /** Null when every character is one UTF-16 unit; else {@code len + 1} offsets, the last {@code s.length()}. */
+        private final int[] offsets;
+
+        private Str(String s, int len, int[] offsets) {
+            this.s = s;
+            this.len = len;
+            this.offsets = offsets;
+        }
+
+        public static Str of(String s) {
+            int n = s.length();
+            int i = 0;
+            while (i < n && !Character.isSurrogate(s.charAt(i))) i++;
+            if (i == n) return n == 0 ? EMPTY : new Str(s, n, null);
+            int len = s.codePointCount(0, n);
+            var offsets = new int[len + 1];
+            for (int k = 0, at = 0; k < len; k++) {
+                offsets[k] = at;
+                at += Character.charCount(s.codePointAt(at));
+            }
+            offsets[len] = n;
+            return new Str(s, len, offsets);
+        }
+
+        /** The number of characters. */
+        public int len() {
+            return len;
+        }
+
+        public boolean isEmpty() {
+            return len == 0;
+        }
+
+        /** The code point of character {@code i}; {@code 0 <= i < len}. */
+        public int at(int i) {
+            return offsets == null ? s.charAt(i) : s.codePointAt(offsets[i]);
+        }
+
+        /** Characters {@code [start, end)}; {@code 0 <= start <= end <= len}. */
+        public Str slice(int start, int end) {
+            if (start == 0 && end == len) return this;
+            if (offsets == null) return start == end ? EMPTY : new Str(s.substring(start, end), end - start, null);
+            return of(s.substring(offsets[start], offsets[end]));
+        }
+
+        public Str concat(Str o) {
+            if (o.len == 0) return this;
+            if (len == 0) return o;
+            var joined = s.concat(o.s);
+            return offsets == null && o.offsets == null ? new Str(joined, len + o.len, null) : of(joined);
+        }
+
+        /** Code-point order, which is also the byte order of UTF-8. */
+        public int compareTo(Str o) {
+            if (offsets == null && o.offsets == null) return s.compareTo(o.s);
+            for (int i = 0; i < len && i < o.len; i++) {
+                int x = at(i);
+                int y = o.at(i);
+                if (x != y) return Integer.compare(x, y);
+            }
+            return Integer.compare(len, o.len);
+        }
+
+        @Override
+        public boolean equals(Object o) {
+            return o instanceof Str t && s.equals(t.s);
+        }
+
+        @Override
+        public int hashCode() {
+            return s.hashCode();
+        }
+
+        /** The UTF-16 text. */
+        @Override
+        public String toString() {
+            return s;
         }
     }
 

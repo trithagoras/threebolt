@@ -11,6 +11,7 @@ import dev.threebolt.interp.Values.ListVal;
 import dev.threebolt.interp.Values.MapVal;
 import dev.threebolt.interp.Values.Obj;
 import dev.threebolt.interp.Values.SetVal;
+import dev.threebolt.interp.Values.Str;
 import dev.threebolt.interp.Values.TupleVal;
 import dev.threebolt.interp.Values.TypeVal;
 import dev.threebolt.interp.Values.Unit;
@@ -68,7 +69,7 @@ final class Natives {
             case "random" -> new Int(Prim.U64, ENTROPY.nextLong());
             // Collections lock themselves per operation (§13.4), but not around a callback.
             case "List" -> name.equals("with_ptr") ? ffi.withPtr(recv, (Values.FnVal) a[0])
-                    : name.equals("join") ? join(recv, (String) a[0])
+                    : name.equals("join") ? join(recv, a[0].toString())
                     : locked(recv, () -> recv instanceof ArrayVal arr ? array(name, arr, a) : list(name, (ListVal) recv, a));
             case "Map" -> locked(recv, () -> map(name, (MapVal) recv, a));
             case "Set" -> locked(recv, () -> set(name, (SetVal) recv, a));
@@ -78,10 +79,10 @@ final class Natives {
             case "float" -> floating(name, recv, a, fn);
             case "str" -> name.equals("from_cstr") || name.equals("to_cstr") ? ffi.intrinsic("str", name, recv, a, typeEnv, fn)
                     : name.equals("from_chars") ? fromChars(a[0], fn)
-                    : name.equals("from_utf8") ? fromUtf8((ListVal) a[0]) : str(name, (String) recv, a);
+                    : name.equals("from_utf8") ? fromUtf8((ListVal) a[0]) : str(name, (Str) recv, a);
             case "char" -> character(name, (Char) recv, a);
             case "bool" -> switch (name) {
-                case "to_str" -> recv.toString();
+                case "to_str" -> Str.of(recv.toString());
                 case "eq" -> recv.equals(a[0]);
                 case "hash" -> new Int(Prim.U64, Ops.mix(((Boolean) recv) ? 1 : 0));
                 default -> unknown(key);
@@ -92,26 +93,26 @@ final class Natives {
     }
 
     /** {@code str::from_chars(cs)}, for either overload: an {@code Iterable<char>} or an {@code Iterator<char>}. */
-    private String fromChars(Object cs, FnInfo fn) {
+    private Str fromChars(Object cs, FnInfo fn) {
         boolean iterator = fn.params.getFirst().type() instanceof Type.Nominal n && n.decl() == rt.ts().iterator;
         var it = iterator ? cs : rt.callTrait(cs, rt.ts().iterable, "iter");
         var out = new StringBuilder();
         for (Object c; !isDone(c = rt.next(it)); ) out.appendCodePoint(((Char) c).cp());
-        return out.toString();
+        return Str.of(out.toString());
     }
 
     /** {@code str::from_utf8(bytes)}: invalid sequences become U+FFFD. */
-    private static String fromUtf8(ListVal bytes) {
+    private static Str fromUtf8(ListVal bytes) {
         byte[] b;
         synchronized (bytes) {
             b = new byte[bytes.items.size()];
             for (int i = 0; i < b.length; i++) b[i] = (byte) ((Int) bytes.items.get(i)).v();
         }
-        return new String(b, StandardCharsets.UTF_8);
+        return Str.of(new String(b, StandardCharsets.UTF_8));
     }
 
     /** {@code xs.join(sep)}: `to_str` runs user code, so it is called outside the list's lock. */
-    private String join(Object recv, String sep) {
+    private Str join(Object recv, String sep) {
         List<Object> items;
         synchronized (recv) {
             items = recv instanceof ArrayVal arr ? java.util.Arrays.asList(arr.items) : new ArrayList<>(((ListVal) recv).items);
@@ -121,7 +122,7 @@ final class Natives {
             if (i > 0) out.append(sep);
             out.append(rt.display(items.get(i)));
         }
-        return out.toString();
+        return Str.of(out.toString());
     }
 
     private boolean isDone(Object v) {
@@ -188,13 +189,13 @@ final class Natives {
 
     private Object prelude(String name, Object[] a) {
         rt.checkAbort();
-        if (name.equals("panic")) throw new Panic((String) a[0]);
+        if (name.equals("panic")) throw new Panic(a[0].toString());
         return unknown("prelude." + name);
     }
 
     private Object type(String name, TypeVal t, Object[] a) {
         return switch (name) {
-            case "name", "to_str" -> TypeSystem.name(t.type());
+            case "name", "to_str" -> Str.of(TypeSystem.name(t.type()));
             case "eq" -> t.equals(a[0]);
             case "hash" -> new Int(Prim.U64, Ops.mix(t.type().hashCode()));
             case "is_subtype_of" -> rt.ts().assignable(t.type(), ((TypeVal) a[0]).type());
@@ -379,7 +380,7 @@ final class Natives {
 
     private Object integer(String name, Object self, Object[] a, FnInfo fn) {
         switch (name) {
-            case "parse" -> { return Ops.parseInt((String) a[0], ownerPrim(fn)); }
+            case "parse" -> { return Ops.parseInt(a[0].toString(), ownerPrim(fn)); }
             case "from_i64" -> { return fromI64(ownerPrim(fn), ((Int) a[0]).v()); }
             case "zero" -> { return new Int(ownerPrim(fn), 0); }
             case "one" -> { return new Int(ownerPrim(fn), 1); }
@@ -392,7 +393,7 @@ final class Natives {
         var k = x.kind();
         return switch (name) {
             case "pow" -> Ops.pow(x, ((Int) a[0]).v());
-            case "to_str" -> x.toString();
+            case "to_str" -> Str.of(x.toString());
             case "eq" -> x.equals(a[0]);
             case "cmp" -> new Int(Prim.I32, Ops.compare(x, (Int) a[0]));
             case "hash" -> new Int(Prim.U64, Ops.mix(x.v()));
@@ -451,7 +452,7 @@ final class Natives {
     private Object floating(String name, Object self, Object[] a, FnInfo fn) {
         var p = ownerPrim(fn);
         switch (name) {
-            case "parse" -> { return Ops.parseFloat((String) a[0], p); }
+            case "parse" -> { return Ops.parseFloat(a[0].toString(), p); }
             case "from_i64" -> { return Ops.flt(p, ((Int) a[0]).v()); }
             case "from_f64" -> { return Ops.flt(p, ((Flt) a[0]).v()); }
             case "zero" -> { return Ops.flt(p, 0); }
@@ -483,7 +484,7 @@ final class Natives {
             case "log10" -> Ops.flt(k, Math.log10(v));
             case "is_nan" -> Double.isNaN(v);
             case "is_infinite" -> Double.isInfinite(v);
-            case "to_str" -> Ops.display(x);
+            case "to_str" -> Str.of(Ops.display(x));
             case "eq" -> v == o;
             case "cmp" -> new Int(Prim.I32, Double.compare(v, o));
             case "add" -> Ops.flt(k, v + o);
@@ -545,69 +546,68 @@ final class Natives {
         return new BigInteger(Long.toUnsignedString(x.v()));
     }
 
-    private Object str(String name, String s, Object[] a) {
+    private Object str(String name, Str s, Object[] a) {
+        String text = s.toString();
         return switch (name) {
-            case "len" -> usize(s.codePointCount(0, s.length()));
+            case "len" -> usize(s.len());
             case "truthy" -> !s.isEmpty();
             case "index" -> {
                 long i = ((Int) a[0]).v();
-                int len = s.codePointCount(0, s.length());
                 // usize values above i64::MAX are negative here; they are out of range anyway.
-                if (i < 0 || i >= len) throw new Panic("index " + Long.toUnsignedString(i) + " out of range for a string of length " + len);
-                yield new Char(s.codePointAt(s.offsetByCodePoints(0, (int) i)));
+                if (i < 0 || i >= s.len()) throw new Panic("index " + Long.toUnsignedString(i) + " out of range for a string of length " + s.len());
+                yield new Char(s.at((int) i));
             }
             case "chars" -> {
-                var cps = s.codePoints().iterator();
-                yield generate(Prim.CHAR, () -> cps.hasNext() ? new Char(cps.next()) : rt.done());
+                int[] i = {0};
+                yield generate(Prim.CHAR, () -> i[0] < s.len() ? new Char(s.at(i[0]++)) : rt.done());
             }
             case "bytes" -> {
-                var bytes = s.getBytes(StandardCharsets.UTF_8);
+                var bytes = text.getBytes(StandardCharsets.UTF_8);
                 int[] i = {0};
                 yield generate(Prim.U8, () -> i[0] < bytes.length ? new Int(Prim.U8, bytes[i[0]++] & 0xff) : rt.done());
             }
-            case "contains" -> s.contains((String) a[0]);
-            case "starts_with" -> s.startsWith((String) a[0]);
-            case "ends_with" -> s.endsWith((String) a[0]);
+            case "contains" -> text.contains(a[0].toString());
+            case "starts_with" -> text.startsWith(a[0].toString());
+            case "ends_with" -> text.endsWith(a[0].toString());
             case "find" -> {
-                int i = s.indexOf((String) a[0]);
-                yield i < 0 ? null : usize(s.codePointCount(0, i));
+                int i = text.indexOf(a[0].toString());
+                yield i < 0 ? null : usize(text.codePointCount(0, i));
             }
             case "slice" -> {
                 long start = ((Int) a[0]).v(), end = ((Int) a[1]).v();
-                int len = s.codePointCount(0, s.length());
-                if (start < 0 || end < 0 || end > len || start > end) {
+                if (start < 0 || end < 0 || end > s.len() || start > end) {
                     throw new Panic("slice " + Long.toUnsignedString(start) + ".." + Long.toUnsignedString(end)
-                            + " out of range for a string of length " + len);
+                            + " out of range for a string of length " + s.len());
                 }
-                yield Ops.substring(s, start, end);
+                yield s.slice((int) start, (int) end);
             }
-            case "upper" -> s.toUpperCase(Locale.ROOT);
-            case "lower" -> s.toLowerCase(Locale.ROOT);
-            case "trim" -> s.strip();
+            case "upper" -> Str.of(text.toUpperCase(Locale.ROOT));
+            case "lower" -> Str.of(text.toLowerCase(Locale.ROOT));
+            case "trim" -> Str.of(text.strip());
             case "split" -> {
                 var parts = new ArrayList<Object>();
-                String sep = (String) a[0];
+                String sep = a[0].toString();
                 if (sep.isEmpty()) {
-                    s.codePoints().forEach(cp -> parts.add(Character.toString(cp)));
+                    text.codePoints().forEach(cp -> parts.add(Str.of(Character.toString(cp))));
                 } else {
                     int from = 0;
                     while (true) {
-                        int i = s.indexOf(sep, from);
+                        int i = text.indexOf(sep, from);
                         if (i < 0) break;
-                        parts.add(s.substring(from, i));
+                        parts.add(Str.of(text.substring(from, i)));
                         from = i + sep.length();
                     }
-                    parts.add(s.substring(from));
+                    parts.add(Str.of(text.substring(from)));
                 }
                 yield new ListVal(Prim.STR, parts);
             }
-            case "replace" -> s.replace((String) a[0], (String) a[1]);
-            case "repeat" -> s.repeat((int) ((Int) a[0]).v());
+            case "replace" -> Str.of(text.replace(a[0].toString(), a[1].toString()));
+            case "repeat" -> Str.of(text.repeat((int) ((Int) a[0]).v()));
             case "to_str" -> s;
             case "eq" -> s.equals(a[0]);
-            case "cmp" -> new Int(Prim.I32, Integer.signum(Ops.compareStr(s, (String) a[0])));
-            case "hash" -> new Int(Prim.U64, Ops.hashStr(s));
-            case "add" -> s + a[0];
+            case "cmp" -> new Int(Prim.I32, Integer.signum(s.compareTo((Str) a[0])));
+            case "hash" -> new Int(Prim.U64, Ops.hashStr(text));
+            case "add" -> s.concat((Str) a[0]);
             default -> unknown("str." + name);
         };
     }
@@ -622,7 +622,7 @@ final class Natives {
             case "is_lowercase" -> Character.isLowerCase(cp);
             case "to_upper" -> new Char(Character.toUpperCase(cp));
             case "to_lower" -> new Char(Character.toLowerCase(cp));
-            case "to_str" -> Character.toString(cp);
+            case "to_str" -> Str.of(Character.toString(cp));
             case "eq" -> c.equals(a[0]);
             case "cmp" -> new Int(Prim.I32, Integer.compare(cp, ((Char) a[0]).cp()));
             case "hash" -> new Int(Prim.U64, Ops.mix(cp));
@@ -632,7 +632,7 @@ final class Natives {
 
     private Object enumeration(String name, EnumVal e, Object[] a) {
         return switch (name) {
-            case "to_str" -> Ops.display(e);
+            case "to_str" -> Str.of(Ops.display(e));
             case "eq" -> e.equals(a[0]);
             case "cmp" -> new Int(Prim.I32, Long.compare(e.v(), ((EnumVal) a[0]).v()));
             case "hash" -> new Int(Prim.U64, Ops.mix(e.v()));

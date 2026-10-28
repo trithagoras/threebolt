@@ -55,7 +55,7 @@ final class Exprs {
         return switch (e) {
             case Expr.IntLit i -> intLit(i.value(), i.suffix(), expected, i.span());
             case Expr.FloatLit f -> floatLit(f.digits(), f.suffix(), expected, f.span(), false);
-            case Expr.StrLit s -> new Typed(new Ir.Lit(s.value()), new Type.Lit(Prim.STR, s.value()));
+            case Expr.StrLit s -> new Typed(new Ir.Lit(Values.Str.of(s.value())), new Type.Lit(Prim.STR, s.value()));
             case Expr.CharLit ch -> new Typed(new Ir.Lit(new Values.Char(ch.codePoint())), new Type.Lit(Prim.CHAR, ch.codePoint()));
             case Expr.BoolLit b -> new Typed(new Ir.Lit(b.value()), new Type.Lit(Prim.BOOL, b.value()));
             case Expr.NullLit n -> new Typed(new Ir.Lit(null), Type.NULL);
@@ -116,7 +116,7 @@ final class Exprs {
             case Expr.Typeof t -> new Typed(new Ir.TypeOf(types.resolve(t.type(), c.ctx.typeScope)), typeType());
             case Expr.Nameof n -> {
                 var t = types.resolve(n.type(), c.ctx.typeScope);
-                Ir.Expr ir = TypeSystem.isGeneric(t) ? new Ir.NameOf(t) : new Ir.Lit(TypeSystem.name(t));
+                Ir.Expr ir = TypeSystem.isGeneric(t) ? new Ir.NameOf(t) : new Ir.Lit(Values.Str.of(TypeSystem.name(t)));
                 yield new Typed(ir, Prim.STR);
             }
         };

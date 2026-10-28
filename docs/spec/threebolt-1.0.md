@@ -94,7 +94,7 @@ use std::math::*;               // every pub item of a module
 `i8 i16 i32 i64 isize u8 u16 u32 u64 usize f32 f64 bool char str`
 
 - Primitive names are lowercase and predeclared, not keywords; static members use paths as for any type (`i32::parse(s)`, `u64::MAX`, `str::from_cstr(p)`). Declaring a type with a primitive's name is an error (outside the standard library: `c::char`, §14.2, is an alias in `std::c`). Nominal and stdlib types are PascalCase (`Type`, `MsgErr`, `List`, `Ptr`, …).
-- `str`: immutable Unicode text, reference semantics but immutable (identity unobservable). A `str` is a sequence of characters (Unicode scalar values, i.e. `char`s), and every length, index and offset counts characters, as in Python: `.len`, `s[i]` (a `char`), `s[a..b]` (a `str`, §7.6), `.find`, `.slice`. `.bytes()` gives its UTF-8 encoding. Operations by index may take time linear in the string's length.
+- `str`: immutable Unicode text, reference semantics but immutable (identity unobservable). A `str` is a sequence of characters (Unicode scalar values, i.e. `char`s), and every length, index and offset counts characters, as in Python: `.len`, `s[i]` (a `char`), `s[a..b]` (a `str`, §7.6), `.find`, `.slice`. `.bytes()` gives its UTF-8 encoding. `.len` and `s[i]` take constant time, and `s[a..b]` (like `.slice`) time proportional to the slice's length, whatever the string holds. Concatenation copies, so building a string by repeated `+` in a loop is quadratic; collect the parts and use `[str].join` or `str::from_chars`.
 - `char`: Unicode scalar value (32-bit).
 - `()`: unit, the empty tuple; sole value `()`.
 - `null`: the null type; sole value `null`.
@@ -980,3 +980,6 @@ Semantics the spec left open, decided while implementing:
 
 ### 2026-10-28 — orphan impls
 - §4.10 Non-normative note: a future package system will add an orphan rule for library packages only; 1.0 keeps impls unrestricted. A duplicate of a standard-library impl is reported at the program's impl, with the std impl as the note (was: reported in std, since std is declared last).
+
+### 2026-10-28 — constant-time `str` indexing
+- §3.1 `.len` and `s[i]` take constant time, and slicing time proportional to the slice (was: operations by index may take time linear in the string's length). Semantics are unchanged: lengths, indices and offsets still count characters. Implementations keep a character count per string and, for strings with characters outside the BMP, an offset table (as Python's PEP 393 does with its flexible layout).

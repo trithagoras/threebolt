@@ -51,8 +51,8 @@ final class Io {
     }
 
     Object call(String name, Object[] a) {
-        if (name.equals("sys_error")) return lastError.get();
-        if (name.equals("sys_temp_dir")) return System.getProperty("java.io.tmpdir").replaceAll("(?<=.)[/\\\\]+$", "");
+        if (name.equals("sys_error")) return Values.Str.of(lastError.get());
+        if (name.equals("sys_temp_dir")) return Values.Str.of(System.getProperty("java.io.tmpdir").replaceAll("(?<=.)[/\\\\]+$", ""));
         long r = switch (name) {
             case "sys_open" -> open(str(a[0]), num(a[1]));
             case "sys_close" -> close(num(a[0]));
@@ -82,7 +82,7 @@ final class Io {
     }
 
     private static String str(Object v) {
-        return (String) v;
+        return ((Values.Str) v).toString();
     }
 
     private static long num(Object v) {
@@ -269,7 +269,7 @@ final class Io {
             try (var entries = Files.list(path(p))) {
                 var names = entries.map(e -> e.getFileName().toString()).sorted().toList();
                 synchronized (out) {
-                    out.items.addAll(names);
+                    for (String n : names) out.items.add(Values.Str.of(n));
                 }
                 return names.size();
             }
