@@ -36,9 +36,9 @@ other backend and for dogfooding the language.)
   Threebolt); `str`'s `trim`, `split`, `replace`, `repeat`, `starts_with`, `ends_with`, `find`, `contains`, `truthy`.
 
 **Steps:**
-1. **Benchmarks first**: `tests/bench/` (not run by `test`), a handful of programs exercising strings,
-   collections, arithmetic, calls and threads, with a Gradle task that times them. Moving code into Threebolt
-   makes the tree-walker slower on it; measure rather than guess (DevX over performance, but know the cost).
+1. ~~**Benchmarks first**~~ — done (`4d29fa5`): `tests/bench/` (five programs printing checksums),
+   `./gradlew bench [-Pbench=name]`, baseline times in `tests/bench/README.md`. Re-run after each step;
+   a changed checksum is a bug, a slower time is a cost to note.
 2. **One callback interface**: every intrinsic that calls back into Threebolt (comparators, `Thread::spawn`,
    `Mutex::lock`, `with_ptr`, C upcalls, iterator adaptors) goes through `call(FnVal, args) -> Object` instead of
    reaching into `Interpreter`. No intrinsic touches the AST or frames.
