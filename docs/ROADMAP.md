@@ -16,7 +16,7 @@ The small open decisions (§5) are deferred, except 5.2, which is decided and la
 
 ---
 
-## 1. Runtime boundary (next)
+## 1. Runtime boundary (done, except the §13.4 decision in step 6)
 
 **Goal:** as much of std as possible written in Threebolt, over an intrinsic layer that is small, explicit
 and value-in/value-out, so a future backend reimplements only that layer. Today ~370 std functions are
@@ -63,8 +63,8 @@ other backend and for dogfooding the language.)
    narrow §13.4 to the primitive operations (`len`, index, `set`, `push`, `pop`, `insert`, `remove`, `clear`,
    one iteration step) and move them, or keep them intrinsic. Also left: making `std::math`'s float functions
    generic over `Float` would break `math::sqrt(n)` for an `i32` variable `n`, so they keep `f64`.
-7. **Document the boundary**: a `PLAN.md` section listing every remaining intrinsic, its group, and its
-   contract (arguments, result, panics), i.e. what a new backend must provide.
+7. ~~**Document the boundary**~~ — done (`3a9fae7`): `PLAN.md` § Runtime boundary; post-task timings in
+   `tests/bench/README.md`.
 
 ### 1.1 `str` representation — **decided 2026-10-28: C**
 
