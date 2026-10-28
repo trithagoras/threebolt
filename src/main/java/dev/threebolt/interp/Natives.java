@@ -386,17 +386,12 @@ final class Natives {
         switch (name) {
             case "parse" -> { return Ops.parseInt(a[0].toString(), ownerPrim(fn)); }
             case "from_i64" -> { return fromI64(ownerPrim(fn), ((Int) a[0]).v()); }
-            case "zero" -> { return new Int(ownerPrim(fn), 0); }
-            case "one" -> { return new Int(ownerPrim(fn), 1); }
-            case "min_value" -> { return new Int(ownerPrim(fn), ownerPrim(fn).min().longValue()); }
-            case "max_value" -> { return new Int(ownerPrim(fn), ownerPrim(fn).max().longValue()); }
             case "bits" -> { return new Int(Prim.U32, ownerPrim(fn).bits()); }
             default -> {}
         }
         var x = (Int) self;
         var k = x.kind();
         return switch (name) {
-            case "pow" -> Ops.pow(x, ((Int) a[0]).v());
             case "to_str" -> Str.of(x.toString());
             case "eq" -> x.equals(a[0]);
             case "cmp" -> new Int(Prim.I32, Ops.compare(x, (Int) a[0]));
@@ -459,11 +454,6 @@ final class Natives {
             case "parse" -> { return Ops.parseFloat(a[0].toString(), p); }
             case "from_i64" -> { return Ops.flt(p, ((Int) a[0]).v()); }
             case "from_f64" -> { return Ops.flt(p, ((Flt) a[0]).v()); }
-            case "zero" -> { return Ops.flt(p, 0); }
-            case "one" -> { return Ops.flt(p, 1); }
-            case "nan" -> { return Ops.flt(p, Double.NaN); }
-            case "infinity" -> { return Ops.flt(p, Double.POSITIVE_INFINITY); }
-            case "epsilon" -> { return Ops.flt(p, p == Prim.F32 ? Math.ulp(1.0f) : Math.ulp(1.0)); }
             default -> {}
         }
         var x = (Flt) self;

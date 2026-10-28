@@ -1,0 +1,9 @@
+// §10.1, §16: integer members written in Threebolt (std/builtin/int.3b).
+fn main() {
+    let a: i64 = -2;
+    let b: u64 = 2;
+    let c: i8 = -2;
+    println(f"{a.pow(63)} {b.pow(63)} {c.pow(7)} {3.pow(0)} {0.pow(0)} {1.pow(4000000000)} {(-1).pow(4000000001)}");
+    println(f"{i8::zero()} {u16::one()} {i16::min_value()} {u32::max_value()} {f32::zero()} {f64::one()}");
+    println(f"{f64::nan()} {f32::infinity()} {f64::epsilon()} {f32::epsilon()}");
+}

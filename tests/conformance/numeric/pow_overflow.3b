@@ -1,0 +1,6 @@
+//! exit: 101
+fn main() {
+    let x: i8 = 2;
+    println(x.pow(6));
+    println(x.pow(7));
+}

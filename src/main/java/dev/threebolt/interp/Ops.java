@@ -189,12 +189,6 @@ public final class Ops {
         return new Int(kind, v.longValue());
     }
 
-    public static Int pow(Int a, long exp) {
-        Int r = new Int(a.kind(), 1);
-        for (long i = 0; i < exp; i++) r = mul(r, a);
-        return r;
-    }
-
     // ---- Floats ----
 
     public static Flt flt(Prim kind, double v) {
