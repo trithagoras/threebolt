@@ -234,6 +234,13 @@ Moved to Threebolt in task 1 (no longer intrinsics): `str` `trim split replace r
 contains truthy to_str`; integer `abs min max pow zero one min_value max_value`; float `zero one nan infinity epsilon`;
 `char::is_digit`; `flags::has`; collection `truthy`; `[T]` `contains reverse first last`; `Mutex`; `math::isqrt factorial comb perm`.
 
+## Packages (roadmap task 2) ✅ (branch `packages`)
+
+- `project.Manifest` parses `package.toml` (`[package] name`, `[dependencies] k = { path }`, `[[bin]]`) and `workspace.toml`. night-config gives no positions, so spans come from the key's line in the text. `project.Project` finds the package or workspace in one directory. `project.Scaffold` is `bolt new`/`add`, which edit manifests as text.
+- `resolve.Package`: root, manifest, dependencies by key; `Package.STD`; `isApplication()`. `ModuleLoader.load(entry)` (no manifest: one package at the entry's directory), `load(entry, root)` and `loadLibrary(root)` (no entry; `Program.entry()` is null). Packages are read first, one per real path, with cycle and key-clash checks. Then modules load per (package, local path); a directory holding a `package.toml` is not part of its parent.
+- `Module.samePackage` decides `internal`; `Declarer.checkOrphan` is the §4.10 rule (E0412). `Lints` cover only the application package.
+- LSP: `Analysis.Target` (entry or library, plus package root). `Workspace.targetsFor` tries the package's bins, then the library; `Program.pathFrom` names a module as the importing file would (`key::local`).
+
 ## Conventions for the implementing agent
 - The spec is the source of truth; if code and spec disagree, fix one deliberately and record it.
 - Every feature lands with conformance tests in `tests/conformance/` (positive run + at least one compile-error case).

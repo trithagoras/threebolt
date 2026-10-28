@@ -200,22 +200,22 @@ the exemption keeps "add `Display` to a dependency's type" a one-liner in apps.
    Std's private `str` helpers are `internal`, replacing the std/builtin visibility special case. Re-exports resolve
    on demand in `ModuleLoader` (`resolveUse`/`reexport`), so they chain and may form cycles; a glob re-exports each
    name at the lesser visibility. `Module.samePackage` is a placeholder (std vs everything else) until step 3.
-3. Manifest loading, package graph (DAG, key clashes, canonical identity), per-package source roots, `internal`
-   across packages, orphan rule. Conformance: multi-package cases (a case directory holding `package.toml`s;
-   README extended). Notes:
-   - TOML library: night-config (`com.electronwill.night-config:toml`) is the candidate; avoid tomlj, which pins
-     an older ANTLR runtime than ours (4.13.2) and would likely print a version-mismatch warning at run time. Check
-     the latest version on Maven Central before adding it.
-   - `ModuleLoader` today assumes one `root` and `ModulePath`s relative to it; `std::` is special-cased by its first
-     segment. Packages need a module to know its package (root directory, dependency keys), with `std` becoming
-     one more package; `Module.samePackage` then compares packages. A dependency key is the first path segment.
-   - Without a manifest nothing changes: one application package rooted at the entry file's directory.
-   - The orphan rule is a new check beside the duplicate-impl one (`Declarer`, E0404, which stays); it only
-     bites outside the application package, so existing conformance cases are unaffected.
-   - Until step 4 the CLI is still `threebolt run <file>`; step 3 can take the manifest from the entry file's
-     directory for tests, with step 4 switching to the current directory and `--project`.
-4. CLI: `applicationName = "bolt"`, the commands above, `--project`, the hint.
-5. Language server: manifest-based roots; the VS Code extension activates on `package.toml`/`workspace.toml`.
+3. ~~Manifest loading, package graph, per-package source roots, `internal` across packages, orphan rule~~ — done
+   (`dbdcd65`, `6fad8fe`, `d2ab70d`; spec `75ec21f`: a nested package is not part of its parent). `project.Manifest`
+   parses `package.toml`/`workspace.toml` with night-config 3.9.0. A `resolve.Package` has a root and dependencies by
+   key; `std` is `Package.STD`. A `Module` has its package and local path, and `path()` is for display
+   (`shared::model`). Paths resolve per package (`Package.locate`), as in `Program.module(from, path)`. Diagnostics
+   name files relative to the application root (`../shared/m.3b`). New codes: E0111 manifest, E0112 names, E0113 key
+   clash, E0114 cycle, E0412 orphan impl. E0100 notes a nested package or a key of another package. Lints cover only
+   the application package. Conformance: `tests/conformance/packages/`.
+4. ~~CLI~~ — done (`74d0fd3`): `bolt new|add|run|check|debug|lsp`, `--project`, the hint. A `.3b` file outside every
+   package of the project runs as a script. Program arguments only follow `--`. `bolt check` with no target checks
+   every bin, and a package without bins as a library (`ModuleLoader.loadLibrary`). Not done: `[native]` (its key set
+   is still to settle, with the first package that ships a prebuilt library).
+5. ~~Language server~~ — done (`b325358`): a file's package is the nearest `package.toml` at or above it within the
+   open folder, or a member of the folder's workspace. This walks up where the CLI does not, so the conformance packages
+   in this repo check in the editor. Files outside any package keep the nearest-`main.3b` rule. Manifest errors
+   publish on `package.toml`. The extension activates on manifests and forwards their changes.
 
 ## 3. Standard library expansion
 
