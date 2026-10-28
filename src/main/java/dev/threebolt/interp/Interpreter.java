@@ -52,17 +52,15 @@ import java.util.function.UnaryOperator;
  * every Threebolt thread (§13.4): call stacks are per thread, and statics, caches and collections
  * are safe to share.
  */
-public final class Interpreter {
+public final class Interpreter implements Callbacks {
     final TypeSystem ts;
     private final CheckedProgram program;
     /** UTF-8, malformed input replaced with U+FFFD; read under its own lock. */
     final InputStream stdin;
     final PrintStream out;
     final PrintStream err;
-    final Natives natives;
-    final Ffi ffi = new Ffi(this);
-    final Threads threads = new Threads(this);
-    final Io io = new Io(this);
+    private final Natives natives;
+    private final Ffi ffi = new Ffi(this);
     /** The `Done` sentinel (§16). */
     final Obj done;
 
@@ -86,8 +84,43 @@ public final class Interpreter {
         this.stdin = in;
         this.out = out;
         this.err = err;
-        this.natives = new Natives(this);
+        this.natives = new Natives(this, ffi, new Threads(this), new Io(this));
         this.done = new Obj(ts.done, List.of(), new Object[0]);
+    }
+
+    @Override
+    public TypeSystem ts() {
+        return ts;
+    }
+
+    @Override
+    public Obj done() {
+        return done;
+    }
+
+    @Override
+    public PrintStream out() {
+        return out;
+    }
+
+    @Override
+    public PrintStream err() {
+        return err;
+    }
+
+    @Override
+    public InputStream stdin() {
+        return stdin;
+    }
+
+    @Override
+    public boolean equal(Object a, Object b) {
+        return valueEquals(a, b);
+    }
+
+    @Override
+    public int hash(Object v) {
+        return hashOf(v);
     }
 
     /** One function invocation. */
@@ -125,26 +158,6 @@ public final class Interpreter {
     private static final Signal BREAK = new Signal();
     private static final Signal CONTINUE = new Signal();
 
-    /**
-     * Unwinds a thread once the process is ending (a panic or `exit` on another thread, or
-     * `main` returned, §13.1); no defers run.
-     */
-    static final class Abort extends RuntimeException {
-        Abort() {
-            super(null, null, false, false);
-        }
-    }
-
-    /** {@code std::process::exit}: leaves immediately, no defers (§2.4). */
-    static final class ExitSignal extends RuntimeException {
-        final int code;
-
-        ExitSignal(int code) {
-            super(null, null, false, false);
-            this.code = code;
-        }
-    }
-
     // ---- Entry (§2.4) ----
 
     /**
@@ -159,7 +172,7 @@ public final class Interpreter {
             Object[] a = main.params.isEmpty() ? new Object[0] : new Object[] {list};
             var result = invoke(main, null, a, List.of(), null, null, null);
             if (result != Unit.UNIT && result != null) {
-                var message = callByName(result, ts.error, "message");
+                var message = callTrait(result, ts.error, "message");
                 synchronized (exitCode) {
                     if (!terminating) err.println(message);
                     terminate(1);
@@ -197,7 +210,8 @@ public final class Interpreter {
     }
 
     /** Ends the process with {@code code}; the first caller wins, and the other threads stop. */
-    void terminate(int code) {
+    @Override
+    public void terminate(int code) {
         synchronized (exitCode) {
             if (terminating) return;
             out.flush();
@@ -209,7 +223,8 @@ public final class Interpreter {
     }
 
     /** Reports a panic on any thread and ends the process with 101 (§13.1). */
-    void panicked(Panic p) {
+    @Override
+    public void panicked(Panic p) {
         synchronized (exitCode) {
             if (terminating) return;
             out.flush();
@@ -229,17 +244,20 @@ public final class Interpreter {
         }
     }
 
-    boolean isTerminating() {
+    @Override
+    public boolean isTerminating() {
         return terminating;
     }
 
     /** Stops this thread if the process is ending. */
-    void checkAbort() {
+    @Override
+    public void checkAbort() {
         if (terminating) throw new Abort();
     }
 
     /** Starts a Threebolt thread (§13.4) running {@code body}; a panic in it ends the process. */
-    Thread startThread(Runnable body) {
+    @Override
+    public Thread startThread(Runnable body) {
         var t = new Thread(null, () -> {
             try {
                 body.run();
@@ -405,7 +423,7 @@ public final class Interpreter {
         return switch (c.kind()) {
             case DIRECT -> invoke(c.fn(), recv, args, typeArgs, ownerArgs, null, c.span());
             case VIRTUAL -> invoke(virtualTarget(c.fn(), recv), recv, args, typeArgs, ownerArgs, null, c.span());
-            case TRAIT -> callTrait(c.fn(), recv, args, typeArgs);
+            case TRAIT -> dispatchTrait(c.fn(), recv, args, typeArgs);
             case TRAIT_STATIC -> {
                 var self = subst(c.staticSelf(), f);
                 var target = staticTraitTarget(c.fn(), self);
@@ -428,15 +446,16 @@ public final class Interpreter {
     }
 
     /** Calls trait member {@code fn} on {@code recv}, through the implementation for its runtime type (§8.3). */
-    Object callTrait(FnInfo fn, Object recv, Object[] args, List<Type> typeArgs) {
+    private Object dispatchTrait(FnInfo fn, Object recv, Object[] args, List<Type> typeArgs) {
         var target = traitTarget(fn, recv);
         if (target == null) return builtinTraitCall(fn, recv, args);
         return invoke(target, recv, args, typeArgs, null, null, null);
     }
 
     /** Calls the trait member named {@code name} of {@code trait} on {@code recv}. */
-    Object callByName(Object recv, TypeInfo trait, String name, Object... args) {
-        return callTrait(trait.methods(name).getFirst(), recv, args, List.of());
+    @Override
+    public Object callTrait(Object recv, TypeInfo trait, String name, Object... args) {
+        return dispatchTrait(trait.methods(name).getFirst(), recv, args, List.of());
     }
 
     private FnInfo traitTarget(FnInfo fn, Object recv) {
@@ -513,8 +532,8 @@ public final class Interpreter {
         };
     }
 
-    /** Calls a function value. */
-    Object callFn(FnVal fn, Object[] args) {
+    @Override
+    public Object call(FnVal fn, Object... args) {
         if (fn.fn != null) return invoke(fn.fn, null, args, fn.typeArgs, null, null, null);
         if (fn.lambda == null) return ffi.callPointer(fn, args);
         var lambda = fn.lambda;
@@ -542,7 +561,8 @@ public final class Interpreter {
     }
 
     /** The runtime type of a value (§15). */
-    Type typeOf(Object v) {
+    @Override
+    public Type typeOf(Object v) {
         return switch (v) {
             case null -> Type.NULL;
             case Boolean b -> Prim.BOOL;
@@ -792,7 +812,7 @@ public final class Interpreter {
         b = unbox(b);
         if (a instanceof EnumVal x && b instanceof EnumVal y) return Long.compare(x.v(), y.v());
         if (a instanceof Obj o) {
-            var r = (Int) callByName(a, ts.ord, "cmp", b);
+            var r = (Int) callTrait(a, ts.ord, "cmp", b);
             return Long.signum(r.v());
         }
         return Ops.comparePrim(a, b);
@@ -838,36 +858,19 @@ public final class Interpreter {
     }
 
     /** {@code Display} (§16), as used by f-strings. */
-    String display(Object v) {
+    @Override
+    public String display(Object v) {
         return switch (v) {
             case String s -> s;
             case Int i -> i.toString();
             case Flt fl -> Ops.display(fl);
             case Char ch -> Ops.display(ch);
             case Boolean b -> b.toString();
-            case EnumVal e -> enumDisplay(e);
+            case EnumVal e -> Ops.display(e);
             case TypeVal t -> TypeSystem.name(t.type());
             case null -> "null";
-            default -> (String) callByName(v, ts.display, "to_str");
+            default -> (String) callTrait(v, ts.display, "to_str");
         };
-    }
-
-    /** Member name; flags combinations as {@code A | B}; undeclared bits as the integer (§4.11). */
-    String enumDisplay(EnumVal e) {
-        var members = e.decl().enumMembers;
-        for (var m : members.entrySet()) if (m.getValue() == e.v()) return m.getKey();
-        if (!e.decl().isFlags) return Ops.wrap(e.decl().backing, e.v()).toString();
-        var parts = new ArrayList<String>();
-        long rest = e.v();
-        for (var m : members.entrySet()) {
-            long bits = m.getValue();
-            if (bits != 0 && (rest & bits) == bits) {
-                parts.add(m.getKey());
-                rest &= ~bits;
-            }
-        }
-        if (rest != 0) parts.add(Ops.wrap(e.decl().backing, rest).toString());
-        return String.join(" | ", parts);
     }
 
     boolean truthy(Object v) {
@@ -878,7 +881,7 @@ public final class Interpreter {
             case ListVal l -> !l.items.isEmpty();
             case MapVal m -> !m.entries.isEmpty();
             case SetVal s -> !s.entries.isEmpty();
-            default -> (Boolean) callByName(v, ts.truthy, "truthy");
+            default -> (Boolean) callTrait(v, ts.truthy, "truthy");
         };
     }
 
@@ -887,9 +890,10 @@ public final class Interpreter {
     }
 
     /** One step of an iterator: {@code Iterator::next} on a value used in place. */
-    Object next(Object iterator) {
+    @Override
+    public Object next(Object iterator) {
         if (iterator instanceof IterVal it) return it.next.get();
-        return callByName(iterator, ts.iterator, "next");
+        return callTrait(iterator, ts.iterator, "next");
     }
 
     // ---- Statics (§4.2) ----
@@ -994,51 +998,26 @@ public final class Interpreter {
         }
     }
 
-    /** Lists, maps and sets lock themselves for each operation, so racing threads cannot break them. */
     Object indexGet(Object container, Object index) {
         return switch (container) {
-            case ListVal l -> {
-                synchronized (l) {
-                    yield Values.copy(l.items.get(checkIndex(index, l.items.size())));
-                }
-            }
-            case ArrayVal a -> Values.copy(a.items[checkIndex(index, a.items.length)]);
-            case MapVal m -> {
-                var key = new Key(index, this);
-                synchronized (m) {
-                    if (!m.entries.containsKey(key)) throw new Panic("key not found in map: " + debug(index));
-                    yield Values.copy(m.entries.get(key));
-                }
-            }
-            default -> callByName(container, ts.index, "index", index);
+            case ListVal l -> Natives.get(l, index);
+            case ArrayVal a -> Natives.get(a, index);
+            case MapVal m -> Natives.get(this, m, index);
+            default -> callTrait(container, ts.index, "index", index);
         };
     }
 
     void indexSet(Object container, Object index, Object value) {
         switch (container) {
-            case ListVal l -> {
-                synchronized (l) {
-                    l.items.set(checkIndex(index, l.items.size()), value);
-                }
-            }
-            case ArrayVal a -> a.items[checkIndex(index, a.items.length)] = value;
-            case MapVal m -> {
-                var key = new Key(index, this);
-                synchronized (m) {
-                    m.entries.put(key, value);
-                }
-            }
-            default -> callByName(container, ts.indexMut, "set", index, value);
+            case ListVal l -> Natives.set(l, index, value);
+            case ArrayVal a -> Natives.set(a, index, value);
+            case MapVal m -> Natives.set(this, m, index, value);
+            default -> callTrait(container, ts.indexMut, "set", index, value);
         }
     }
 
-    static int checkIndex(Object index, int size) {
-        var i = (Int) index;
-        if (i.v() < 0 || i.v() >= size) throw new Panic("index out of range: " + i + " >= " + size);
-        return (int) i.v();
-    }
-
-    String debug(Object v) {
+    @Override
+    public String debug(Object v) {
         if (v instanceof String s) return '"' + s + '"';
         try {
             return display(v);
@@ -1228,7 +1207,7 @@ public final class Interpreter {
                 var args = new Object[c.args().size()];
                 for (int i = 0; i < args.length; i++) args[i] = eval(c.args().get(i), f);
                 f.at = c.span();
-                yield callFn((FnVal) fn, args);
+                yield call((FnVal) fn, args);
             }
             case Ir.FnRef r -> new FnVal((Type.Fn) subst(r.type(), f), null, null, Map.of(), r.fn(), substAll(r.typeArgs(), f));
             case Ir.Lambda l -> new FnVal((Type.Fn) subst(l.type(), f), l, f.env.snapshot(), f.typeEnv, null, null);

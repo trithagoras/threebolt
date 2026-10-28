@@ -21,10 +21,10 @@ import java.util.function.LongBinaryOperator;
  * are std classes whose Java state is kept in {@link Obj#nat}.
  */
 final class Threads {
-    private final Interpreter in;
+    private final Callbacks rt;
 
-    Threads(Interpreter in) {
-        this.in = in;
+    Threads(Callbacks rt) {
+        this.rt = rt;
     }
 
     /** A spawned thread and, once it has finished, its result. */
@@ -39,7 +39,7 @@ final class Threads {
                 try {
                     Thread.sleep(((Int) a[0]).v());
                 } catch (InterruptedException e) {
-                    throw new Interpreter.Abort();
+                    throw new Callbacks.Abort();
                 }
                 yield Unit.UNIT;
             }
@@ -73,7 +73,7 @@ final class Threads {
         var thread = construct(fn, typeEnv);
         var running = new Running();
         thread.nat = running;
-        running.thread = in.startThread(() -> running.result = in.callFn(f, new Object[0]));
+        running.thread = rt.startThread(() -> running.result = rt.call(f));
         return thread;
     }
 
@@ -82,10 +82,10 @@ final class Threads {
         try {
             running.thread.join();
         } catch (InterruptedException e) {
-            throw new Interpreter.Abort();
+            throw new Callbacks.Abort();
         }
         // The thread may have ended the process (a panic) rather than returned.
-        in.checkAbort();
+        rt.checkAbort();
         return Values.copy(running.result);
     }
 
@@ -101,12 +101,12 @@ final class Threads {
         try {
             lock.lockInterruptibly();
         } catch (InterruptedException e) {
-            throw new Interpreter.Abort();
+            throw new Callbacks.Abort();
         }
         try {
             var guardType = (Type.Nominal) ((Type.Fn) fn.params.getFirst().type()).params().getFirst();
             var guard = new Obj(guardType.decl(), mutex.args, new Object[] {mutex.fields[0]});
-            var result = in.callFn(f, new Object[] {guard});
+            var result = rt.call(f, guard);
             mutex.fields[0] = guard.fields[0];
             return result;
         } finally {

@@ -2,6 +2,7 @@ package dev.threebolt.interp;
 
 import dev.threebolt.ast.Expr.BinaryOp;
 import dev.threebolt.interp.Values.Char;
+import dev.threebolt.interp.Values.EnumVal;
 import dev.threebolt.interp.Values.Flt;
 import dev.threebolt.interp.Values.Int;
 import dev.threebolt.types.Prim;
@@ -333,6 +334,24 @@ public final class Ops {
     }
 
     // ---- Display (§16) ----
+
+    /** Member name; flags combinations as {@code A | B}; undeclared bits as the integer (§4.11). */
+    static String display(EnumVal e) {
+        var members = e.decl().enumMembers;
+        for (var m : members.entrySet()) if (m.getValue() == e.v()) return m.getKey();
+        if (!e.decl().isFlags) return wrap(e.decl().backing, e.v()).toString();
+        var parts = new java.util.ArrayList<String>();
+        long rest = e.v();
+        for (var m : members.entrySet()) {
+            long bits = m.getValue();
+            if (bits != 0 && (rest & bits) == bits) {
+                parts.add(m.getKey());
+                rest &= ~bits;
+            }
+        }
+        if (rest != 0) parts.add(wrap(e.decl().backing, rest).toString());
+        return String.join(" | ", parts);
+    }
 
     public static String display(Object v) {
         return switch (v) {

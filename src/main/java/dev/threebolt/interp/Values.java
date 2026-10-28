@@ -132,21 +132,21 @@ public final class Values {
         }
     }
 
-    /** A map/set key: equality and hash through the interpreter's `==` and `Hash`. */
+    /** A map/set key: equality and hash through `==` and `Hash` (which may run user code). */
     public static final class Key {
         public final Object value;
-        private final Interpreter interp;
+        private final Callbacks rt;
         private final int hash;
 
-        public Key(Object value, Interpreter interp) {
+        Key(Object value, Callbacks rt) {
             this.value = value;
-            this.interp = interp;
-            this.hash = interp.hashOf(value);
+            this.rt = rt;
+            this.hash = rt.hash(value);
         }
 
         @Override
         public boolean equals(Object o) {
-            return o instanceof Key k && interp.valueEquals(value, k.value);
+            return o instanceof Key k && rt.equal(value, k.value);
         }
 
         @Override
