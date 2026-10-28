@@ -1,0 +1,3 @@
+pub struct User { let name: str; }
+
+pub fn greet(u: User) -> str => f"hello, {u.name}";

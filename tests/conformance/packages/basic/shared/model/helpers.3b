@@ -1,0 +1,2 @@
+// `internal` items are visible anywhere in their package (§2.3).
+internal fn wrap(s: str) -> str => f"<{s}>";

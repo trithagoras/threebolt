@@ -1,0 +1,11 @@
+[package]
+name = "app"
+
+[[bin]]
+name = "app"
+entry = "main.3b"
+
+[dependencies]
+mid = { path = "../mid" }
+none = { path = "../nowhere" }
+shared = { path = "vendor/shared" }

@@ -21,9 +21,10 @@ Hobbyist general-purpose language (`.3b`): statically typed, GC-managed, Rust-fl
 ```sh
 ./gradlew build                                   # generate parser, compile, test
 ./gradlew test
-./gradlew run --args="tokens examples/arena/main.3b"
-./gradlew run --args="parse examples/arena/main.3b"
-./gradlew run --args="ast examples/arena/main.3b"     # also: print, check
+./gradlew run --args="debug tokens examples/arena/main.3b"
+./gradlew run --args="debug parse examples/arena/main.3b"
+./gradlew run --args="debug ast examples/arena/main.3b"     # also: debug print, check, run
+./gradlew installDist                             # the `bolt` CLI at build/install/bolt/bin/bolt
 ./gradlew test -PupdateGolden                     # rewrite lexer goldens and conformance .err files
 ./gradlew vscodeServer                            # build the language server jar into editors/vscode/server/
 ```
@@ -37,14 +38,14 @@ Hobbyist general-purpose language (`.3b`): statically typed, GC-managed, Rust-fl
 ```
 src/main/antlr/…/parser/   ANTLR grammars
 src/main/java/dev/threebolt/
-  Main.java                CLI
+  Main.java                CLI (`bolt`); project/ finds package.toml / workspace.toml, `bolt new`/`add`
   diag/                    Source, Span, diagnostics with stable E0xxx codes
   ast/ parse/ resolve/ types/ interp/ runtime/   (created as phases land — see PLAN)
 src/main/resources/std/    std modules in Threebolt (bodyless fns are intrinsics: see PLAN.md § Runtime boundary)
 src/test/java/…            JUnit 5 unit tests
 tests/conformance/         .3b programs + expected output / expected diagnostics (see its README)
 examples/                  sample Threebolt programs (must keep parsing as the grammar evolves)
-src/main/java/…/lsp/       language server (`threebolt lsp`, LSP4J) over types.SymbolIndex; completion via types.Completer hooks
+src/main/java/…/lsp/       language server (`bolt lsp`, LSP4J) over types.SymbolIndex; completion via types.Completer hooks
 editors/vscode/            VS Code extension: TextMate grammar (keep in step with ThreeboltLexer.g4) + LSP client
 ```
 

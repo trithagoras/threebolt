@@ -1,0 +1,2 @@
+package.toml:9:1: error[E0113]: dependency key 'util' clashes with the top-level module 'util' (util.3b) of package 'app'; rename the key
+package.toml:10:1: error[E0113]: dependency key 'game' clashes with the top-level directory 'game/' of package 'app'; rename the key

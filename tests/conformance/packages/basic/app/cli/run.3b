@@ -1,0 +1,19 @@
+// §2.5: a bin entry below the root is the module `cli::run`; paths still start at the root.
+// `geo` is the key of the package named `geometry`; `shared` reaches the same directory from
+// both app and geometry, so its static counter exists once.
+use report::line;
+use shared::api::User;
+use geo::point::Point;
+
+// An orphan impl (§4.10) is allowed in the application package.
+impl Display for Point {
+    fn to_str(self) -> str => f"({self.x}, {self.y})";
+}
+
+fn main() {
+    println(line(User { name: "ada" }));
+    println(Point { x: 1, y: 2 });
+    shared::counter::bump();
+    println(geo::point::bumped());
+    println(shared::counter::total());
+}

@@ -1,0 +1,5 @@
+main.3b:2:5: error[E0100]: module 'base::m' not found
+../mid/package.toml:5:1: note: 'base' is a dependency of package 'mid', not of 'app'; dependencies are not transitive
+main.3b:3:5: error[E0100]: module 'vendor::shared::m' not found
+vendor/shared/package.toml:1:1: note: 'vendor/shared' is a package of its own, not part of 'app'; depend on it to use it
+package.toml:10:1: error[E0111]: dependency 'none': there is no package.toml in '../nowhere'

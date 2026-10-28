@@ -1,0 +1,3 @@
+pub struct Point { let x: i32; }
+
+pub trait Shape { fn sides(self) -> i32; }

@@ -8,7 +8,7 @@ implementation), and strike it here.
 
 **Order (agreed 2026-10-28):**
 1. Runtime boundary: move std into Threebolt over a small, documented intrinsic layer; backend prerequisites.
-2. Projects and packages: manifest, workspaces, dependencies, lockfile, multiple executables.
+2. Projects and packages: manifest, workspaces, path dependencies, multiple executables, `internal`, `pub use`.
 3. Standard library expansion, one module per session: `time` → `env`/`process` → `net`.
 4. JVM bytecode backend, when benchmarks show a need or the language has settled.
 
@@ -101,56 +101,121 @@ std, and lets the derivable members be plain index-based Threebolt. Under C the 
 Repeated `+` in a loop stays quadratic; `[str].join("")` or `str::from_chars` over a `[char]` are the
 idioms, and a `StrBuilder` can be decided with the std expansion.
 
-## 2. Projects and packages
+## 2. Projects and packages — design (decided 2026-10-28)
 
 Today a program is an entry file plus the modules reachable from it under its directory (spec §2.1), and
 `std::` is a reserved root. None of this needs std to be finished.
 
-**Agreed direction:**
-- **One-off scripts stay first-class.** `threebolt run script.3b` with no manifest behaves as today: the source
-  root is the file's directory, plus std.
-- **Module cycles are allowed inside a package; package cycles are an error.** Cyclic imports between modules
-  already work (§2.2: resolution is whole-program, statics initialise lazily), which is the C# assembly / Rust
-  crate model and is not Python's problem (Python's comes from imports executing at import time against
-  half-initialised modules). The package dependency graph must be a DAG; a cycle is a compile error naming it.
-- **Cargo-shaped manifest and lockfile; workspaces for multi-package repos.** A package has at most one library
-  and any number of executables:
+### 2.1 Decided
 
-  ```toml
-  # threebolt.toml at the repo root
-  [workspace]
-  members = ["shared", "server", "client"]
+**Names.** The language stays Threebolt (`.3b`); the tool is **`bolt`** (`bolt run`, `bolt new`, …). Puppet's
+orchestration tool also installs a `bolt` binary; accepted, as the two are rarely installed together. The unit
+of code is a **package**, described by **`package.toml`**; several packages form a **workspace**.
 
-  # server/threebolt.toml
-  [package]
-  name = "server"
-  version = "0.1.0"
+**One-off scripts stay first-class.** `bolt run script.3b` with no manifest in the current directory behaves as
+today: the source root is the file's directory, plus std.
 
-  [[bin]]
-  name = "server"
-  entry = "main.3b"
+**Package = directory.** The directory holding `package.toml` is the package's **source root** (spec §2.1 changes:
+today the root is the entry file's directory). Every entry file is a module in it, so `scripts/seed.3b` is the
+module `scripts::seed` and can `use game::entity` and the package's dependencies. There is no `[lib]` section and
+no `lib.3b` convention: a package is a library simply by being depended on, and its importable modules are those
+under its root. Bins are listed explicitly; nothing assumes `main.3b`.
 
-  [dependencies]
-  shared = { path = "../shared" }
-  ```
+```toml
+# server/package.toml
+[package]
+name = "server"
 
-  `server` and `client` are executables that cannot see each other; both use `shared` as a library. The
-  lockfile (`threebolt.lock`) records exact revisions and content hashes.
+[[bin]]
+name = "server"
+entry = "main.3b"
 
-**To decide (in a design doc before building):**
-- Manifest name (`threebolt.toml`) and fields: library entry (`lib.3b` by convention?), `[[bin]]` defaults
-  (`main.3b` alone ⇒ one bin named after the package?), C libraries for `@link`.
-- **Dependency → module mapping**: a dependency becomes a top-level module root like `std` (`use shared::model::User;`).
-  Clash with a local directory of the same name ⇒ error?
-- Does `threebolt run script.3b` *inside* a project use the project's dependencies? (Recommendation: yes, if a
-  manifest is found above it.)
-- Sources: local paths and git for now; a registry later. Versioning: semver ranges, one version per package
-  per program.
-- Visibility: is `pub` enough at package boundaries, or is a package-private level needed?
-- CLI: `threebolt new`, `add`, `run [bin]`, `build`, `test`, `check`, `fmt`. A test runner (`#[test]`-like
-  attribute? `tests/` convention?) belongs here.
-- Native code: how a package declares the C libraries it links, and whether packages may ship C.
-- Language server: find the project root via the manifest instead of the nearest `main.3b`.
+[dependencies]
+shared = { path = "../shared" }
+```
+
+**Finding the package: current directory only, never walking up.** `bolt run`/`check` use `./package.toml` if
+present, or `--project <dir>`. Run from a subdirectory, a failed import may add a hint naming a manifest found
+above ("run from there or pass `--project ..`"); that lookup only produces the hint, never changes behaviour.
+The language server does the same from the editor's open folder (and each workspace member), replacing the
+"nearest `main.3b`" search in `lsp/Workspace.java`.
+
+**Dependencies.**
+- Path dependencies only for now: no git, no semver, no lockfile; those come with a registry (or a git need).
+  The `{ path = … }` table form leaves room for `{ git = … }` and version strings later. Meanwhile git
+  submodules plus path dependencies cover sharing across repos.
+- The `[dependencies]` key is the module root the dependency is imported under (`use shared::model::User;`).
+- Package names and dependency keys are identifiers (snake_case by convention, no hyphens), never `std`.
+- A key that clashes with a top-level module or directory of the depending package ⇒ error naming both; fix it
+  by renaming the key.
+- Package identity is the canonical path: two packages depending on `../shared` share one copy.
+- Module cycles are allowed inside a package; the package graph must be a DAG (a cycle is an error naming it).
+
+**Visibility: new keyword `internal`** — visible anywhere in the declaring package, for items and members. Std's
+special rule (private members visible within std/builtin) becomes plain `internal`. In a manifest-less script the
+program is one package, so `internal` ≡ `pub` there.
+
+**Re-exports return as `pub use`.** A `use` is an item; a visibility modifier on it makes the imported name visible
+to other modules as if declared there (`pub use model::user::User;`, `internal use …`). Same forms as `use`,
+including globs, with the existing shadowing rules. Gives libraries a facade independent of their file layout.
+
+**`bolt new`.** No `bolt init`. `bolt new <name>` run in a workspace root adds the new package to
+its members and says so (only the current directory is checked).
+
+**CLI (this phase).**
+
+| Command | |
+|---|---|
+| `bolt new <name> [--lib \| --workspace]` | `--lib`: no bin scaffolded; default scaffolds `main.3b` hello world and its `[[bin]]` |
+| `bolt add <path>` | adds a path dependency, keyed by the dependency's package name |
+| `bolt run [bin \| file.3b] [-- args]` | `*.3b` ⇒ file, else a bin name; no argument and one bin ⇒ that bin; bin names unique per workspace |
+| `bolt check [bin \| file.3b]` | |
+| `bolt debug tokens\|parse\|ast\|print <file>` | today's inspection commands |
+| `bolt lsp` | |
+
+Later: `bolt test` (an `@test fn` attribute; its own phase). Not planned: `build` (nothing to build until a
+backend), `fmt`.
+
+**Native code.** Libraries load at runtime through FFM (closest to C#'s `DllImport` + NuGet's `runtimes/<rid>/native/`).
+`@link("name")` in source stays the only declaration. A package may ship **prebuilt** libraries and list
+per-platform search directories in `package.toml` (`[native]`; key set settled at implementation); the loader
+searches those, then the system. No build scripts and no compiling C: if a library must be built, the package's
+README says how to install it.
+
+**Workspaces.** A workspace root holds **`workspace.toml`** (`[workspace] members = [...]`), as Go keeps `go.work`
+beside `go.mod`; a directory holding both `package.toml` and `workspace.toml` ⇒ error.
+
+**Orphan rule, with the application exempt.** An impl must live in the package that declares the trait or the
+target's type constructor, except in the **application package** (the package of the entry being run), whose
+orphan impls can only conflict at an upgrade its own author chooses. A package containing orphan impls therefore
+cannot be used as a dependency (error at the impl, naming the dependent). Rust applies the rule everywhere;
+the exemption keeps "add `Display` to a dependency's type" a one-liner in apps.
+
+**Manifest parsing** uses a TOML library (the third dependency, after ANTLR and LSP4J).
+
+### 2.2 Steps
+1. ~~Spec~~ — done (`fdb3b8e`): §1 keyword `internal`; §2.1 packages and source roots; §2.2 `pub use`; §2.3 `internal`; §4.10 orphan rule
+   (normative, application exempt); intro's "Not in 1.0" loses re-exports and package manager; changelog entry.
+2. ~~`internal` and `pub use` in grammar and checker (testable without packages); TextMate grammar~~ — done (`3e99db4`).
+   Std's private `str` helpers are `internal`, replacing the std/builtin visibility special case. Re-exports resolve
+   on demand in `ModuleLoader` (`resolveUse`/`reexport`), so they chain and may form cycles; a glob re-exports each
+   name at the lesser visibility. `Module.samePackage` is a placeholder (std vs everything else) until step 3.
+3. ~~Manifest loading, package graph, per-package source roots, `internal` across packages, orphan rule~~ — done
+   (`dbdcd65`, `6fad8fe`, `d2ab70d`; spec `75ec21f`: a nested package is not part of its parent). `project.Manifest`
+   parses `package.toml`/`workspace.toml` with night-config 3.9.0. A `resolve.Package` has a root and dependencies by
+   key; `std` is `Package.STD`. A `Module` has its package and local path, and `path()` is for display
+   (`shared::model`). Paths resolve per package (`Package.locate`), as in `Program.module(from, path)`. Diagnostics
+   name files relative to the application root (`../shared/m.3b`). New codes: E0111 manifest, E0112 names, E0113 key
+   clash, E0114 cycle, E0412 orphan impl. E0100 notes a nested package or a key of another package. Lints cover only
+   the application package. Conformance: `tests/conformance/packages/`.
+4. ~~CLI~~ — done (`74d0fd3`): `bolt new|add|run|check|debug|lsp`, `--project`, the hint. A `.3b` file outside every
+   package of the project runs as a script. Program arguments only follow `--`. `bolt check` with no target checks
+   every bin, and a package without bins as a library (`ModuleLoader.loadLibrary`). Not done: `[native]` (its key set
+   is still to settle, with the first package that ships a prebuilt library).
+5. ~~Language server~~ — done (`b325358`): a file's package is the nearest `package.toml` at or above it within the
+   open folder, or a member of the folder's workspace. This walks up where the CLI does not, so the conformance packages
+   in this repo check in the editor. Files outside any package keep the nearest-`main.3b` rule. Manifest errors
+   publish on `package.toml`. The extension activates on manifests and forwards their changes.
 
 ## 3. Standard library expansion
 

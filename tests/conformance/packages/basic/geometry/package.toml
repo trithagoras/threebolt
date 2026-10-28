@@ -1,0 +1,5 @@
+[package]
+name = "geometry"
+
+[dependencies]
+shared = { path = "../shared" }

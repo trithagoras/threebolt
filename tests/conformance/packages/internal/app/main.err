@@ -1,0 +1,6 @@
+main.3b:2:23: error[E0102]: 'hidden' is internal to package 'lib'
+../lib/m.3b:7:1: note: declared here as `internal`
+main.3b:7:15: error[E0109]: field 'secret' is internal to package 'lib'
+main.3b:8:7: error[E0109]: method 'tick' is internal to package 'lib'
+main.3b:9:21: error[E0102]: 'hidden' is internal to package 'lib'
+../lib/m.3b:7:1: note: declared here as `internal`

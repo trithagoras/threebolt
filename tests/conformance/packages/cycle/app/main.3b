@@ -1,0 +1,2 @@
+// §2.5: the dependency graph must be acyclic; the error names the cycle.
+fn main() { a::m::f(); }

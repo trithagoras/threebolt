@@ -1,0 +1,5 @@
+pub struct Order { let id: i32; }
+
+pub fn count() -> i32 => 3;
+
+internal fn helper() -> str => "internal";

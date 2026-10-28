@@ -8,7 +8,7 @@ import java.util.List;
 /**
  * Renders an AST as an s-expression of every record component except spans, e.g.
  * {@code (Binary ADD (IntLit 1 null) (Path [(PathSegment x [])]))}. Generic over the records, so
- * two trees with equal dumps are equal up to spans; used by `threebolt ast` and round-trip tests.
+ * two trees with equal dumps are equal up to spans; used by `bolt debug ast` and round-trip tests.
  */
 public final class AstDump {
     private AstDump() {}

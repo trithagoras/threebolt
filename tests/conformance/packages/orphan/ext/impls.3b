@@ -1,0 +1,13 @@
+use model::shapes::{Point, Shape};
+
+impl Default for Point {
+    fn default() -> Self => Point { x: 0 };
+}
+
+// Not orphans: ext declares the trait or the type.
+pub trait Area { fn area(self) -> i32; }
+impl Area for Point { fn area(self) -> i32 => 0; }
+pub struct Square { let side: i32; }
+impl Shape for Square { fn sides(self) -> i32 => 4; }
+
+pub fn touch() {}

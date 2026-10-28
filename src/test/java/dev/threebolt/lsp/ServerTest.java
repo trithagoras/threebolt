@@ -19,6 +19,8 @@ import org.eclipse.lsp4j.CodeActionParams;
 import org.eclipse.lsp4j.DefinitionParams;
 import org.eclipse.lsp4j.Diagnostic;
 import org.eclipse.lsp4j.DidChangeTextDocumentParams;
+import org.eclipse.lsp4j.CompletionParams;
+import org.eclipse.lsp4j.DidChangeWatchedFilesParams;
 import org.eclipse.lsp4j.DidOpenTextDocumentParams;
 import org.eclipse.lsp4j.DocumentHighlightParams;
 import org.eclipse.lsp4j.DiagnosticSeverity;
@@ -114,6 +116,55 @@ class ServerTest {
         open(shapes, SHAPES.replace("p.y * p.y", "p.y * q"));
         assertEquals(1, diagnostics.get(uri(shapes)).size());
         assertEquals(List.of(), diagnostics.get(uri(main)));
+    }
+
+    @Test
+    void packagesResolveByKeyAndPublishManifestErrors() throws Exception {
+        var app = Files.createDirectories(dir.resolve("app"));
+        var lib = Files.createDirectories(dir.resolve("lib"));
+        Files.writeString(app.resolve("package.toml"), """
+                [package]
+                name = "app"
+
+                [[bin]]
+                name = "app"
+                entry = "main.3b"
+
+                [dependencies]
+                shared = { path = "../lib" }
+                """);
+        var libManifest = Files.writeString(lib.resolve("package.toml"), "[package]\nname = \"lib\"\n");
+        Files.writeString(lib.resolve("model.3b"), "pub struct User { let name: str; }\ninternal fn secret() {}\n");
+        Files.writeString(app.resolve("main.3b"), "fn main() { report::run(); }\n");
+        // Not the bin: checked as part of the bin's program, with the package's dependencies.
+        var report = app.resolve("report.3b");
+        var text = "pub fn run() {\n    let _u = User { name: \"a\" };\n    shared::model::secret();\n}\n";
+        Files.writeString(report, text);
+        open(report, text);
+        var codes = diagnostics.get(uri(report)).stream().map(d -> d.getCode().getLeft()).toList();
+        assertEquals(List.of("E0107", "E0102"), codes);
+        assertEquals("use shared::model::User;\n" + text, fix(report, text, "Import `shared::model::User`", "User"));
+
+        Files.writeString(libManifest, "[package]\nname = \"my-lib\"\n");
+        server.didChangeWatchedFiles(new DidChangeWatchedFilesParams(List.of()));
+        server.workspace().awaitIdle();
+        var ds = diagnostics.get(uri(libManifest));
+        assertEquals("E0112", ds.getFirst().getCode().getLeft(), ds.toString());
+        assertEquals(new Position(1, 0), ds.getFirst().getRange().getStart());
+
+        // `use` lines offer the dependency keys, and a dependency's modules under its key.
+        change(report, "use \n" + text);
+        var labels = server.completion(new CompletionParams(doc(report), new Position(0, 4))).get().getLeft()
+                .stream().map(org.eclipse.lsp4j.CompletionItem::getLabel).toList();
+        assertTrue(labels.contains("shared") && labels.contains("std") && labels.contains("main"), labels.toString());
+        change(report, "use shared::\n" + text);
+        labels = server.completion(new CompletionParams(doc(report), new Position(0, 12))).get().getLeft()
+                .stream().map(org.eclipse.lsp4j.CompletionItem::getLabel).toList();
+        assertEquals(List.of("model"), labels);
+        change(report, "use shared::model::\n" + text);
+        labels = server.completion(new CompletionParams(doc(report), new Position(0, 19))).get().getLeft()
+                .stream().map(org.eclipse.lsp4j.CompletionItem::getLabel).toList();
+        assertEquals(List.of("User"), labels);
     }
 
     @Test

@@ -182,7 +182,10 @@ public final class Server implements LanguageServer, LanguageClientAware, TextDo
     public void didChangeConfiguration(DidChangeConfigurationParams params) {}
 
     @Override
-    public void didChangeWatchedFiles(DidChangeWatchedFilesParams params) {}
+    public void didChangeWatchedFiles(DidChangeWatchedFilesParams params) {
+        // The client watches package.toml and workspace.toml (editors/vscode/extension.js).
+        workspace.manifestsChanged();
+    }
 
     private void publish(Analysis a, Path file, List<Diagnostic> diagnostics) {
         var out = new ArrayList<org.eclipse.lsp4j.Diagnostic>();

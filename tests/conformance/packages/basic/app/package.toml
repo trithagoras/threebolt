@@ -1,0 +1,10 @@
+[package]
+name = "app"
+
+[[bin]]
+name = "app"
+entry = "cli/run.3b"
+
+[dependencies]
+shared = { path = "../shared" }
+geo = { path = "../geometry" }

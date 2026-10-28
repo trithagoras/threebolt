@@ -5,6 +5,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import dev.threebolt.diag.Diagnostic;
 import dev.threebolt.diag.Diagnostics;
+import dev.threebolt.diag.Source;
+import dev.threebolt.project.Manifest;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -37,9 +39,20 @@ class ConformanceTest {
         return entries.stream().map(entry -> DynamicTest.dynamicTest(ROOT.relativize(entry).toString(), () -> run(entry)));
     }
 
-    /** A directory with a `main.3b` is one multi-module case; otherwise each `.3b` file is a case. */
+    /**
+     * A directory with a `package.toml` is an application package, run from its first `[[bin]]`
+     * (else its `main.3b`), or a library with neither, loaded only as a dependency. Otherwise a
+     * directory with a `main.3b` is one multi-module case, and else each `.3b` file is a case.
+     */
     private static void collect(Path dir, List<Path> entries) throws IOException {
         Path main = dir.resolve("main.3b");
+        Path manifest = dir.resolve(Manifest.FILE);
+        if (Files.isRegularFile(manifest)) {
+            var bins = Manifest.parse(new Source(Manifest.FILE, Files.readString(manifest)), new Diagnostics()).bins();
+            if (!bins.isEmpty()) entries.add(dir.resolve(bins.getFirst().entry()).normalize());
+            else if (Files.isRegularFile(main)) entries.add(main);
+            return;
+        }
         if (!dir.equals(ROOT) && Files.isRegularFile(main)) {
             entries.add(main);
             return;
@@ -56,7 +69,7 @@ class ConformanceTest {
 
     private static void run(Path entry) throws IOException {
         var diagnostics = new Diagnostics();
-        var program = Driver.check(entry, diagnostics);
+        var program = Driver.check(entry, packageRoot(entry), diagnostics);
         var actual = new StringBuilder();
         for (Diagnostic d : diagnostics.sorted()) {
             // Warnings are expected only of cases without errors: an error case's leftovers are noise.
@@ -80,6 +93,14 @@ class ConformanceTest {
         golden(sibling(entry, ".stderr"), err.toString(StandardCharsets.UTF_8));
         int expected = directive(source, "exit").map(Integer::parseInt).orElse(0);
         assertEquals(expected, code, "exit code (set it with `//! exit: N`)");
+    }
+
+    /** The nearest directory at or above {@code entry}'s holding a `package.toml`, within the suite; null if none. */
+    private static Path packageRoot(Path entry) {
+        for (var dir = entry.getParent(); dir != null && dir.startsWith(ROOT); dir = dir.getParent()) {
+            if (Files.isRegularFile(dir.resolve(Manifest.FILE))) return dir;
+        }
+        return null;
     }
 
     /** {@code //! name: value} on a line of its own. */

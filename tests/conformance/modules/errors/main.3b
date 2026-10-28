@@ -4,7 +4,7 @@ use missing;
 use lib::Absent;
 use lib::hidden;
 use lib::{shown, Absent2};
-pub use lib::shown as shown2;
+pub use lib;
 use other::shown;
 
 fn main() {}

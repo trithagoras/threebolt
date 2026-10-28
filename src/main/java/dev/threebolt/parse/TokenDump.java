@@ -4,7 +4,7 @@ import dev.threebolt.parser.ThreeboltLexer;
 import java.util.List;
 import org.antlr.v4.runtime.Token;
 
-/** One-line-per-token rendering used by `threebolt tokens` and the lexer golden tests. */
+/** One-line-per-token rendering used by `bolt debug tokens` and the lexer golden tests. */
 public final class TokenDump {
     private TokenDump() {}
 

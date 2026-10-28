@@ -15,6 +15,7 @@ dependencies {
     antlr("org.antlr:antlr4:4.13.2")
     implementation("org.antlr:antlr4-runtime:4.13.2")
     implementation("org.eclipse.lsp4j:org.eclipse.lsp4j:1.0.0")
+    implementation("com.electronwill.night-config:toml:3.9.0")
 
     testImplementation(platform("org.junit:junit-bom:5.13.4"))
     testImplementation("org.junit.jupiter:junit-jupiter")
@@ -44,7 +45,7 @@ tasks.generateGrammarSource {
 
 application {
     mainClass = "dev.threebolt.Main"
-    applicationName = "threebolt"
+    applicationName = "bolt"
     // FFM (C interop) needs native access.
     applicationDefaultJvmArgs = listOf("--enable-native-access=ALL-UNNAMED")
 }
@@ -64,7 +65,7 @@ tasks.test {
     inputs.file("docs/spec/threebolt-1.0.md")
 }
 
-// One jar with every dependency, for `threebolt lsp` launched by the VS Code extension.
+// One jar with every dependency, for `bolt lsp` launched by the VS Code extension.
 val serverJar by tasks.registering(Jar::class) {
     archiveFileName = "threebolt.jar"
     destinationDirectory = layout.buildDirectory.dir("server")
@@ -88,7 +89,7 @@ tasks.register<Copy>("vscodeServer") {
 tasks.register("bench") {
     dependsOn(tasks.installDist)
     val only = providers.gradleProperty("bench")
-    val cli = layout.buildDirectory.file("install/threebolt/bin/threebolt")
+    val cli = layout.buildDirectory.file("install/bolt/bin/bolt")
     val dir = layout.projectDirectory.dir("tests/bench")
     doLast {
         val files = dir.asFile.listFiles { f -> f.extension == "3b" }!!.sortedBy { it.name }

@@ -1,1 +1,1 @@
-str_private.3b:3:19: error[E0109]: method 'matches_at' is private in 'str'
+str_private.3b:3:19: error[E0109]: method 'matches_at' is internal to the standard library

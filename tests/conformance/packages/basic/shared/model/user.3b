@@ -1,0 +1,5 @@
+pub struct User { let name: str; }
+
+internal fn shout(s: str) -> str => s.upper();
+
+pub fn describe(u: User) -> str => f"user {model::helpers::wrap(shout(u.name))}";

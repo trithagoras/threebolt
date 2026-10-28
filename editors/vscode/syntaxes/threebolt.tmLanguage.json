@@ -220,7 +220,7 @@
         },
         {
           "name": "storage.modifier.threebolt",
-          "match": "\\b(?:mut|pub|prot|abstract|override|virtual|unsafe)\\b"
+          "match": "\\b(?:mut|pub|internal|prot|abstract|override|virtual|unsafe)\\b"
         },
         {
           "name": "constant.language.boolean.threebolt",

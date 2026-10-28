@@ -1,0 +1,9 @@
+pub class Counter {
+    internal let secret: i32 = 0;
+    pub fn new() -> Self => {};
+    internal fn tick(self) {}
+}
+
+internal fn hidden() -> i32 => 1;
+
+pub fn open() {}

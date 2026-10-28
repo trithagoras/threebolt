@@ -1,0 +1,5 @@
+// §4.10: `ext` implements a std trait for model's type, so it cannot be a dependency.
+fn main() {
+    ext::impls::touch();
+    println(model::shapes::Point::default().x);
+}

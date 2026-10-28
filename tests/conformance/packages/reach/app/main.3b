@@ -1,0 +1,6 @@
+// §2.5: dependencies are not transitive, and a nested package is not part of its parent.
+use base::m::f;
+use vendor::shared::m::g;
+use shared::m::g as h;
+
+fn main() {}

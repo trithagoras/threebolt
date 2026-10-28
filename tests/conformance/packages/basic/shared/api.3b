@@ -1,0 +1,2 @@
+// The package's facade (§2.2 re-exports), independent of its file layout.
+pub use model::user::{User, describe};

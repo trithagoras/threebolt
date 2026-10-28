@@ -1,0 +1,4 @@
+../lib/package.toml:2:1: error[E0112]: 'std' is reserved and cannot be a package name
+package.toml:2:1: error[E0112]: 'my-app' is not a valid package name: use an identifier (snake_case, no hyphens)
+package.toml:9:1: error[E0112]: 'std' is reserved and cannot be a dependency key
+package.toml:10:2: error[E0112]: 'my-lib' is not a valid dependency key: use an identifier (snake_case, no hyphens)

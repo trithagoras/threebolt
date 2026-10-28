@@ -1,0 +1,3 @@
+// §2.5: a key may not be the name of a top-level module (`util.3b`) or directory (`game/`).
+// `vendor/` is fine: it holds only a nested package, which is not part of app.
+fn main() {}
