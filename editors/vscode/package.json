@@ -1,8 +1,8 @@
 {
   "name": "threebolt",
   "displayName": "Threebolt",
-  "description": "Threebolt (.3b) support: syntax highlighting, and a language server for errors, hover, go to definition, references, rename, completion and signature help",
-  "version": "0.3.12",
+  "description": "Threebolt (.3b) support: syntax highlighting, and a language server for errors and warnings, quick fixes, hover with doc comments, go to definition and implementation, references, rename, completion, signature help, inferred-type hints and semantic highlighting",
+  "version": "0.4.0",
   "publisher": "threebolt",
   "private": true,
   "license": "UNLICENSED",
@@ -63,7 +63,22 @@
         "command": "threebolt.restartServer",
         "title": "Threebolt: Restart Language Server"
       }
-    ]
+    ],
+    "semanticTokenModifiers": [
+      {
+        "id": "mutable",
+        "description": "A binding or static declared `mut`"
+      }
+    ],
+    "configurationDefaults": {
+      "editor.semanticTokenColorCustomizations": {
+        "rules": {
+          "*.mutable:threebolt": {
+            "underline": true
+          }
+        }
+      }
+    }
   },
   "main": "./extension.js",
   "activationEvents": [

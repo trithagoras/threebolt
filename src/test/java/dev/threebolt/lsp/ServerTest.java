@@ -25,6 +25,12 @@ import org.eclipse.lsp4j.DiagnosticSeverity;
 import org.eclipse.lsp4j.DocumentSymbol;
 import org.eclipse.lsp4j.DocumentSymbolParams;
 import org.eclipse.lsp4j.HoverParams;
+import org.eclipse.lsp4j.ImplementationParams;
+import org.eclipse.lsp4j.InlayHintParams;
+import org.eclipse.lsp4j.SemanticTokensParams;
+import org.eclipse.lsp4j.SymbolKind;
+import org.eclipse.lsp4j.WorkspaceSymbol;
+import org.eclipse.lsp4j.WorkspaceSymbolParams;
 import org.eclipse.lsp4j.InitializeParams;
 import org.eclipse.lsp4j.Location;
 import org.eclipse.lsp4j.MessageActionItem;
@@ -307,6 +313,91 @@ class ServerTest {
         assertEquals(text.replace("use shapes::Point;\n", "use shapes::Point;\nuse shapes::norm;\n"),
                 fix(file, text, "Import `shapes::norm`"));
         assertEquals(text.replace("let n", "let mut n"), fix(file, text, "Declare it `let mut`"));
+    }
+
+    @Test
+    void inlayHintsShowInferredTypes() throws Exception {
+        var text = """
+                fn main() {
+                    let a = 1;
+                    let b: i64 = 2;
+                    let (c, d) = ("x", 2.5);
+                    let f = (x: i32) => x;
+                    let g = [1].iter().map(y => y > 0);
+                    for (i, v) in ["p"].enumerate() { println(f"{i}{v}"); }
+                    println(f"{a}{b}{c}{d}{f(1)}{g.count()}");
+                }
+                """;
+        var file = Files.writeString(dir.resolve("hints.3b"), text);
+        open(file, text);
+        var hints = server.inlayHint(new InlayHintParams(doc(file), new org.eclipse.lsp4j.Range(new Position(0, 0),
+                new Position(99, 0)))).get();
+        var shown = hints.stream().map(h -> slice(text, new org.eclipse.lsp4j.Range(new Position(h.getPosition().getLine(), 0),
+                h.getPosition())).strip() + h.getLabel().getLeft()).toList();
+        assertEquals(List.of("let a: i32", "let (c: str", "let (c, d: f64", "let f: fn(i32) -> i32",
+                "let g: Iterator<bool>", "let g = [1].iter().map(y: i32", "for (i: usize", "for (i, v: str"), shown);
+    }
+
+    @Test
+    void semanticTokensClassifyNames() throws Exception {
+        var text = """
+                struct P { pub let x: i32; }
+                fn main() {
+                    let mut n = P { x: 1 };
+                    n.x = 2;
+                    println(n.x);
+                }
+                """;
+        var file = Files.writeString(dir.resolve("tokens.3b"), text);
+        open(file, text);
+        var data = server.semanticTokensFull(new SemanticTokensParams(doc(file))).get().getData();
+        var tokens = new ArrayList<String>();
+        int line = 0;
+        int col = 0;
+        for (int i = 0; i < data.size(); i += 5) {
+            line += data.get(i);
+            col = data.get(i) == 0 ? col + data.get(i + 1) : data.get(i + 1);
+            var name = text.lines().toList().get(line).substring(col, col + data.get(i + 2));
+            var mods = new ArrayList<String>();
+            for (int m = 0; m < SemanticTokens.MODIFIERS.size(); m++) {
+                if ((data.get(i + 4) & (1 << m)) != 0) mods.add(SemanticTokens.MODIFIERS.get(m));
+            }
+            tokens.add(name + ":" + SemanticTokens.TYPES.get(data.get(i + 3)) + mods);
+        }
+        // Primitive type names are keywords to the TextMate grammar; they have no token here.
+        assertEquals(List.of("P:struct[declaration]", "x:property[declaration]", "main:function[declaration]", "n:variable[declaration, mutable]", "P:struct[]", "x:property[]",
+                "n:variable[mutable]", "x:property[]", "println:function[defaultLibrary]", "n:variable[mutable]",
+                "x:property[]"), tokens);
+    }
+
+    @Test
+    void findsImplementationsAndWorkspaceSymbols() throws Exception {
+        var text = """
+                trait Speak { fn speak(self) -> str; }
+                abstract class Animal { abstract fn noise(self) -> str; }
+                class Dog : Animal, Speak {
+                    override fn noise(self) -> str => "woof";
+                    pub fn speak(self) -> str => self.noise();
+                }
+                struct Robot;
+                impl Speak for Robot { fn speak(self) -> str => "beep"; }
+                fn main() { println(Robot.speak()); }
+                """;
+        var file = Files.writeString(dir.resolve("impls.3b"), text);
+        open(file, text);
+        assertEquals(List.of("Speak", "Speak"), implementations(file, text, "Speak {"));
+        assertEquals(List.of("Dog"), implementations(file, text, "Animal {"));
+        assertEquals(List.of("speak", "speak"), implementations(file, text, "speak(self) -> str;"));
+        assertEquals(List.of("noise"), implementations(file, text, "noise(self) -> str;"));
+        var symbols = server.symbol(new WorkspaceSymbolParams("spk")).get().getRight();
+        assertEquals(List.of("Speak", "speak", "speak", "speak"), symbols.stream().map(WorkspaceSymbol::getName).toList());
+        assertEquals(List.of("Speak", "Dog", "Robot"), symbols.stream().filter(x -> x.getKind() == SymbolKind.Method)
+                .map(WorkspaceSymbol::getContainerName).toList());
+    }
+
+    private List<String> implementations(Path file, String text, String needle) throws Exception {
+        var locs = server.implementation(new ImplementationParams(doc(file), at(text, needle))).get().getLeft();
+        return locs.stream().map(l -> slice(text, l.getRange())).toList();
     }
 
     @Test

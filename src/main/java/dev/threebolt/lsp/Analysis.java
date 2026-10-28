@@ -10,6 +10,7 @@ import dev.threebolt.resolve.Program;
 import dev.threebolt.types.Checker;
 import dev.threebolt.types.Completion;
 import dev.threebolt.types.SymbolIndex;
+import dev.threebolt.types.TypeSystem;
 import java.nio.file.Path;
 import java.util.HashMap;
 import java.util.IdentityHashMap;
@@ -26,14 +27,17 @@ final class Analysis {
     final Path entry;
     final Program program;
     final SymbolIndex index;
+    final TypeSystem ts;
     final List<Diagnostic> diagnostics;
     private final Map<Source, Path> files = new IdentityHashMap<>();
     private final Map<Path, Module> modules = new HashMap<>();
 
-    private Analysis(Path entry, Program program, SymbolIndex index, List<Diagnostic> diagnostics, StdFiles std) {
+    private Analysis(Path entry, Program program, SymbolIndex index, TypeSystem ts, List<Diagnostic> diagnostics,
+                     StdFiles std) {
         this.entry = entry;
         this.program = program;
         this.index = index;
+        this.ts = ts;
         this.diagnostics = diagnostics;
         for (Module m : program.all()) {
             Path file = m.file() != null ? m.file() : std.file(m);
@@ -51,13 +55,13 @@ final class Analysis {
         var diagnostics = new Diagnostics();
         var program = new ModuleLoader(diagnostics, reader).load(entry);
         var index = completion == null ? new SymbolIndex() : new SymbolIndex(completion);
-        new Checker(program, diagnostics, index).check();
+        var checked = new Checker(program, diagnostics, index).check();
         var ds = diagnostics.sorted();
         if (!entry.getFileName().toString().equals("main.3b") && program.entry().scope().items("main").isEmpty()) {
             // A module checked on its own because no program uses it: it need not have a `main`.
             ds = ds.stream().filter(d -> d.code() != Code.INVALID_MAIN).toList();
         }
-        return new Analysis(entry, program, index, ds, std);
+        return new Analysis(entry, program, index, checked.ts(), ds, std);
     }
 
     /** The module read from {@code file}, or null if the program does not include it. */

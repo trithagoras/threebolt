@@ -92,6 +92,13 @@ final class Workspace {
         return a != null ? a : current.get(file);
     }
 
+    /** The latest analysis of each program, each once. */
+    java.util.Collection<Analysis> analyses() {
+        var out = java.util.Collections.newSetFromMap(new java.util.IdentityHashMap<Analysis, Boolean>());
+        out.addAll(current.values());
+        return out;
+    }
+
     /** The editor's text of {@code file}, else the file on disk; null if it cannot be read. */
     String text(Path file) {
         var text = open.get(file);
