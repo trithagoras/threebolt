@@ -238,7 +238,6 @@ final class Natives {
         var items = l.items;
         return switch (name) {
             case "len" -> usize(items.size());
-            case "truthy" -> !items.isEmpty();
             case "iter" -> listIter(l);
             case "index" -> get(l, a[0]);
             case "set" -> {
@@ -279,7 +278,6 @@ final class Natives {
         var items = arr.items;
         return switch (name) {
             case "len" -> usize(items.length);
-            case "truthy" -> items.length > 0;
             case "iter" -> iter(arr.element, java.util.Arrays.asList(items).iterator());
             case "index" -> get(arr, a[0]);
             case "set" -> {
@@ -300,7 +298,6 @@ final class Natives {
         var entries = m.entries;
         return switch (name) {
             case "len" -> usize(entries.size());
-            case "truthy" -> !entries.isEmpty();
             case "iter" -> {
                 var it = new ArrayList<>(entries.entrySet()).iterator();
                 yield generate(new Type.Tuple(List.of(m.key, m.value)), () -> {
@@ -331,7 +328,6 @@ final class Natives {
         var entries = s.entries;
         return switch (name) {
             case "len" -> usize(entries.size());
-            case "truthy" -> !entries.isEmpty();
             case "iter" -> iter(s.element, new ArrayList<>(entries.values()).iterator());
             case "insert" -> entries.putIfAbsent(new Key(a[0], rt), a[0]) == null;
             case "contains" -> entries.containsKey(new Key(a[0], rt));

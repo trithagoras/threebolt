@@ -296,7 +296,7 @@ pub class List<T> : Len, Truthy, Iterable<T>, Index<usize, T>, IndexMut<usize, T
     /// The number of elements.
     pub get fn len(self) -> usize;
     /// Whether the list is not empty.
-    pub fn truthy(self) -> bool;
+    pub fn truthy(self) -> bool => self.len > 0;
     /// The elements in order.
     pub fn iter(self) -> Iterator<T>;
     /// The element at `i` (`xs[i]`); panics if `i >= len`.
