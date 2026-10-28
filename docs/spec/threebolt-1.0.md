@@ -4,7 +4,7 @@ Normative technical reference for implementers (human or agent). Supersedes `doc
 
 **Character:** statically typed, GC-managed, Rust-flavoured syntax, C#-flavoured semantics. Structs (values), classes (references, single inheritance), traits (behaviour + runtime polymorphism), flattened union types, explicit `null`, no exceptions, easy C interop. Hobbyist "three-bolt" ethos: prefer simple, slightly sharp semantics over safety machinery.
 
-**Not in 1.0:** async; ownership/borrowing/lifetimes; exceptions; ADT enums with payloads; interfaces (traits instead); setters; method hiding; sealing; `Try` trait; blanket impls; `where` clauses; variance; re-exports (`pub use`); full reflection; finalizers/destructors; labeled `break`; format specifiers; method references as values; static fields in generic types; package manager/dependencies.
+**Not in 1.0:** async; ownership/borrowing/lifetimes; exceptions; ADT enums with payloads; interfaces (traits instead); setters; method hiding; sealing; `Try` trait; blanket impls; `where` clauses; variance; full reflection; finalizers/destructors; labeled `break`; format specifiers; method references as values; static fields in generic types; a package registry and versioned or remote dependencies (path dependencies only, §2.5).
 
 ---
 
@@ -16,7 +16,7 @@ Normative technical reference for implementers (human or agent). Supersedes `doc
 - Semicolons terminate statements. Whitespace is insignificant.
 
 **Keywords:**
-`abstract as break class const continue defer else enum extern false fn for if impl in is let loop match mut nameof null override prot pub return Self self static struct super trait true type typeof unsafe use virtual while`
+`abstract as break class const continue defer else enum extern false fn for if impl in internal is let loop match mut nameof null override prot pub return Self self static struct super trait true type typeof unsafe use virtual while`
 
 After `.` (member access) or `::` (path segment) any keyword is accepted as a name (e.g. `x.type()`, `Ptr<T>::null()`).
 
@@ -53,8 +53,8 @@ After `.` (member access) or `::` (path segment) any keyword is accepted as a na
 ## 2. Program structure
 
 ### 2.1 Modules
-- Every `.3b` file is a module. The **source root** is the directory containing the entry file. Module path = file path relative to root, `/` → `::`, extension dropped (`game/entity.3b` → `game::entity`). Module paths are case-sensitive.
-- The **program** is the entry module, every module reachable from it (transitively) through `use` or a fully-qualified path (§2.2), and the standard library modules. Other files under the source root are not part of it (their `impl`s do not apply).
+- Every `.3b` file is a module of a package (§2.5). Module path = file path relative to the package's **source root**, `/` → `::`, extension dropped (`game/entity.3b` → `game::entity`). Module paths are case-sensitive. A dependency's modules are named under its key: with dependency `shared`, `shared::model` is the module `model.3b` of that package.
+- The **program** is the entry module, every module reachable from it (transitively, across packages) through `use` or a fully-qualified path (§2.2), and the standard library modules. Other files are not part of it (their `impl`s do not apply).
 - Standard library modules live under `std::`. The prelude (§16) is implicitly imported everywhere.
 - A module contains only items: `use`, `fn`, `struct`, `class`, `trait`, `impl`, `enum`, `type`, `const`, `static let`, `extern` blocks.
 
@@ -66,17 +66,18 @@ use game::entity;               // module; then entity::Entity
 use std::collections::Map as Dict;
 use std::math::*;               // every pub item of a module
 ```
-- Only `pub` items may be imported from another module. Cyclic module imports are permitted (resolution is whole-program).
+- Only items visible to the importing module (§2.3) may be imported from another module. Cyclic module imports are permitted (resolution is whole-program).
 - `use p::n` imports module `p::n` if that file exists, else the items named `n` of module `p` (for a function, every `pub` overload). If both exist ⇒ error (ambiguous import).
 - `use p::*` (a **glob import**) imports every `pub` item of module `p` (`p` must be a module, not a type or enum). The module's own items and its explicit imports silently shadow glob-imported names; two glob imports that bring the same name for different things ⇒ error (at the later `use`), even if the name is never used.
 - A module's items and imports share one namespace: an import may not have the same name as an item of the module, or as another import of something different (importing the same thing twice is permitted). Functions with the same name form an overload set (§4.4); any other repeated name ⇒ error. Items and imports shadow prelude names.
-- `use` declarations cannot be `pub`: there are no re-exports in 1.0.
-- **Fully-qualified paths** need no `use`: in a type or expression path `a::b::C` whose first segment is not a name in scope (item, import or prelude name), the leading segments name a module from the source root (or `std::…`), e.g. `std::process::exit(1)`, `game::entity::Entity::new()`. A name in scope wins: after `use game::entity;`, `entity::Entity` uses the import. The same rules as `use` apply: only `pub` items of other modules are accessible.
+- **Re-exports.** A `use` is an item, and may carry `pub` or `internal` (§2.3). The names it binds are then visible to other modules, with that visibility, as if declared in the importing module: after `pub use model::user::User;` in module `api`, both `use api::User;` and `api::User` name `model::user::User`. Glob imports include re-exported names, and `pub use p::*;` re-exports every name the glob binds (names it is shadowed for are not bound, so not re-exported). A re-export may not be more visible than the item: `pub use` of an `internal` item ⇒ error. Modules cannot be re-exported: a `pub use` or `internal use` naming a module ⇒ error.
+- **Fully-qualified paths** need no `use`: in a type or expression path `a::b::C` whose first segment is not a name in scope (item, import or prelude name), the leading segments name a module from the source root, a dependency (§2.5) or `std::…`, e.g. `std::process::exit(1)`, `game::entity::Entity::new()`. A name in scope wins: after `use game::entity;`, `entity::Entity` uses the import. The same rules as `use` apply: only visible items (§2.3) of other modules are accessible.
 - Trait methods are callable on any implementing type without importing the trait (impls are global, §8.5).
 
 ### 2.3 Visibility
 - Items and members are **private by default** (visible within the declaring module; for members, within the declaring type, including every `impl` block for that type, §4.10).
 - `pub`: visible everywhere it can be imported/accessed.
+- `internal`: items and members; visible anywhere in the declaring package (§2.5). In a program without a manifest every module but std's is in one package, so there `internal` differs from `pub` only for the standard library's own items.
 - `prot`: class members only; visible to the declaring class and its subclasses.
 - Struct fields are always public; writing `pub` on them is permitted and redundant.
 - Trait method implementations are always public.
@@ -85,6 +86,17 @@ use std::math::*;               // every pub item of a module
 - The entry module MUST declare `fn main()` or `fn main(args: [str])`, return type `()` or `() | E` where every non-`()` member implements `Err`.
 - `args` excludes the program name.
 - Returning an error: its `message()` (just the message, followed by a newline) is written to stderr, exit code 1. Normal return: exit code 0. `std::process::exit(code: i32)` terminates immediately; pending `defer`s do not run.
+
+---
+
+### 2.5 Packages
+- A **package** is a directory containing a manifest, `package.toml`; the directory is the source root of its modules. The manifest's `[package]` table gives the package's `name`, and its `[dependencies]` table maps each **key** to a dependency, `shared = { path = "../shared" }` (relative to the manifest). Its other contents (executables, native library directories) and workspaces belong to the tooling (`docs/PLAN.md`).
+- A program whose entry file is run without a manifest is one package with no dependencies, rooted at the entry file's directory.
+- The **application package** is the package of the entry module. The standard library is a package that every package depends on under the key `std`.
+- Each key is a module root within the depending package (`use shared::model::User;`). Dependencies are not transitive: a package sees only its own dependencies and `std`.
+- Package names and keys are identifiers other than `std`. A key that equals the name of a top-level module (`k.3b`) or directory (`k/`) of the depending package ⇒ error.
+- A package is identified by its directory (symbolic links resolved): dependency paths that reach the same directory are one package, whose modules and statics exist once in the program.
+- The dependency graph must be acyclic; a cycle ⇒ error naming it. (Module cycles within a package are permitted, §2.2.)
 
 ---
 
@@ -284,8 +296,8 @@ impl<T: Display> Display for [T] { ... }
 ```
 - `struct S : T` / `class C : T` with methods in the body ≡ a separate `impl T for S { ... }`; both may be mixed for different traits but each (trait, type) pair is implemented exactly once program-wide. Listing `T` in the base list is itself that pair's implementation, even when its members come from defaults, so a separate `impl T for S` is then a duplicate.
 - A base list also implements the supertraits of each listed trait from the body's methods, unless they are implemented elsewhere: `struct Position : Component { pub fn default() -> Self => {}; }` implements `Default` (§18).
-- `impl` may appear in any module, for any trait and any type (no orphan rule). Two impls of the same (trait, type-constructor) pair anywhere in the program ⇒ error.
-  - *Non-normative — future packages:* 1.0 has no packages, so the only code outside the program's control is the standard library, and a clash with it is reported at the program's impl. When packages arrive, a library package will be allowed to implement a trait for a type only if it declares the trait or the target's type constructor (an orphan rule at the package boundary); the root (application) package stays exempt, since its orphan impls can only conflict at an upgrade its own author chooses.
+- **Orphan rule.** An `impl` (or base-list implementation) must be in the package (§2.5) that declares the trait or the target's type constructor (for a trait-reference target, its trait); primitive, collection, tuple and function types belong to `std`. Otherwise ⇒ error, except in the **application package**, which may implement any trait for any type: its orphan impls can only conflict when its own author changes a dependency. So a package with orphan impls can be run but not depended on.
+- Two impls of the same (trait, type-constructor) pair anywhere in the program ⇒ error; a clash with a standard-library impl is reported at the other impl, with the std impl as a note.
 - Generic impls are allowed for a generic type constructor (`impl<T: Eq> Eq for [T]`). Blanket impls over a bare type parameter (`impl<T: X> Y for T`) are not permitted in 1.0.
 - The target may be a trait reference (§8.3): `impl<T: Eq> Contains<T> for Iterator<T>`. Values whose static type is that trait reference implement the trait; types that implement `Iterator` do not thereby implement `Contains`. A call through the impl dispatches to the receiver's own implementation of the trait if its runtime type has one, and otherwise runs the impl. Implementing a trait for a trait reference that already has it as itself or a supertrait (`impl Eq for Ord`) is an error.
 - `impl` blocks contain only implementations of that trait's members.
@@ -990,3 +1002,9 @@ Semantics the spec left open, decided while implementing:
 
 ### 2026-10-28 — collection atomicity narrowed
 - §13.4 Only the primitive collection operations are atomic (length, indexing, index assignment, `push`, `pop`, `insert`, `remove`, `clear`, one iteration step, `Map`/`Set` insertion, lookup and removal); members composed of several (`contains`, `reverse`, `first`, `last`, `join`, …) are not atomic as a whole (was: every operation). Races still never corrupt a collection. As in C#, Java and Go, concurrent reading and writing of one collection should go through a `Mutex`; dedicated concurrent collections may come with the standard library.
+
+### 2026-10-28 — packages, `internal`, re-exports
+- §2.5 New: packages. A directory with a `package.toml` is a package and the source root of its modules (was: the entry file's directory, which remains the root of a program run without a manifest). Path dependencies only, imported under their manifest key; not transitive; one copy per directory; the dependency graph must be acyclic. Removed "package manager/dependencies" from "Not in 1.0" (a registry and versioned or remote dependencies stay out).
+- §1, §2.3 New keyword and visibility `internal`: visible within the declaring package.
+- §2.2 Re-exports: `pub use` / `internal use` make the imported names visible to other modules as if declared there (was: `use` cannot be `pub`). Modules cannot be re-exported. Removed from "Not in 1.0".
+- §4.10 Orphan rule (replacing the non-normative note): an impl must be in the package declaring the trait or the target's type constructor, except in the application package.
