@@ -146,7 +146,7 @@ public final class Values {
         public final TypeInfo decl;
         public final List<Type> args;
         public final Object[] fields;
-        /** The Java state of a std class implemented by the interpreter (`Thread`, `Mutex`, `Atomic`). */
+        /** The Java state of a std class implemented by the interpreter (`Thread`, `Atomic`, `RawLock`). */
         public Object nat;
 
         public Obj(TypeInfo decl, List<Type> args, Object[] fields) {

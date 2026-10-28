@@ -3,11 +3,21 @@
 /// A value shared between threads, accessed under a lock.
 pub class Mutex<T> {
     let value: T;
+    let raw: RawLock;
 
-    pub fn new(value: T) -> Self;
+    pub fn new(value: T) -> Self => { value, raw: RawLock::new() };
     /// Runs `f` with the lock held. The guard is valid only during `f`; its `value` is stored
     /// back into the mutex when `f` returns. Locking a mutex the thread already holds panics.
-    pub fn lock<R>(self, f: fn(Guard<T>) -> R) -> R;
+    pub fn lock<R>(self, f: fn(Guard<T>) -> R) -> R {
+        self.raw.acquire();
+        defer self.raw.release();
+        let guard = guard(self.value);
+        let result = f(guard);
+        // `lock` takes `self`, as locking is not mutation; store through a mutable binding (§5.2).
+        let mut me = self;
+        me.value = guard.value;
+        return result;
+    }
 }
 
 /// Access to a locked `Mutex`'s value (§13.4).
@@ -30,4 +40,17 @@ pub class Atomic<T> {
     pub fn fetch_and(self, value: T) -> T;
     pub fn fetch_or(self, value: T) -> T;
     pub fn fetch_xor(self, value: T) -> T;
+}
+
+/// A new guard over `value`. An intrinsic only because a class initializer may appear only in its own
+/// body and `Guard` has no public constructor.
+fn guard<T>(value: T) -> Guard<T>;
+
+/// A lock that one thread holds at a time; not reentrant. The building block of `Mutex`.
+class RawLock {
+    pub fn new() -> Self;
+    /// Waits until the lock is free and takes it; panics if this thread already holds it.
+    pub fn acquire(self);
+    /// Frees the lock, which this thread holds.
+    pub fn release(self);
 }

@@ -59,7 +59,7 @@ final class Natives {
             }
             case "c", "Ptr" -> ffi.intrinsic(owner, name, recv, a, typeEnv, fn);
             case "cstruct" -> ffi.withPtr(recv, (Values.FnVal) a[0]);
-            case "thread", "Thread", "Mutex", "Atomic" -> threads.call(owner, name, recv, a, typeEnv, fn);
+            case "thread", "Thread", "Atomic", "RawLock", "sync" -> threads.call(owner, name, recv, a, typeEnv, fn);
             case "Type" -> type(name, (TypeVal) recv, a);
             case "math" -> math(name, a);
             case "io" -> {
