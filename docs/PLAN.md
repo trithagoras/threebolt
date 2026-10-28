@@ -135,7 +135,7 @@ Built in one go rather than slice by slice, because one checker and one interpre
 - Rename refuses std and built-in names, `self`, non-identifiers and shorthand fields; it renames a method's whole override chain, edits `use` paths, and leaves uses through an import alias alone.
 - Build: `./gradlew vscodeServer` (fat jar `build/server/threebolt.jar`, copied into `editors/vscode/server/`). The `antlr` configuration is kept off the runtime classpath (the tool is 17 MB).
 - Tests: `lsp.ServerTest` (in-process server over a temp program), `types.SymbolIndexTest` (every name in examples and conformance spells its target and its definition).
-- Not done (besides completion and signature help, next section): semantic tokens, doc comments in hovers (they are on the `DOC` channel, not in the AST), formatting (`AstPrinter` drops comments), renaming trait methods across impls (only override chains are linked), named arguments (`f(x: 1)`) are not indexed.
+- Not done: formatting (`AstPrinter` drops comments), renaming trait methods across impls (only override chains are linked), named arguments (`f(x: 1)`) are not indexed.
 
 ### Editor support — completion and signature help ✅ (branch `lsp`)
 `textDocument/completion` after `.`, `::` and on bare names (trigger characters `.` and `:`, the latter only as `::`), and `textDocument/signatureHelp` inside call parentheses (triggers `(` `,`, re-trigger `)`). No language semantics changed, so the spec did not change.
@@ -147,7 +147,33 @@ Built in one go rather than slice by slice, because one checker and one interpre
 - **Fallback** when no variant parses: the module-level names of the last analysis in which the file parsed, the prelude, primitives and keywords (from `ThreeboltLexer`'s vocabulary).
 - **Signature help:** variants without the placeholder first (`f(1, ` + `);` parses), then with it. `Completer.call`/`callValue` (hooks in `Calls.pathCall`, `methodCall`, `superCall`, `valueCall`) keep the innermost call around the cursor in the file being edited, with every overload rendered by `SymbolIndex.signature(f, env, params, selfIsParam)` (owner type parameters substituted; parameter offsets for the LSP labels; a UFCS receiver is parameter `self`). The active parameter is counted from depth-0 commas after the call's `(`; `name:` selects by name.
 - Tests: `lsp.CompletionTest` (members, private/inherited/trait members, narrowed unions, instantiated generics, enum members, statics, primitive constants, `pub`-only module items, submodules, locals in scope only, `self`/imports/type parameters, type positions incl. signatures, missing `;`, unclosed calls, the fallback, comments/strings, `use` lines, signature help by position, by name, nested and on a generic receiver).
-- Not done: doc comments in hovers and completion details; semantic tokens; snippets (methods insert only their name); completion in patterns beyond paths, in struct-initializer field names, and of named arguments.
+- Not done: snippets (methods insert only their name); completion in patterns beyond paths, in struct-initializer field names, and of named arguments.
+
+### Warnings ✅ (branch `lsp-docs-warnings`)
+Checker warnings, `W0xxx` codes (`diag.Code.isWarning`): they never count as errors (`Diagnostics.count`/`hasErrors` ignore them), are dropped while muted without counting as dropped, and are reported once per text. Tooling only: no language semantics changed, so not in the spec. `threebolt check` prints them; `run` only prints diagnostics when there are errors.
+
+| Code | Warning | Not warned |
+|---|---|---|
+| W0001 | unused local, pattern binding, lambda or function parameter | names starting with `_`; parameters whose signature is imposed: bodyless, extern, virtual/abstract/override, trait members, trait implementations (`Lints.signatureImposed`) |
+| W0002 | `mut` binding never assigned or given to a `mut self` method (root of the place: `x.a[i] = v` changes `x`) | |
+| W0003 | unused import (a group's names separately; a glob when nothing from it is used) | |
+| W0004 | unreachable statements: from the first one after a statement that never completes to the end of its block | |
+| W0005 | private function, method, type, const, static, or class field that is never named | `main`, overrides, trait implementations, externs; struct fields (always public, §2.3) |
+| W0006 | expression statement without effect (literals, names, operators on them, uncalled lambdas); `x == 1;` suggests `=` | anything with a call, member access, index, cast or `?` in it |
+
+- `types.Lints` collects facts while checking (hooks: `Checker.declare`/`assign`/`block`/`exprStmt`, `Calls.methodCall` for `mut self`, `Names.resolve`/`lookup` for imports, `SymbolIndex.put` for every use, even with the index disabled) and reports the unused ones at the end of `Checker.check`. Only locals declared while unmuted are candidates; any use counts. Std is never warned about.
+- Conformance: a case with errors compares only its errors; `tests/conformance/warnings/` covers each warning, including what is not warned.
+- Language server: severity Warning; unused and unreachable code carry the `Unnecessary` tag (faded).
+
+### Editor support — docs, quick fixes, hints, highlighting ✅ (branch `lsp-docs-warnings`)
+- **Doc comments** (`parse.DocComments`): a run of `///` lines documents the declaration whose first token follows it (attributes included). Looked up by `SymbolIndex.declaration(target)`; an undocumented override or trait implementation uses `SymbolIndex.inheritsDocsFrom` (overridden method, implemented trait member). `lsp.Docs` caches each source's comments (weak keys). Shown in hovers (signature, `---`, Markdown), completion items (`Completion.Item.target`) and signature help (`Completion.Signature.fn`). Std's prelude, builtin members, collections and math are documented.
+- **Hovers** show the call's instantiation (`SymbolIndex.Ref.env`, from `Calls.env(Bound)`: `fn List::iter(self) -> Iterator<Fighter>`), default values and constant values as source, enum member values, `self: T`.
+- **Quick fixes** (`lsp.CodeActions`): `_` prefix (W0001), remove `mut` (W0002), remove an unused import or group name (W0003), `==` → `=` (W0006), `let mut` for E0300/E0301, and imports for E0107: every `pub` item or module of that name in std or the program's files (found by loading a throwaway program that glob-imports them all). The new `use` goes after the last `use`, else after the file's leading comments.
+- **Inlay hints** (`lsp.InlayHints`): inferred types after bindings written without one (not after `:` or `is`, not when the type has an error).
+- **Semantic tokens** (`lsp.SemanticTokens`): every indexed name by kind; modifiers `declaration`, `readonly`, `static`, `defaultLibrary` (std), and `mutable`, which the extension underlines by default (`configurationDefaults`). Primitive type names are left to the TextMate grammar.
+- **Workspace symbols** (declarations outside std, letters of the query in order) and **go to implementation** (a trait's impls, a class's subclasses, a method's overrides and implementations; `TypeSystem.implsOfTrait`).
+- Member completion sorts methods that operators call (`add`, `eq`, `cmp`, `truthy`, ...) after the rest when the receiver implements their trait.
+- Not done: a warning for a `///` that documents nothing; formatting.
 
 ## Conventions for the implementing agent
 - The spec is the source of truth; if code and spec disagree, fix one deliberately and record it.

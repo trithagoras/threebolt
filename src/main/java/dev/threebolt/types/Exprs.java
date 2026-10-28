@@ -652,7 +652,7 @@ final class Exprs {
         var g = getters.getFirst();
         c.calls.checkMethodAccess(g.fn(), m.name().span());
         var ret = TypeSystem.subst(g.fn().ret, g.env());
-        c.index.ref(m.name().span(), g.fn(), null);
+        c.index.call(m.name().span(), g.fn(), g.env());
         return new Typed(new Ir.Call(g.fn(), g.kind(), r.value().ir(), null, List.of(), new int[0], List.of(), null,
                 null, m.span()), ret);
     }

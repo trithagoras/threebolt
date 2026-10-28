@@ -49,6 +49,12 @@ public final class TypeSystem {
         return byType.values().stream().filter(i -> i.targetDecl.isTrait()).toList();
     }
 
+    /** Every implementation of {@code trait}, built-in ones included. */
+    public java.util.Collection<ImplInfo> implsOfTrait(TypeInfo trait) {
+        var byType = impls.get(trait);
+        return byType == null ? List.of() : byType.values();
+    }
+
     /** Every trait with at least one impl. */
     public Set<TypeInfo> implementedTraits() {
         return impls.keySet();

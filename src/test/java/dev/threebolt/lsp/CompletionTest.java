@@ -40,12 +40,14 @@ class CompletionTest {
                 let secret: i32 = 0;
                 pub static let ORIGIN: Point = { x: 0, y: 0 };
                 pub fn new(x: i32, y: i32) -> Point => { x, y };
+                /// Distance along x.
                 pub fn dist(self, other: Point) -> i32 => (self.x - other.x).abs();
                 pub get fn norm(self) -> i32 => self.x * self.x + self.y * self.y;
                 fn hidden(self) -> i32 => self.secret;
             }
 
             pub trait Describe {
+                /// A short description.
                 fn describe(self) -> str;
                 fn shout(self) -> str => self.describe() + "!";
             }
@@ -97,6 +99,31 @@ class CompletionTest {
         assertEquals(List.of(), logged);
     }
 
+    // ---- Documentation ----
+
+    @Test
+    void itemsAndSignaturesCarryDocComments() throws Exception {
+        var items = complete("""
+                use shapes::Point;
+                fn main() {
+                    let p = Point::new(1, 2);
+                    p.‸
+                }
+                """);
+        assertEquals("Distance along x.", find(items, "dist").getDocumentation().getRight().getValue());
+        // Point's `describe` (in an `impl`) has no doc of its own: the trait member's.
+        assertEquals("A short description.", find(items, "describe").getDocumentation().getRight().getValue());
+        assertNull(find(items, "x").getDocumentation());
+        var help = signatureHelp("""
+                use shapes::Point;
+                fn main() {
+                    let p = Point::new(1, 2);
+                    p.dist(‸
+                }
+                """);
+        assertEquals("Distance along x.", help.getSignatures().getFirst().getDocumentation().getRight().getValue());
+    }
+
     // ---- After `.` ----
 
     @Test
@@ -119,6 +146,19 @@ class CompletionTest {
         assertEquals("fn Point::dist(self, other: Point) -> i32", find(items, "dist").getDetail());
         // Members declared on the type sort before trait members.
         assertTrue(find(items, "dist").getSortText().compareTo(find(items, "describe").getSortText()) < 0);
+    }
+
+    @Test
+    void operatorMethodsSortLast() throws Exception {
+        var items = complete("""
+                fn main() {
+                    let n = 5;
+                    n.‸
+                }
+                """);
+        // `+` calls `add`; nobody writes `n.add(1)`.
+        assertTrue(find(items, "wrapping_add").getSortText().compareTo(find(items, "add").getSortText()) < 0);
+        assertTrue(find(items, "to_str").getSortText().compareTo(find(items, "eq").getSortText()) < 0);
     }
 
     @Test
@@ -424,7 +464,7 @@ class CompletionTest {
                 """);
         assertEquals(1, help.getSignatures().size());
         assertEquals(2, help.getActiveParameter());
-        assertEquals("suffix: str = ...", label(help, 0, 2));
+        assertEquals("suffix: str = \"\"", label(help, 0, 2));
     }
 
     @Test

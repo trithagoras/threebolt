@@ -1,0 +1,11 @@
+unused.3b:20:9: warning[W0005]: field 'Bird.secret' is never used
+unused.3b:24:8: warning[W0005]: method 'Bird::unused_helper' is never used
+unused.3b:28:19: warning[W0001]: unused parameter 'b'; if this is intentional, name it `_b`
+unused.3b:29:4: warning[W0005]: function 'never_called' is never used
+unused.3b:31:7: warning[W0005]: constant 'LIMIT' is never used
+unused.3b:34:8: warning[W0005]: struct 'Unused' is never used
+unused.3b:37:9: warning[W0001]: unused variable 'x'; if this is intentional, name it `_x`
+unused.3b:39:13: warning[W0002]: 'never_changed' is declared `mut` but never changed
+unused.3b:50:17: warning[W0001]: unused variable 'second'; if this is intentional, name it `_second`
+unused.3b:52:10: warning[W0001]: unused variable 'i'; if this is intentional, name it `_i`
+unused.3b:53:22: warning[W0001]: unused variable 'z'; if this is intentional, name it `_z`

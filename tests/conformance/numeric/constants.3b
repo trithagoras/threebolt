@@ -1,0 +1,20 @@
+// Primitive constants (§16): MIN and MAX on every numeric type; EPSILON, INFINITY,
+// NEG_INFINITY and NAN on floats.
+fn main() {
+    println(i8::MIN);
+    println(i8::MAX);
+    println(u64::MAX);
+    println(i64::MIN);
+    println(f32::EPSILON);
+    println(f64::EPSILON);
+    println(1.0 + f64::EPSILON > 1.0);
+    println(1.0 + f64::EPSILON / 2.0 == 1.0);
+    println(f64::INFINITY);
+    println(f32::NEG_INFINITY);
+    println(f64::NAN);
+    println(f64::NAN == f64::NAN);
+    println(f64::NAN.is_nan());
+    println(f64::INFINITY.is_infinite());
+    println(f64::MAX * 2.0 == f64::INFINITY);
+    println(f32::MAX < f32::INFINITY);
+}

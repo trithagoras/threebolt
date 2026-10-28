@@ -1,38 +1,69 @@
 // Members of every integer type (spec §16); `Self` is the integer type. Not a module: the
 // checker attaches these intrinsics to the primitive types.
 
+/// The value `n`; panics if it does not fit.
 pub fn from_i64(n: i64) -> Self;
+/// `0`.
 pub fn zero() -> Self;
+/// `1`.
 pub fn one() -> Self;
+/// The smallest value (`MIN`).
 pub fn min_value() -> Self;
+/// The largest value (`MAX`).
 pub fn max_value() -> Self;
+/// The width in bits.
 pub fn bits() -> u32;
 
+/// The absolute value; `MIN.abs()` overflows and panics (§13.2).
 pub fn abs(self) -> Self;
+/// The smaller of `self` and `o`.
 pub fn min(self, o: Self) -> Self;
+/// The larger of `self` and `o`.
 pub fn max(self, o: Self) -> Self;
+/// `self` raised to `exp`; overflow panics (§13.2).
 pub fn pow(self, exp: u32) -> Self;
 
+/// `self + o`, wrapping around on overflow.
 pub fn wrapping_add(self, o: Self) -> Self;
+/// `self - o`, wrapping around on overflow.
 pub fn wrapping_sub(self, o: Self) -> Self;
+/// `self * o`, wrapping around on overflow.
 pub fn wrapping_mul(self, o: Self) -> Self;
+/// `-self`, wrapping around on overflow (`MIN` stays `MIN`).
 pub fn wrapping_neg(self) -> Self;
+/// `self << n`, with `n` taken modulo the width.
 pub fn wrapping_shl(self, n: u32) -> Self;
+/// `self >> n`, with `n` taken modulo the width.
 pub fn wrapping_shr(self, n: u32) -> Self;
+/// `self + o`, or `null` on overflow.
 pub fn checked_add(self, o: Self) -> Self | null;
+/// `self - o`, or `null` on overflow.
 pub fn checked_sub(self, o: Self) -> Self | null;
+/// `self * o`, or `null` on overflow.
 pub fn checked_mul(self, o: Self) -> Self | null;
+/// `-self`, or `null` on overflow.
 pub fn checked_neg(self) -> Self | null;
+/// `self << n`, or `null` if `n` is not less than the width.
 pub fn checked_shl(self, n: u32) -> Self | null;
+/// `self >> n`, or `null` if `n` is not less than the width.
 pub fn checked_shr(self, n: u32) -> Self | null;
+/// `self + o`, clamped to `MIN..=MAX`.
 pub fn saturating_add(self, o: Self) -> Self;
+/// `self - o`, clamped to `MIN..=MAX`.
 pub fn saturating_sub(self, o: Self) -> Self;
+/// `self * o`, clamped to `MIN..=MAX`.
 pub fn saturating_mul(self, o: Self) -> Self;
+/// `-self`, clamped to `MIN..=MAX`.
 pub fn saturating_neg(self) -> Self;
+/// `self << n`; `0` if `n` is not less than the width.
 pub fn saturating_shl(self, n: u32) -> Self;
+/// `self >> n`; `0` (or `-1` for a negative value) if `n` is not less than the width.
 pub fn saturating_shr(self, n: u32) -> Self;
 
+/// The decimal number in `s` (an optional sign, then digits), or `null` if `s` is not one or the
+/// value does not fit.
 pub fn parse(s: str) -> Self | null;
+/// The value in decimal.
 pub fn to_str(self) -> str;
 pub fn eq(self, o: Self) -> bool;
 pub fn cmp(self, o: Self) -> i32;
@@ -41,7 +72,9 @@ pub fn hash(self) -> u64;
 pub fn add(self, o: Self) -> Self;
 pub fn sub(self, o: Self) -> Self;
 pub fn mul(self, o: Self) -> Self;
+/// Integer division, rounding towards zero; dividing by zero panics.
 pub fn div(self, o: Self) -> Self;
+/// The remainder of `div`, with the sign of `self`; by zero panics.
 pub fn rem(self, o: Self) -> Self;
 pub fn neg(self) -> Self;
 pub fn bitand(self, o: Self) -> Self;

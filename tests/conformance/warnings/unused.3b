@@ -1,0 +1,62 @@
+// Warnings (W0001 unused variables, W0002 unused `mut`, W0005 unused private items): legal code
+// that is most likely a mistake. The program still runs.
+trait Shape {
+    fn area(self, scale: f64) -> f64;
+    fn describe(self, verbose: bool) -> str => "shape";
+}
+
+struct Square : Shape {
+    pub let side: f64;
+    // Implements a trait member: the signature is not its own, so `scale` may go unused.
+    fn area(self, scale: f64) -> f64 => self.side * self.side;
+}
+
+abstract class Animal {
+    abstract fn speak(self, loud: bool) -> str;
+    virtual fn legs(self, counting: bool) -> i32 => 4;
+}
+
+class Bird : Animal {
+    let secret: i32 = 0;              // never read: a private field
+    pub override fn speak(self, loud: bool) -> str => "tweet";
+    pub override fn legs(self, counting: bool) -> i32 => 2;
+    pub fn new() -> Bird => Bird {};
+    fn unused_helper(self) {}         // a private method nobody calls
+    pub fn wings(self) -> i32 => 2;
+}
+
+fn helper(a: i32, b: i32) -> i32 => a;    // `b` is unused
+fn never_called() {}
+fn recurse(n: i32) -> i32 => 0 if n == 0 else recurse(n - 1);
+const LIMIT: i32 = 10;
+const USED: i32 = 1;
+static let mut COUNTER: i32 = 0;
+struct Unused;
+
+fn main() {
+    let x = 1;                        // unused
+    let _ignored = 2;                 // `_` prefix: fine
+    let mut never_changed = 3;        // `mut` not needed
+    println(never_changed);
+    let mut changed = 4;
+    changed += 1;
+    println(changed);
+    let mut list = [1, 2];
+    list.push(3);                     // a `mut self` method counts as a change
+    println(list);
+    let mut pair = (1, 2);
+    pair.0 = 5;                       // so does writing a field
+    println(pair.0);
+    let (first, second) = (1, 2);     // `second` is unused
+    println(first);
+    for (i, v) in list.enumerate() { println(v); }   // `i` is unused
+    let f = (y: i32, z: i32) => y;    // lambda parameter `z` is unused
+    println(f(1, 2));
+    println(helper(1, 2) + USED + recurse(3));
+    let s = Square { side: 2.0 };
+    println(s.area(1.0));
+    println(s.describe(true));
+    let b = Bird::new();
+    println(b.speak(true) + f"{b.legs(true)} {b.wings()}");
+    COUNTER += 1;
+}

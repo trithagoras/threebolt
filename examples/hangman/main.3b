@@ -19,7 +19,6 @@ fn main() -> () | Err {
                 continue;
             }
             let ch = guess.chars().first() as char; // forced unwrap is safe due to above checks
-            let s = "d";
             running_word = str::from_chars(word.iter().enumerate().map(((i, c)) => c if c == ch else running_word[i]));
             if !('_' in running_word) {
                 break;

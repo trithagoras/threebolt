@@ -5,7 +5,7 @@ Hobbyist general-purpose language (`.3b`): statically typed, GC-managed, Rust-fl
 ## Source of truth
 
 1. `docs/spec/threebolt-1.0.md` — the normative language spec. Read the relevant sections before touching the grammar, checker, or interpreter.
-2. `docs/PLAN.md` — implementation phases, stack, repo layout.
+2. `docs/PLAN.md` — implementation phases, stack, repo layout. `docs/ROADMAP.md` — open decisions on the way to 1.0 (std expansion, backend, packages).
 3. `docs/history/` — the original design doc and the design-interview decision log. Rationale only; never implement from these when they disagree with the spec.
 
 **Spec first:** if implementation reveals a problem, change the spec (and its `## Changelog` section) before or alongside the code — never let code silently diverge. Ask the user before changing language semantics; they own the design.

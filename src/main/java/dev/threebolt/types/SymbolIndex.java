@@ -28,14 +28,23 @@ import java.util.TreeMap;
 public final class SymbolIndex {
     /**
      * One occurrence of a name. {@code type} is its type at that point (narrowed, instantiated),
-     * or null to use the target's declared type.
+     * or null to use the target's declared type. For a function called here, {@code env} binds its
+     * type parameters (and its owner's) as the call instantiated them.
      */
-    public record Ref(Span span, Object target, Type type, boolean isDecl) {}
+    public record Ref(Span span, Object target, Type type, boolean isDecl, Map<TypeParamInfo, Type> env) {
+        public Ref(Span span, Object target, Type type, boolean isDecl) {
+            this(span, target, type, isDecl, Map.of());
+        }
+    }
 
     /** An enum member, which has no info object of its own. */
     public record EnumMember(TypeInfo owner, String name) {}
 
     private final boolean enabled;
+    /** Told of every use of a name (also when this index is disabled). */
+    Lints lints;
+    /** Recording the paths in `use` items, which are not uses. */
+    private boolean inUse;
     /** A completion or signature-help request to answer while checking, or null. */
     final Completion completion;
     private Diagnostics diag;
@@ -76,12 +85,18 @@ public final class SymbolIndex {
         put(new Ref(span, target, type, false));
     }
 
+    /** A call of {@code fn}, instantiated by {@code env}. */
+    void call(Span span, FnInfo fn, Map<TypeParamInfo, Type> env) {
+        put(new Ref(span, fn, null, false, env));
+    }
+
     /** A declaration's own name. */
     void decl(Span span, Object target) {
         put(new Ref(span, target, null, true));
     }
 
     private void put(Ref r) {
+        if (lints != null && !r.isDecl() && !inUse && r.target() != null) lints.used(r.target());
         if (!enabled || r.span() == null || r.target() == null) return;
         var bySpan = refs.computeIfAbsent(r.span().source(), k -> new TreeMap<>());
         boolean muted = isMuted();
@@ -141,12 +156,14 @@ public final class SymbolIndex {
     /** Records the names of every declaration the checker knows about, and the paths in `use` items. */
     void declarations(Program program, Declarer decls) {
         if (!enabled) return;
+        inUse = true;
         for (Module m : program.all()) {
             if (m.ast() == null) continue;
             for (Item item : m.ast().items()) {
                 if (item instanceof Item.Use u) use(program, decls.names, m, u);
             }
         }
+        inUse = false;
         for (TypeInfo t : decls.allTypes) {
             if (t.item == null) continue;
             decl(itemName(t.item), t);
@@ -245,23 +262,61 @@ public final class SymbolIndex {
         };
     }
 
+    /**
+     * The whole declaration of {@code target} (its doc comment, if any, sits right before it), or
+     * null for what has no declaration of its own (locals, primitives, modules).
+     */
+    public static Span declaration(Object target) {
+        return switch (target) {
+            case FnInfo f -> f.span();
+            case TypeInfo t -> t.item == null ? null : t.item.span();
+            case FieldInfo f -> f.span();
+            case StaticInfo s -> s.ast.span();
+            case ConstInfo c -> c.ast.span();
+            case EnumMember m -> m.owner().item instanceof Item.Enum e ? e.members().stream()
+                    .filter(x -> x.name().text().equals(m.name())).map(Item.EnumMember::span).findFirst().orElse(null) : null;
+            default -> null;
+        };
+    }
+
+    /**
+     * Where an undocumented method's documentation comes from: the method it overrides, or the
+     * trait member it implements; null if neither.
+     */
+    public static FnInfo inheritsDocsFrom(FnInfo f) {
+        if (f.overrides != null) return f.overrides;
+        if (f.owner instanceof ImplInfo i) {
+            var ms = i.trait.decl().methods(f.name());
+            return ms.isEmpty() ? null : ms.getFirst();
+        }
+        return f.owner instanceof TypeInfo t ? Lints.implementedMember(t, f) : null;
+    }
+
     // ---- Descriptions ----
 
     /** A one-line, source-like description of {@code r}'s target, for hovers. */
     public static String describe(Ref r) {
         return switch (r.target()) {
+            case Local l when l.name().equals("self") -> (l.isMutable() ? "mut self: " : "self: ") + l.type;
             case Local l -> "let " + (l.isMutable() ? "mut " : "") + l.name() + ": " + (r.type() != null ? r.type() : l.type);
-            case FnInfo f -> signature(f);
+            case FnInfo f -> signature(f, r.env(), null, false);
             case TypeInfo t -> typeHeader(t);
             case FieldInfo f -> "let " + f.owner().name() + "." + f.name() + ": " + (r.type() != null ? r.type() : f.type);
             case StaticInfo s -> "static let " + (s.isMutable() ? "mut " : "") + qualified(s.owner, s.name()) + ": " + s.type;
-            case ConstInfo c -> "const " + c.name() + ": " + c.type;
+            case ConstInfo c -> "const " + c.name() + ": " + c.type + " = " + source(c.ast.value());
             case TypeParamInfo p -> p.name() + (p.bounds.isEmpty() ? ""
                     : ": " + String.join(" + ", p.bounds.stream().map(Type::toString).toList()));
-            case EnumMember m -> m.owner().name() + "::" + m.name();
+            case EnumMember m -> m.owner().name() + "::" + m.name()
+                    + (m.owner().enumMembers.containsKey(m.name()) ? " = " + m.owner().enumMembers.get(m.name()) : "");
             case Module m -> "mod " + m.path();
             default -> r.target().toString();
         };
+    }
+
+    /** {@code e} as source, shortened when long. */
+    private static String source(dev.threebolt.ast.Expr e) {
+        var s = dev.threebolt.parse.AstPrinter.print(e).strip().replaceAll("\\s+", " ");
+        return s.length() <= 40 ? s : s.substring(0, 37) + "...";
     }
 
     private static String qualified(TypeInfo owner, String name) {
@@ -283,14 +338,15 @@ public final class SymbolIndex {
         if (f.isExtern) sb.append("extern ");
         if (f.isUnsafe() && !f.isExtern) sb.append("unsafe ");
         sb.append(f.isGetter() ? "get fn " : "fn ").append(f.qualifiedName());
-        if (!f.typeParams.isEmpty()) sb.append(params(f.typeParams));
+        // Type parameters the call bound are substituted below rather than declared.
+        if (!f.typeParams.isEmpty() && !env.keySet().containsAll(f.typeParams)) sb.append(params(f.typeParams));
         var parts = new ArrayList<String>();
         if (f.receiver == FnInfo.Receiver.SELF) parts.add("self");
         if (f.receiver == FnInfo.Receiver.MUT_SELF) parts.add("mut self");
         boolean receiver = !parts.isEmpty();
         for (var p : f.params) {
             parts.add((p.isMutable() ? "mut " : "") + p.name() + ": " + TypeSystem.subst(p.type(), env)
-                    + (p.isOptional() ? " = ..." : ""));
+                    + (p.isOptional() ? " = " + source(p.defaultValue()) : ""));
         }
         if (f.isVariadic) parts.add("...");
         sb.append('(');

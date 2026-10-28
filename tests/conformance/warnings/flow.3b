@@ -1,0 +1,38 @@
+// Warnings W0004 (unreachable code) and W0006 (statements without effect).
+fn early(n: i32) -> i32 {
+    return n;
+    println("never");                 // unreachable, to the end of the block
+    println("never either");
+}
+
+fn diverges() -> i32 {
+    panic("stop");
+    0;
+}
+
+fn loops() {
+    loop {
+        break;
+        println("after break");
+    }
+    while true {}
+    println("after an endless loop");
+}
+
+fn effects(x: i32, xs: [i32]) {
+    x == 1;                           // a comparison, not an assignment
+    x + 1;
+    x;
+    42;
+    () => x;                          // a lambda nobody calls
+    xs.len;                           // a getter may do anything: no warning
+    xs[0];                            // indexing may panic: no warning
+    println(x) if x > 0 else println(0);
+}
+
+fn main() {
+    println(early(1));
+    effects(1, [1]);
+    if false { println(diverges()); }
+    if false { loops(); }
+}

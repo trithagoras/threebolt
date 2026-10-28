@@ -1,33 +1,55 @@
 // Members of str. Lengths and offsets count characters (Unicode scalar values), not bytes.
 
+/// The number of characters (not bytes).
 pub get fn len(self) -> usize;
+/// Whether the string is not empty.
 pub fn truthy(self) -> bool;
+/// The characters, in order.
 pub fn chars(self) -> Iterator<char>;
 /// The UTF-8 encoding.
 pub fn bytes(self) -> Iterator<u8>;
+/// Whether `s` occurs in this string.
 pub fn contains(self, s: str) -> bool;
+/// Whether this string begins with `s`.
 pub fn starts_with(self, s: str) -> bool;
+/// Whether this string ends with `s`.
 pub fn ends_with(self, s: str) -> bool;
+/// The character offset of the first occurrence of `s`, or `null` if there is none.
 pub fn find(self, s: str) -> usize | null;
+/// The characters from `start` up to `end` (`s[start..end]`); panics unless `start <= end <= len`.
 pub fn slice(self, start: usize, end: usize) -> str;
 /// `s[i]`: the `i`th character; panics if out of range.
 pub fn index(self, i: usize) -> char;
+/// The string in upper case.
 pub fn upper(self) -> str;
+/// The string in lower case.
 pub fn lower(self) -> str;
+/// The string without leading and trailing whitespace.
 pub fn trim(self) -> str;
+/// The parts between occurrences of `sep` (`"a,b,".split(",")` is `["a", "b", ""]`); an empty
+/// `sep` splits into characters.
 pub fn split(self, sep: str) -> [str];
+/// The string with every occurrence of `from` replaced by `to`.
 pub fn replace(self, from: str, to: str) -> str;
+/// The string `n` times over.
 pub fn repeat(self, n: usize) -> str;
+/// A NUL-terminated UTF-8 copy in C memory (§14.4), for passing to C.
 pub fn to_cstr(self) -> Ptr<std::c::char>;
+/// The NUL-terminated UTF-8 string at `p`.
 pub unsafe fn from_cstr(p: Ptr<std::c::char>) -> str;
 /// The string of `cs`'s characters, in order: the inverse of `chars()`.
 pub fn from_chars(cs: Iterable<char>) -> str;
+/// The string of the iterator's remaining characters, in order.
 pub fn from_chars(cs: Iterator<char>) -> str;
 /// The string `bytes` encode in UTF-8 (the inverse of `bytes()`); invalid sequences become U+FFFD.
 pub fn from_utf8(bytes: [u8]) -> str;
 
+/// The string itself.
 pub fn to_str(self) -> str;
+/// Whether the strings have the same characters.
 pub fn eq(self, o: Self) -> bool;
+/// Compares character by character (by code point).
 pub fn cmp(self, o: Self) -> i32;
 pub fn hash(self) -> u64;
+/// `a + b`: the concatenation.
 pub fn add(self, o: Self) -> Self;

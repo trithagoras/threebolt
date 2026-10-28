@@ -1,0 +1,1 @@
+main_returns.3b:7:9: warning[W0001]: unused variable 'spinner'; if this is intentional, name it `_spinner`

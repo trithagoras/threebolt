@@ -1,34 +1,61 @@
 // Members of f32 and f64; `Self` is the float type.
 
+/// The nearest value to `n`.
 pub fn from_i64(n: i64) -> Self;
+/// The nearest value to `x`.
 pub fn from_f64(x: f64) -> Self;
+/// `0.0`.
 pub fn zero() -> Self;
+/// `1.0`.
 pub fn one() -> Self;
+/// Not a number (`NAN`).
 pub fn nan() -> Self;
+/// Positive infinity (`INFINITY`).
 pub fn infinity() -> Self;
+/// The difference between `1.0` and the next larger value (`EPSILON`).
 pub fn epsilon() -> Self;
 
+/// The absolute value.
 pub fn abs(self) -> Self;
+/// The smaller of `self` and `o`.
 pub fn min(self, o: Self) -> Self;
+/// The larger of `self` and `o`.
 pub fn max(self, o: Self) -> Self;
+/// `self` raised to `exp`.
 pub fn pow(self, exp: Self) -> Self;
+/// The square root; `NaN` for negative numbers.
 pub fn sqrt(self) -> Self;
+/// The largest integer value not above `self`.
 pub fn floor(self) -> Self;
+/// The smallest integer value not below `self`.
 pub fn ceil(self) -> Self;
+/// The nearest integer value, halves away from zero (`2.5` → `3`, `-2.5` → `-3`).
 pub fn round(self) -> Self;
+/// The integer part, rounding towards zero.
 pub fn trunc(self) -> Self;
+/// The sine (radians).
 pub fn sin(self) -> Self;
+/// The cosine (radians).
 pub fn cos(self) -> Self;
+/// The tangent (radians).
 pub fn tan(self) -> Self;
+/// `e` raised to `self`.
 pub fn exp(self) -> Self;
+/// The natural logarithm.
 pub fn ln(self) -> Self;
+/// The base-10 logarithm.
 pub fn log10(self) -> Self;
+/// Whether this is `NaN` (which is not even equal to itself).
 pub fn is_nan(self) -> bool;
+/// Whether this is positive or negative infinity.
 pub fn is_infinite(self) -> bool;
 
+/// The number in `s` (`1`, `-2.5`, `1e9`, `.5`, `inf`, `-inf`, `NaN`), or `null` if `s` is not one.
 pub fn parse(s: str) -> Self | null;
+/// The shortest digits that read back as the same value, never with an exponent (§16).
 pub fn to_str(self) -> str;
 pub fn eq(self, o: Self) -> bool;
+/// A total order: `-0` sorts before `0`, and `NaN` after every other value.
 pub fn cmp(self, o: Self) -> i32;
 
 pub fn add(self, o: Self) -> Self;

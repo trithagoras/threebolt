@@ -44,6 +44,8 @@ public final class Names {
     final SymbolIndex symbolIndex;
     /** Set by the checker when answering a completion request. */
     Completer completer;
+    /** Set by the checker: told which imports are used. */
+    Lints lints;
     /** Semantic info for each declaration item. */
     final Map<Item, Object> infos = new HashMap<>();
 
@@ -69,6 +71,7 @@ public final class Names {
             if (prim != null) return new Resolved(new PrimEntity(prim), 1);
             return fullyQualified(from, path);
         }
+        noteImport(from, first.text());
         var entity = entity(symbols);
         record(first, entity);
         return continueFrom(from, entity, path, 1);
@@ -81,7 +84,14 @@ public final class Names {
             var prim = Prim.named(name);
             return prim == null ? null : new PrimEntity(prim);
         }
+        noteImport(from, name);
         return entity(symbols);
+    }
+
+    private void noteImport(Module from, String name) {
+        if (lints == null || !from.scope().items(name).isEmpty()) return;
+        var i = from.scope().imports().get(name);
+        if (i != null) lints.usedImport(i);
     }
 
     private Resolved fullyQualified(Module from, List<Name> path) {

@@ -4,30 +4,86 @@
 //
 // Functions without a body are intrinsics provided by the interpreter.
 
+/// Aborts the program: prints `msg` and a stack trace to stderr and exits with code 101 (§13.1).
+/// Pending `defer`s do not run.
 pub fn panic(msg: str) -> !;
+/// An error carrying just `msg` (a `MsgErr`), for `return error("...")` (§12).
 pub fn error(msg: str) -> Err => MsgErr::new(msg);
+/// The length of `x`: characters of a `str`, elements of a collection.
 pub fn len<T: Len>(x: T) -> usize => x.len;
 
-pub trait Truthy { fn truthy(self) -> bool; }
-pub trait Len { get fn len(self) -> usize; }
-pub trait Display { fn to_str(self) -> str; }
-pub trait Err { fn message(self) -> str; }
-pub trait Default { fn default() -> Self; }
-pub trait Eq { fn eq(self, o: Self) -> bool; }
-pub trait Ord : Eq { fn cmp(self, o: Self) -> i32; }
-pub trait Hash { fn hash(self) -> u64; }
+/// Values usable as conditions (§6.6): `if xs { ... }` tests `xs.truthy()`.
+pub trait Truthy {
+    /// Whether the value counts as true in a condition.
+    fn truthy(self) -> bool;
+}
 
+/// Values with a length: `str` (in characters) and the collections.
+pub trait Len {
+    /// The number of characters or elements.
+    get fn len(self) -> usize;
+}
+
+/// Values that can be shown as text: by `print`, f-string `{...}` and `join`.
+pub trait Display {
+    /// The value as text.
+    fn to_str(self) -> str;
+}
+
+/// Errors (§12): a union member implementing `Err` is what `?` propagates and what must not be
+/// silently discarded.
+pub trait Err {
+    /// What went wrong, for people.
+    fn message(self) -> str;
+}
+
+/// Types with a default value.
+pub trait Default {
+    /// The default value.
+    fn default() -> Self;
+}
+
+/// Equality: `==` and `!=` call `eq`.
+pub trait Eq {
+    /// Whether `self` equals `o`.
+    fn eq(self, o: Self) -> bool;
+}
+
+/// Ordering: `<`, `<=`, `>` and `>=` call `cmp`.
+pub trait Ord : Eq {
+    /// Negative if `self` is less than `o`, zero if equal, positive if greater.
+    fn cmp(self, o: Self) -> i32;
+}
+
+/// Hashing, for `Map` keys and `Set` elements. Values that are `eq` must hash the same.
+pub trait Hash {
+    /// The value's hash.
+    fn hash(self) -> u64;
+}
+
+/// `a + b`.
 pub trait Add { fn add(self, o: Self) -> Self; }
+/// `a - b`.
 pub trait Sub { fn sub(self, o: Self) -> Self; }
+/// `a * b`.
 pub trait Mul { fn mul(self, o: Self) -> Self; }
+/// `a / b`.
 pub trait Div { fn div(self, o: Self) -> Self; }
+/// `a % b`.
 pub trait Rem { fn rem(self, o: Self) -> Self; }
+/// `-a`.
 pub trait Neg { fn neg(self) -> Self; }
+/// `a & b`.
 pub trait BitAnd { fn bitand(self, o: Self) -> Self; }
+/// `a | b`.
 pub trait BitOr { fn bitor(self, o: Self) -> Self; }
+/// `a ^ b`.
 pub trait BitXor { fn bitxor(self, o: Self) -> Self; }
+/// `~a`.
 pub trait Not { fn not(self) -> Self; }
+/// `a << b`.
 pub trait Shl { fn shl(self, o: Self) -> Self; }
+/// `a >> b`.
 pub trait Shr { fn shr(self, o: Self) -> Self; }
 
 /// Numbers (§10.1): every integer and float type, and user types that implement it. An integer
@@ -35,13 +91,18 @@ pub trait Shr { fn shr(self, o: Self) -> Self; }
 pub trait Num : Eq + Ord + Display + Add + Sub + Mul + Div + Rem {
     /// The value `n`; panics if it does not fit.
     fn from_i64(n: i64) -> Self;
+    /// `0` of this type.
     fn zero() -> Self => Self::from_i64(0);
+    /// `1` of this type.
     fn one() -> Self => Self::from_i64(1);
+    /// The absolute value. For signed integers, `MIN.abs()` overflows (§13.2).
     fn abs(self) -> Self;
+    /// The smaller of `self` and `o`.
     fn min(self, o: Self) -> Self {
         if self.cmp(o) <= 0 { return self; }
         return o;
     }
+    /// The larger of `self` and `o`.
     fn max(self, o: Self) -> Self {
         if self.cmp(o) >= 0 { return self; }
         return o;
@@ -53,18 +114,31 @@ pub trait Signed : Num + Neg {}
 
 /// The integer types.
 pub trait Integer : Num + Hash + BitAnd + BitOr + BitXor + Not + Shl + Shr {
+    /// The smallest value (`T::MIN`).
     fn min_value() -> Self;
+    /// The largest value (`T::MAX`).
     fn max_value() -> Self;
+    /// The width in bits.
     fn bits() -> u32;
+    /// `self` raised to `exp`; overflow panics (§13.2).
     fn pow(self, exp: u32) -> Self;
+    /// `self + o`, or `null` on overflow.
     fn checked_add(self, o: Self) -> Self | null;
+    /// `self - o`, or `null` on overflow.
     fn checked_sub(self, o: Self) -> Self | null;
+    /// `self * o`, or `null` on overflow.
     fn checked_mul(self, o: Self) -> Self | null;
+    /// `self + o`, wrapping around on overflow.
     fn wrapping_add(self, o: Self) -> Self;
+    /// `self - o`, wrapping around on overflow.
     fn wrapping_sub(self, o: Self) -> Self;
+    /// `self * o`, wrapping around on overflow.
     fn wrapping_mul(self, o: Self) -> Self;
+    /// `self + o`, clamped to `MIN..=MAX`.
     fn saturating_add(self, o: Self) -> Self;
+    /// `self - o`, clamped to `MIN..=MAX`.
     fn saturating_sub(self, o: Self) -> Self;
+    /// `self * o`, clamped to `MIN..=MAX`.
     fn saturating_mul(self, o: Self) -> Self;
 }
 
@@ -73,79 +147,126 @@ pub trait Integer : Num + Hash + BitAnd + BitOr + BitXor + Not + Shl + Shr {
 pub trait Float : Signed {
     /// The nearest value to `x`.
     fn from_f64(x: f64) -> Self;
+    /// Not a number (`T::NAN`).
     fn nan() -> Self;
+    /// Positive infinity (`T::INFINITY`).
     fn infinity() -> Self;
+    /// The difference between `1.0` and the next larger value (`T::EPSILON`).
     fn epsilon() -> Self;
+    /// `self` raised to `exp`.
     fn pow(self, exp: Self) -> Self;
+    /// The square root; `NaN` for negative numbers.
     fn sqrt(self) -> Self;
+    /// The largest integer value not above `self`.
     fn floor(self) -> Self;
+    /// The smallest integer value not below `self`.
     fn ceil(self) -> Self;
+    /// The nearest integer value, halves away from zero.
     fn round(self) -> Self;
+    /// The integer part, rounding towards zero.
     fn trunc(self) -> Self;
+    /// The sine (radians).
     fn sin(self) -> Self;
+    /// The cosine (radians).
     fn cos(self) -> Self;
+    /// The tangent (radians).
     fn tan(self) -> Self;
+    /// `e` raised to `self`.
     fn exp(self) -> Self;
+    /// The natural logarithm.
     fn ln(self) -> Self;
+    /// The base-10 logarithm.
     fn log10(self) -> Self;
+    /// Whether `self` is `NaN` (which is not even equal to itself).
     fn is_nan(self) -> bool;
+    /// Whether `self` is positive or negative infinity.
     fn is_infinite(self) -> bool;
 }
 
-pub trait Index<I, V> { fn index(self, i: I) -> V; }
-pub trait IndexMut<I, V> : Index<I, V> { fn set(mut self, i: I, v: V); }
+/// Reading `c[i]`.
+pub trait Index<I, V> {
+    /// The element at `i`.
+    fn index(self, i: I) -> V;
+}
 
-/// `next` returns the `Done` sentinel at the end, so iterators over nullable elements work.
+/// Writing `c[i] = v`.
+pub trait IndexMut<I, V> : Index<I, V> {
+    /// Stores `v` at `i`.
+    fn set(mut self, i: I, v: V);
+}
+
+/// A sequence of values, produced one at a time; `for` loops consume them. `next` returns the
+/// `Done` sentinel at the end, so iterators over nullable elements work. The other methods are
+/// lazy (`map`, `filter`, `enumerate`, `of_type`) or consume the iterator.
 pub trait Iterator<T> {
+    /// The next value, or `Done` at the end.
     fn next(mut self) -> T | Done;
 
+    /// The values passed through `f`, lazily.
     fn map<U>(self, f: fn(T) -> U) -> Iterator<U> => MapIter::new(self, f);
+    /// The values for which `f` returns true, lazily.
     fn filter(self, f: fn(T) -> bool) -> Iterator<T> => FilterIter::new(self, f);
+    /// Each value with its position, from 0: `(i, value)`.
     fn enumerate(self) -> Iterator<(usize, T)> => EnumerateIter::new(self);
+    /// The values that are a `U` (`v is U`), as `U`s.
     fn of_type<U>(self) -> Iterator<U> => OfTypeIter<T, U>::new(self);
 
+    /// Calls `f` on each value.
     fn for_each(self, f: fn(T)) {
         for x in self { f(x); }
     }
 
+    /// Combines the values from the left: `f(f(f(init, a), b), c)`.
     fn fold<A>(self, init: A, f: fn(A, T) -> A) -> A {
         let mut acc = init;
         for x in self { acc = f(acc, x); }
         return acc;
     }
 
+    /// Whether `f` is true for some value; stops at the first.
     fn any(self, f: fn(T) -> bool) -> bool {
         for x in self { if f(x) { return true; } }
         return false;
     }
 
+    /// Whether `f` is true for every value; stops at the first that is not.
     fn all(self, f: fn(T) -> bool) -> bool {
         for x in self { if !f(x) { return false; } }
         return true;
     }
 
+    /// How many values are left.
     fn count(self) -> usize {
         let mut n: usize = 0;
         for _ in self { n += 1; }
         return n;
     }
 
+    /// The remaining values, in a new list.
     fn to_list(self) -> [T] {
         let mut out: [T] = [];
         for x in self { out.push(x); }
         return out;
     }
 
+    /// The next value, or `null` if there is none.
     fn first(self) -> T | null {
         for x in self { return x; }
         return null;
     }
 }
 
-pub trait Iterable<T> { fn iter(self) -> Iterator<T>; }
+/// Values that `for` can loop over.
+pub trait Iterable<T> {
+    /// A new iterator over the values.
+    fn iter(self) -> Iterator<T>;
+}
 
 /// `x in c` (§7.3).
-pub trait Contains<T: Eq> { fn contains(self, x: T) -> bool; }
+pub trait Contains<T: Eq> {
+    /// Whether `x` is in `self`.
+    fn contains(self, x: T) -> bool;
+}
 
 /// The error `error(msg)` returns: just a message. Subclass it for a message-only error type.
 pub class MsgErr : Err, Display {
@@ -155,35 +276,54 @@ pub class MsgErr : Err, Display {
     pub fn to_str(self) -> str => self.message();
 }
 
+/// What `Iterator::next` returns at the end.
 pub struct Done;
 
 /// A runtime type descriptor (§15).
 pub class Type : Display, Eq, Hash {
+    /// The type's name, as written in source (`i32`, `[str]`, `Point`).
     pub get fn name(self) -> str;
+    /// Whether a value of this type can be used where `other` is expected.
     pub fn is_subtype_of(self, other: Type) -> bool;
     pub fn to_str(self) -> str;
     pub fn eq(self, o: Self) -> bool;
     pub fn hash(self) -> u64;
 }
 
-/// `[T]`: a growable list (reference type).
+/// `[T]`: a growable list (reference type). `xs[i]` panics when `i >= xs.len`; `xs[a..b]` is a
+/// new list of the elements from `a` up to `b` (§7.6).
 pub class List<T> : Len, Truthy, Iterable<T>, Index<usize, T>, IndexMut<usize, T> {
+    /// The number of elements.
     pub get fn len(self) -> usize;
+    /// Whether the list is not empty.
     pub fn truthy(self) -> bool;
+    /// The elements in order.
     pub fn iter(self) -> Iterator<T>;
+    /// The element at `i` (`xs[i]`); panics if `i >= len`.
     pub fn index(self, i: usize) -> T;
+    /// Replaces the element at `i` (`xs[i] = v`); panics if `i >= len`.
     pub fn set(mut self, i: usize, v: T);
+    /// Adds `v` at the end.
     pub fn push(mut self, v: T);
+    /// Removes and returns the last element, or `null` if the list is empty.
     pub fn pop(mut self) -> T | null;
+    /// Inserts `v` at `i`, moving later elements up; panics if `i > len`.
     pub fn insert(mut self, i: usize, v: T);
+    /// Removes and returns the element at `i`, moving later elements down; panics if `i >= len`.
     pub fn remove(mut self, i: usize) -> T;
+    /// Removes every element.
     pub fn clear(mut self);
+    /// Reverses the elements in place.
     pub fn reverse(mut self);
+    /// Whether some element equals `v`.
     pub fn contains(self, v: T) -> bool;
     /// The elements' `to_str()` with `sep` between them; `T` must implement `Display`.
     pub fn join(self, sep: str) -> str;
+    /// The first element, or `null` if the list is empty.
     pub get fn first(self) -> T | null;
+    /// The last element, or `null` if the list is empty.
     pub get fn last(self) -> T | null;
+    /// Each element with its index: `(i, element)`.
     pub fn enumerate(self) -> Iterator<(usize, T)> => self.iter().enumerate();
     /// Pins the elements for the duration of `f` and passes a pointer to the first (§14.5).
     pub fn with_ptr<R>(self, f: fn(Ptr<T>) -> R) -> R;
@@ -193,20 +333,31 @@ pub class List<T> : Len, Truthy, Iterable<T>, Index<usize, T>, IndexMut<usize, T
 pub struct Range<T> : Iterable<T> {
     pub let start: T;
     pub let end: T;
+    /// Whether `end` is included (`a..=b`).
     pub let inclusive: bool;
+    /// The values from `start` up to `end`.
     pub fn iter(self) -> Iterator<T>;
+    /// Whether `x` lies in the range.
     pub fn contains(self, x: T) -> bool;
 }
 
 /// A raw pointer (§14.4).
 pub struct Ptr<T> {
+    /// The null pointer.
     pub fn null_() -> Self;   // `Ptr<T>::null()`: a trailing `_` lets std declare a keyword-named member
+    /// A pointer to address `a`.
     pub unsafe fn from_addr(a: usize) -> Self;
+    /// Whether this is the null pointer.
     pub fn is_null(self) -> bool;
+    /// The address pointed to.
     pub fn addr(self) -> usize;
+    /// The `T` at this address.
     pub unsafe fn read(self) -> T;
+    /// Stores `v` at this address.
     pub unsafe fn write(self, v: T);
+    /// A pointer `n` elements (of `T`'s size) further on.
     pub unsafe fn offset(self, n: isize) -> Self;
+    /// The same address, as a pointer to `U`.
     pub unsafe fn cast<U>(self) -> Ptr<U>;
 }
 

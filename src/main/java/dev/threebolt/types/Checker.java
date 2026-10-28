@@ -92,6 +92,7 @@ public final class Checker {
     final Calls calls;
     final Patterns patterns;
     final ConstEval consts;
+    final Lints lints;
     /** Answers the index's completion request, if any; else null. */
     Completer completer;
     /** Lambda depth at which each local was declared (captured-mutable locals are not narrowed). */
@@ -116,6 +117,9 @@ public final class Checker {
         this.calls = new Calls(this);
         this.patterns = new Patterns(this);
         this.consts = new ConstEval(this);
+        this.lints = new Lints(this);
+        index.lints = lints;
+        names.lints = lints;
         types.constSize = consts::arraySize;
         if (index.completion != null) {
             completer = new Completer(this, index.completion);
@@ -141,6 +145,7 @@ public final class Checker {
                 if (names.info(d.item()) instanceof FnInfo f) main = f;
             }
         }
+        lints.finish(program, decls);
         return new CheckedProgram(ts, main, decls.statics);
     }
 
@@ -206,6 +211,7 @@ public final class Checker {
             for (var p : f.params) {
                 f.defaults.add(p.defaultValue() == null ? null : check(p.defaultValue(), p.type()));
                 var local = declare(p.name(), p.isMutable(), p.type(), p.span());
+                lints.param(local, Lints.signatureImposed(f));
                 f.paramLocals.add(local);
             }
             if (f.ast.body() != null) f.body = fnBody(f.ast.body(), f.ret, f.span());
@@ -249,7 +255,9 @@ public final class Checker {
         ctx.scope.locals.put(name, local);
         localDepth.put(local, ctx.depth);
         ctx.narrowed.remove(local);
-        index.decl(SymbolIndex.nameIn(span, name), local);
+        var nameSpan = SymbolIndex.nameIn(span, name);
+        index.decl(nameSpan, local);
+        lints.declared(local, nameSpan);
         return local;
     }
 
@@ -340,7 +348,14 @@ public final class Checker {
         var saved = ctx.scope;
         ctx.scope = new Scope(saved);
         var out = new ArrayList<Ir.Stmt>();
-        for (Stmt s : b.stmts()) out.add(stmt(s));
+        boolean warned = false;
+        for (Stmt s : b.stmts()) {
+            if (!ctx.reachable && !warned) {
+                lints.unreachable(s, b.stmts().getLast().span());
+                warned = true;
+            }
+            out.add(stmt(s));
+        }
         ctx.scope = saved;
         return new Ir.Block(out);
     }
@@ -386,6 +401,7 @@ public final class Checker {
         Typed t = s.expr() instanceof Expr.Match m ? patterns.match(m, null, true) : exprs.expr(s.expr(), null);
         if (t.type() == Type.NEVER) ctx.reachable = false;
         mustUse(t.type(), s.expr().span());
+        lints.exprStmt(s.expr());
         return new Ir.Eval(t.ir());
     }
 
@@ -643,6 +659,7 @@ public final class Checker {
         if (!place.isMutable()) {
             diag.error(Code.IMMUTABLE_PLACE, a.target().span(), place.immutableWhy());
         }
+        lints.mutated(place.place());
         // The declared type, not the narrowed one, bounds what may be stored (§9).
         Type target = place.local() != null ? place.local().type : place.type();
         if (a.op() == Stmt.AssignOp.ASSIGN) {

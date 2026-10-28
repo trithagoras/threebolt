@@ -1,0 +1,1 @@
+callbacks.3b:24:13: warning[W0002]: 'arr' is declared `mut` but never changed

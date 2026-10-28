@@ -1,0 +1,2 @@
+pub fn shout(s: str) -> str => s + "!";
+pub fn whisper(s: str) -> str => s + "...";

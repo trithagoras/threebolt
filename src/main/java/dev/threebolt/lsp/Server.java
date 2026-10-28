@@ -1,5 +1,6 @@
 package dev.threebolt.lsp;
 
+import dev.threebolt.diag.Code;
 import dev.threebolt.diag.Diagnostic;
 import dev.threebolt.diag.Span;
 import dev.threebolt.ir.Local;
@@ -14,6 +15,11 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import org.antlr.v4.runtime.CharStreams;
+import org.eclipse.lsp4j.CodeAction;
+import org.eclipse.lsp4j.CodeActionKind;
+import org.eclipse.lsp4j.CodeActionOptions;
+import org.eclipse.lsp4j.CodeActionParams;
+import org.eclipse.lsp4j.Command;
 import org.eclipse.lsp4j.CompletionItem;
 import org.eclipse.lsp4j.CompletionList;
 import org.eclipse.lsp4j.CompletionOptions;
@@ -27,12 +33,16 @@ import org.eclipse.lsp4j.DidOpenTextDocumentParams;
 import org.eclipse.lsp4j.DidSaveTextDocumentParams;
 import org.eclipse.lsp4j.DiagnosticRelatedInformation;
 import org.eclipse.lsp4j.DiagnosticSeverity;
+import org.eclipse.lsp4j.DiagnosticTag;
 import org.eclipse.lsp4j.DocumentHighlight;
 import org.eclipse.lsp4j.DocumentHighlightKind;
 import org.eclipse.lsp4j.DocumentHighlightParams;
 import org.eclipse.lsp4j.DocumentSymbol;
 import org.eclipse.lsp4j.DocumentSymbolParams;
 import org.eclipse.lsp4j.Hover;
+import org.eclipse.lsp4j.ImplementationParams;
+import org.eclipse.lsp4j.InlayHint;
+import org.eclipse.lsp4j.InlayHintParams;
 import org.eclipse.lsp4j.HoverParams;
 import org.eclipse.lsp4j.InitializeParams;
 import org.eclipse.lsp4j.InitializeResult;
@@ -49,6 +59,8 @@ import org.eclipse.lsp4j.PublishDiagnosticsParams;
 import org.eclipse.lsp4j.ReferenceParams;
 import org.eclipse.lsp4j.RenameOptions;
 import org.eclipse.lsp4j.RenameParams;
+import org.eclipse.lsp4j.SemanticTokensParams;
+import org.eclipse.lsp4j.SemanticTokensWithRegistrationOptions;
 import org.eclipse.lsp4j.ServerCapabilities;
 import org.eclipse.lsp4j.ServerInfo;
 import org.eclipse.lsp4j.SignatureHelp;
@@ -59,6 +71,8 @@ import org.eclipse.lsp4j.TextDocumentPositionParams;
 import org.eclipse.lsp4j.TextDocumentSyncKind;
 import org.eclipse.lsp4j.TextEdit;
 import org.eclipse.lsp4j.WorkspaceEdit;
+import org.eclipse.lsp4j.WorkspaceSymbol;
+import org.eclipse.lsp4j.WorkspaceSymbolParams;
 import org.eclipse.lsp4j.jsonrpc.ResponseErrorException;
 import org.eclipse.lsp4j.jsonrpc.messages.Either;
 import org.eclipse.lsp4j.jsonrpc.messages.Either3;
@@ -80,6 +94,7 @@ public final class Server implements LanguageServer, LanguageClientAware, TextDo
     private LanguageClient client;
     private final Workspace workspace = new Workspace(this::publish, this::log);
     private final Completions completions = new Completions(workspace);
+    private final CodeActions codeActions = new CodeActions(workspace);
 
     Workspace workspace() {
         return workspace;
@@ -105,6 +120,14 @@ public final class Server implements LanguageServer, LanguageClientAware, TextDo
         caps.setDocumentHighlightProvider(true);
         caps.setDocumentSymbolProvider(true);
         caps.setRenameProvider(new RenameOptions(true));
+        caps.setCodeActionProvider(new CodeActionOptions(List.of(CodeActionKind.QuickFix)));
+        caps.setInlayHintProvider(true);
+        var tokens = new SemanticTokensWithRegistrationOptions(SemanticTokens.LEGEND);
+        tokens.setFull(true);   // whole documents only: no `range` requests
+        tokens.setRange(false);
+        caps.setSemanticTokensProvider(tokens);
+        caps.setWorkspaceSymbolProvider(true);
+        caps.setImplementationProvider(true);
         caps.setCompletionProvider(new CompletionOptions(false, List.of(".", ":")));
         caps.setSignatureHelpProvider(new SignatureHelpOptions(List.of("(", ","), List.of(")")));
         return CompletableFuture.completedFuture(new InitializeResult(caps, new ServerInfo("threebolt", "0.1")));
@@ -164,8 +187,9 @@ public final class Server implements LanguageServer, LanguageClientAware, TextDo
     private void publish(Analysis a, Path file, List<Diagnostic> diagnostics) {
         var out = new ArrayList<org.eclipse.lsp4j.Diagnostic>();
         for (var d : diagnostics) {
-            var lsp = new org.eclipse.lsp4j.Diagnostic(Positions.range(d.span()), d.message(), DiagnosticSeverity.Error,
-                    "threebolt", d.code().id());
+            var lsp = new org.eclipse.lsp4j.Diagnostic(Positions.range(d.span()), d.message(),
+                    d.isWarning() ? DiagnosticSeverity.Warning : DiagnosticSeverity.Error, "threebolt", d.code().id());
+            if (unnecessary(d.code())) lsp.setTags(List.of(DiagnosticTag.Unnecessary));
             var related = new ArrayList<DiagnosticRelatedInformation>();
             for (var n : d.notes()) {
                 var loc = location(a, n.span());
@@ -175,6 +199,14 @@ public final class Server implements LanguageServer, LanguageClientAware, TextDo
             out.add(lsp);
         }
         client.publishDiagnostics(new PublishDiagnosticsParams(file.toUri().toString(), out));
+    }
+
+    /** Warnings about code that could go: editors fade it out. */
+    private static boolean unnecessary(Code code) {
+        return switch (code) {
+            case UNUSED_VARIABLE, UNUSED_IMPORT, UNUSED_ITEM, UNREACHABLE -> true;
+            default -> false;
+        };
     }
 
     private void log(String message) {
@@ -201,7 +233,7 @@ public final class Server implements LanguageServer, LanguageClientAware, TextDo
         return CompletableFuture.supplyAsync(() -> {
             var at = at(params);
             if (at == null) return null;
-            var text = "```threebolt\n" + SymbolIndex.describe(at.ref()) + "\n```";
+            var text = Docs.hover(SymbolIndex.describe(at.ref()), at.ref().target());
             return new Hover(new MarkupContent(MarkupKind.MARKDOWN, text), Positions.range(at.ref().span()));
         });
     }
@@ -215,6 +247,51 @@ public final class Server implements LanguageServer, LanguageClientAware, TextDo
             var loc = def == null ? null : location(at.analysis(), def);
             return Either.forLeft(loc == null ? List.of() : List.of(loc));
         });
+    }
+
+    @Override
+    public CompletableFuture<Either<List<? extends Location>, List<? extends LocationLink>>> implementation(
+            ImplementationParams params) {
+        return CompletableFuture.supplyAsync(() -> {
+            var at = at(params);
+            var out = new ArrayList<Location>();
+            if (at != null) {
+                for (var span : Navigation.implementations(at.analysis(), at.ref().target())) {
+                    var loc = location(at.analysis(), span);
+                    if (loc != null) out.add(loc);
+                }
+            }
+            return Either.forLeft(out);
+        });
+    }
+
+    @Override
+    public CompletableFuture<List<InlayHint>> inlayHint(InlayHintParams params) {
+        return CompletableFuture.supplyAsync(() -> {
+            var file = path(params.getTextDocument().getUri());
+            var a = workspace.forQuery(file);
+            var m = a == null ? null : a.module(file);
+            if (m == null || !m.source().text().equals(workspace.text(file))) return List.of();
+            return InlayHints.of(a, m, params.getRange());
+        });
+    }
+
+    @Override
+    public CompletableFuture<org.eclipse.lsp4j.SemanticTokens> semanticTokensFull(SemanticTokensParams params) {
+        return CompletableFuture.supplyAsync(() -> {
+            var file = path(params.getTextDocument().getUri());
+            var a = workspace.forQuery(file);
+            var m = a == null ? null : a.module(file);
+            if (m == null) return new org.eclipse.lsp4j.SemanticTokens(List.of());
+            return new org.eclipse.lsp4j.SemanticTokens(SemanticTokens.of(a, m));
+        });
+    }
+
+    @Override
+    public CompletableFuture<Either<List<? extends SymbolInformation>, List<? extends WorkspaceSymbol>>> symbol(
+            WorkspaceSymbolParams params) {
+        return CompletableFuture.supplyAsync(() -> Either.forRight(
+                Navigation.workspaceSymbols(workspace.analyses(), params.getQuery(), workspace.std::contains)));
     }
 
     @Override
@@ -267,6 +344,19 @@ public final class Server implements LanguageServer, LanguageClientAware, TextDo
             } catch (Exception e) {
                 log("threebolt: completion failed: " + e);
                 return Either.forLeft(List.of());
+            }
+        });
+    }
+
+    @Override
+    public CompletableFuture<List<Either<Command, CodeAction>>> codeAction(CodeActionParams params) {
+        return CompletableFuture.supplyAsync(() -> {
+            try {
+                return codeActions.actions(path(params.getTextDocument().getUri()), params).stream()
+                        .map(Either::<Command, CodeAction>forRight).toList();
+            } catch (Exception e) {
+                log("threebolt: code actions failed: " + e);
+                return List.of();
             }
         });
     }

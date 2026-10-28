@@ -14,14 +14,23 @@ import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutionException;
+import org.eclipse.lsp4j.CodeActionContext;
+import org.eclipse.lsp4j.CodeActionParams;
 import org.eclipse.lsp4j.DefinitionParams;
 import org.eclipse.lsp4j.Diagnostic;
 import org.eclipse.lsp4j.DidChangeTextDocumentParams;
 import org.eclipse.lsp4j.DidOpenTextDocumentParams;
 import org.eclipse.lsp4j.DocumentHighlightParams;
+import org.eclipse.lsp4j.DiagnosticSeverity;
 import org.eclipse.lsp4j.DocumentSymbol;
 import org.eclipse.lsp4j.DocumentSymbolParams;
 import org.eclipse.lsp4j.HoverParams;
+import org.eclipse.lsp4j.ImplementationParams;
+import org.eclipse.lsp4j.InlayHintParams;
+import org.eclipse.lsp4j.SemanticTokensParams;
+import org.eclipse.lsp4j.SymbolKind;
+import org.eclipse.lsp4j.WorkspaceSymbol;
+import org.eclipse.lsp4j.WorkspaceSymbolParams;
 import org.eclipse.lsp4j.InitializeParams;
 import org.eclipse.lsp4j.Location;
 import org.eclipse.lsp4j.MessageActionItem;
@@ -115,7 +124,7 @@ class ServerTest {
         assertEquals("fn norm(p: Point) -> i32", hover(main, "norm"));
         assertEquals("struct Point", hover(main, "Point::"));
         assertEquals("mod shapes", hover(main, "shapes::norm"));
-        assertEquals("fn println<T: Display>(x: T)", hover(main, "println"));
+        assertEquals("fn println(x: str)\n\n---\n\nWrites `x.to_str()` and a newline to stdout.", hover(main, "println"));
     }
 
     @Test
@@ -189,7 +198,7 @@ class ServerTest {
 
     @Test
     void refusesToRenameAShorthandField() throws Exception {
-        var text = "struct P { let a: i32; }\nfn main() { let a = 1; let p: P = { a }; }\n";
+        var text = "struct P { let a: i32; }\nfn main() { let a = 1; let p: P = { a }; println(p.a); }\n";
         var file = Files.writeString(dir.resolve("short.3b"), text);
         open(file, text);
         assertEquals(List.of(), diagnostics.get(uri(file)));
@@ -210,11 +219,207 @@ class ServerTest {
     }
 
     @Test
+    void hoverShowsDocComments() throws Exception {
+        var text = """
+                /// A shape.
+                /// Has an **area**.
+                trait Shape {
+                    /// The area, in square units.
+                    fn area(self) -> f64;
+                }
+
+                // Not a doc comment.
+                /// A square.
+                @c
+                struct Square : Shape {
+                    /// Length of a side.
+                    pub let side: f64;
+                    fn area(self) -> f64 => self.side * self.side;
+                }
+
+                enum Dir {
+                    /// Up the screen.
+                    Up,
+                    Down,
+                }
+
+                //// Four slashes: an ordinary comment.
+                fn plain() {}
+
+                fn main() {
+                    let s: Shape = Square { side: 2.0 };
+                    println(s.area());
+                    println(Square { side: 1.0 }.side);
+                    println(Dir::Up as i32 + Dir::Down as i32);
+                    plain();
+                    println("ab".upper() + f"{5.abs()}");
+                    println([true].iter().map(b => 1).count());
+                }
+                """;
+        var file = Files.writeString(dir.resolve("docs.3b"), text);
+        open(file, text);
+        assertEquals("trait Shape\n\n---\n\nA shape.\nHas an **area**.", hover(file, "Shape = "));
+        assertEquals("struct Square : Shape\n\n---\n\nA square.", hover(file, "Square { side: 2"));
+        assertEquals("let Square.side: f64\n\n---\n\nLength of a side.", hover(file, "side);"));
+        // Square::area has no doc of its own: it shows the trait member's.
+        assertEquals("fn Square::area(self) -> f64\n\n---\n\nThe area, in square units.", hover(file, "area(self) -> f64 =>"));
+        assertEquals("fn Shape::area(self) -> f64\n\n---\n\nThe area, in square units.", hover(file, "area());"));
+        assertEquals("Dir::Up = 0\n\n---\n\nUp the screen.", hover(file, "Up as"));
+        assertEquals("Dir::Down = 1", hover(file, "Down as"));
+        assertEquals("fn plain()", hover(file, "plain();"));
+        // A generic method shows what the call instantiated it with.
+        assertEquals("fn List::iter(self) -> Iterator<bool>\n\n---\n\nThe elements in order.", hover(file, "iter()"));
+        assertEquals("fn Iterator::map(self, f: fn(bool) -> i32) -> Iterator<i32>\n\n---\n\nThe values passed through `f`, lazily.",
+                hover(file, "map("));
+        // Primitive members are documented in std.
+        assertEquals("fn str::upper(self) -> str\n\n---\n\nThe string in upper case.", hover(file, "upper"));
+        assertEquals("fn i32::abs(self) -> i32\n\n---\n\nThe absolute value; `MIN.abs()` overflows and panics (§13.2).",
+                hover(file, "abs()"));
+    }
+
+    @Test
+    void quickFixesSilenceWarnings() throws Exception {
+        var text = """
+                use std::math::{sqrt, floor};
+                use std::random;
+
+                fn main() {
+                    let x = 1;
+                    let mut y = 2;
+                    println(y + sqrt(4.0) as i32);
+                    y == 3;
+                }
+                """;
+        var file = Files.writeString(dir.resolve("fixes.3b"), text);
+        open(file, text);
+        assertEquals(text.replace("let x", "let _x"), fix(file, text, "Rename to `_x`"));
+        assertEquals(text.replace("let mut y", "let y"), fix(file, text, "Remove `mut`"));
+        assertEquals(text.replace("use std::random;\n", ""), fix(file, text, "Remove unused import", "random"));
+        assertEquals(text.replace("{sqrt, floor}", "{sqrt}"), fix(file, text, "Remove unused import", "floor"));
+        assertEquals(text.replace("y == 3", "y = 3"), fix(file, text, "Change `==` to `=`"));
+    }
+
+    @Test
+    void quickFixesImportAndMakeMutable() throws Exception {
+        var text = """
+                // A header comment.
+                use shapes::Point;
+
+                fn main() {
+                    let n = 0;
+                    n = sqrt(2.0) as i32 + norm(Point::origin());
+                    println(n);
+                }
+                """;
+        var file = Files.writeString(dir.resolve("imports.3b"), text);
+        open(file, text);
+        assertEquals(text.replace("use shapes::Point;\n", "use shapes::Point;\nuse std::math::sqrt;\n"),
+                fix(file, text, "Import `std::math::sqrt`"));
+        assertEquals(text.replace("use shapes::Point;\n", "use shapes::Point;\nuse shapes::norm;\n"),
+                fix(file, text, "Import `shapes::norm`"));
+        assertEquals(text.replace("let n", "let mut n"), fix(file, text, "Declare it `let mut`"));
+    }
+
+    @Test
+    void inlayHintsShowInferredTypes() throws Exception {
+        var text = """
+                fn main() {
+                    let a = 1;
+                    let b: i64 = 2;
+                    let (c, d) = ("x", 2.5);
+                    let f = (x: i32) => x;
+                    let g = [1].iter().map(y => y > 0);
+                    for (i, v) in ["p"].enumerate() { println(f"{i}{v}"); }
+                    println(f"{a}{b}{c}{d}{f(1)}{g.count()}");
+                }
+                """;
+        var file = Files.writeString(dir.resolve("hints.3b"), text);
+        open(file, text);
+        var hints = server.inlayHint(new InlayHintParams(doc(file), new org.eclipse.lsp4j.Range(new Position(0, 0),
+                new Position(99, 0)))).get();
+        var shown = hints.stream().map(h -> slice(text, new org.eclipse.lsp4j.Range(new Position(h.getPosition().getLine(), 0),
+                h.getPosition())).strip() + h.getLabel().getLeft()).toList();
+        assertEquals(List.of("let a: i32", "let (c: str", "let (c, d: f64", "let f: fn(i32) -> i32",
+                "let g: Iterator<bool>", "let g = [1].iter().map(y: i32", "for (i: usize", "for (i, v: str"), shown);
+    }
+
+    @Test
+    void advertisesOnlyWhatItImplements() throws Exception {
+        var caps = new Server().initialize(new InitializeParams()).get().getCapabilities();
+        var tokens = caps.getSemanticTokensProvider();
+        assertTrue(tokens.getFull().getLeft(), "full-document semantic tokens");
+        assertTrue(tokens.getRange() == null || !tokens.getRange().getLeft(), "no range requests: not implemented");
+    }
+
+    @Test
+    void semanticTokensClassifyNames() throws Exception {
+        var text = """
+                struct P { pub let x: i32; }
+                fn main() {
+                    let mut n = P { x: 1 };
+                    n.x = 2;
+                    println(n.x);
+                }
+                """;
+        var file = Files.writeString(dir.resolve("tokens.3b"), text);
+        open(file, text);
+        var data = server.semanticTokensFull(new SemanticTokensParams(doc(file))).get().getData();
+        var tokens = new ArrayList<String>();
+        int line = 0;
+        int col = 0;
+        for (int i = 0; i < data.size(); i += 5) {
+            line += data.get(i);
+            col = data.get(i) == 0 ? col + data.get(i + 1) : data.get(i + 1);
+            var name = text.lines().toList().get(line).substring(col, col + data.get(i + 2));
+            var mods = new ArrayList<String>();
+            for (int m = 0; m < SemanticTokens.MODIFIERS.size(); m++) {
+                if ((data.get(i + 4) & (1 << m)) != 0) mods.add(SemanticTokens.MODIFIERS.get(m));
+            }
+            tokens.add(name + ":" + SemanticTokens.TYPES.get(data.get(i + 3)) + mods);
+        }
+        // Primitive type names are keywords to the TextMate grammar; they have no token here.
+        assertEquals(List.of("P:struct[declaration]", "x:property[declaration]", "main:function[declaration]", "n:variable[declaration, mutable]", "P:struct[]", "x:property[]",
+                "n:variable[mutable]", "x:property[]", "println:function[defaultLibrary]", "n:variable[mutable]",
+                "x:property[]"), tokens);
+    }
+
+    @Test
+    void findsImplementationsAndWorkspaceSymbols() throws Exception {
+        var text = """
+                trait Speak { fn speak(self) -> str; }
+                abstract class Animal { abstract fn noise(self) -> str; }
+                class Dog : Animal, Speak {
+                    override fn noise(self) -> str => "woof";
+                    pub fn speak(self) -> str => self.noise();
+                }
+                struct Robot;
+                impl Speak for Robot { fn speak(self) -> str => "beep"; }
+                fn main() { println(Robot.speak()); }
+                """;
+        var file = Files.writeString(dir.resolve("impls.3b"), text);
+        open(file, text);
+        assertEquals(List.of("Speak", "Speak"), implementations(file, text, "Speak {"));
+        assertEquals(List.of("Dog"), implementations(file, text, "Animal {"));
+        assertEquals(List.of("speak", "speak"), implementations(file, text, "speak(self) -> str;"));
+        assertEquals(List.of("noise"), implementations(file, text, "noise(self) -> str;"));
+        var symbols = server.symbol(new WorkspaceSymbolParams("spk")).get().getRight();
+        assertEquals(List.of("Speak", "speak", "speak", "speak"), symbols.stream().map(WorkspaceSymbol::getName).toList());
+        assertEquals(List.of("Speak", "Dog", "Robot"), symbols.stream().filter(x -> x.getKind() == SymbolKind.Method)
+                .map(WorkspaceSymbol::getContainerName).toList());
+    }
+
+    private List<String> implementations(Path file, String text, String needle) throws Exception {
+        var locs = server.implementation(new ImplementationParams(doc(file), at(text, needle))).get().getLeft();
+        return locs.stream().map(l -> slice(text, l.getRange())).toList();
+    }
+
+    @Test
     void checksAFileThatNoMainUsesOnItsOwn() throws Exception {
         var text = "fn helper() -> i32 => 1 + true;\n";
         var file = Files.writeString(dir.resolve("loose.3b"), text);
         open(file, text);
-        assertEquals(1, diagnostics.get(uri(file)).size());
+        var errors = diagnostics.get(uri(file)).stream().filter(d -> d.getSeverity() == DiagnosticSeverity.Error).toList();
+        assertEquals(1, errors.size());
         assertNull(hover(file, "1 +"));
     }
 
@@ -248,6 +453,35 @@ class ServerTest {
     private void open(Path file, String text) throws Exception {
         server.didOpen(new DidOpenTextDocumentParams(new TextDocumentItem(uri(file), "threebolt", 1, text)));
         server.workspace().awaitIdle();
+    }
+
+    /**
+     * Applies the quick fix titled {@code title} (for a diagnostic whose text contains
+     * {@code near}, if given) to {@code text}.
+     */
+    private String fix(Path file, String text, String title, String... near) throws Exception {
+        var ds = diagnostics.get(uri(file)).stream()
+                .filter(d -> near.length == 0 || slice(text, d.getRange()).contains(near[0])).toList();
+        var params = new CodeActionParams(doc(file), ds.getFirst().getRange(), new CodeActionContext(ds));
+        var actions = server.codeAction(params).get().stream().map(e -> e.getRight())
+                .filter(a -> a.getTitle().equals(title)).toList();
+        assertEquals(1, actions.size(), title + " among " + server.codeAction(params).get().stream()
+                .map(e -> e.getRight().getTitle()).toList());
+        var edits = actions.getFirst().getEdit().getChanges().get(uri(file));
+        assertEquals(1, edits.size());
+        var e = edits.getFirst();
+        return text.substring(0, index(text, e.getRange().getStart())) + e.getNewText()
+                + text.substring(index(text, e.getRange().getEnd()));
+    }
+
+    private static String slice(String text, org.eclipse.lsp4j.Range r) {
+        return text.substring(index(text, r.getStart()), index(text, r.getEnd()));
+    }
+
+    private static int index(String text, Position p) {
+        int i = 0;
+        for (int line = 0; line < p.getLine(); line++) i = text.indexOf('\n', i) + 1;
+        return i + p.getCharacter();
     }
 
     private void change(Path file, String text) throws Exception {

@@ -3,7 +3,8 @@ package dev.threebolt.diag;
 /**
  * Diagnostic codes. Conformance tests match on these, so a code's number never changes meaning;
  * retired codes are not reused. Grouped by stage: E00xx syntax, E01xx modules and names, E02xx
- * types and expressions, E03xx mutability, E04xx declarations.
+ * types and expressions, E03xx mutability, E04xx declarations. W0xxx are warnings: they do not stop
+ * a program from running.
  */
 public enum Code {
     SYNTAX("E0001"),
@@ -73,7 +74,14 @@ public enum Code {
     BAD_ENUM("E0408"),
     BAD_GETTER("E0409"),
     BAD_IMPL("E0410"),
-    CYCLE("E0411");
+    CYCLE("E0411"),
+
+    UNUSED_VARIABLE("W0001"),
+    UNUSED_MUT("W0002"),
+    UNUSED_IMPORT("W0003"),
+    UNREACHABLE("W0004"),
+    UNUSED_ITEM("W0005"),
+    NO_EFFECT("W0006");
 
     private final String id;
 
@@ -83,5 +91,9 @@ public enum Code {
 
     public String id() {
         return id;
+    }
+
+    public boolean isWarning() {
+        return id.startsWith("W");
     }
 }

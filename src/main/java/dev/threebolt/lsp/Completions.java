@@ -83,7 +83,12 @@ final class Completions {
         var seen = new LinkedHashSet<String>();
         String prefix = completion.prefix();
         for (var i : completion.items()) {
-            if (matches(i.name(), prefix) && seen.add(i.name())) out.add(item(i.name(), kind(i.kind()), i.detail(), i.rank()));
+            if (matches(i.name(), prefix) && seen.add(i.name())) {
+                var item = item(i.name(), kind(i.kind()), i.detail(), i.rank());
+                var doc = Docs.markup(i.target());
+                if (doc != null) item.setDocumentation(doc);
+                out.add(item);
+            }
         }
         if (completion.site() == Completion.Site.MODULE_ITEM) {
             for (var m : moduleFiles(at.file, completion.module())) {
@@ -309,6 +314,8 @@ final class Completions {
             }
             int param = named != null ? s.names().indexOf(named) : index;
             var info = new SignatureInformation(s.label());
+            var doc = Docs.markup(s.fn());
+            if (doc != null) info.setDocumentation(doc);
             info.setParameters(params);
             info.setActiveParameter(param >= 0 && param < params.size() ? param : null);
             if (active < 0 && info.getActiveParameter() != null) active = sigs.size();
