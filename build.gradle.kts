@@ -15,6 +15,7 @@ dependencies {
     antlr("org.antlr:antlr4:4.13.2")
     implementation("org.antlr:antlr4-runtime:4.13.2")
     implementation("org.eclipse.lsp4j:org.eclipse.lsp4j:1.0.0")
+    implementation("com.electronwill.night-config:toml:3.9.0")
 
     testImplementation(platform("org.junit:junit-bom:5.13.4"))
     testImplementation("org.junit.jupiter:junit-jupiter")
