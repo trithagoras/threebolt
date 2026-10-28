@@ -4,7 +4,9 @@
 // handle table beside files, so reading, writing and closing go through the same `sys_*` calls,
 // and a `TcpStream` reads through the same buffer as a `File`.
 
-use std::io::IoErr;
+use std::io::{IoErr, ClosedErr, Read, Write, Buffered, sys_close, sys_write, sys_write_str, sys_error};
+use std::thread::Thread;
+use std::time::Duration;
 
 // ---- Errors ----
 
@@ -38,6 +40,36 @@ pub class AddrInUseErr : NetErr {
 /// Text that is not an address; `path` is the text.
 pub class AddrParseErr : NetErr {
     pub fn new(text: str) -> Self => { ..NetErr::new("invalid address", path: text) };
+}
+
+// Error codes of the `sys_*` calls (negated in their results), after std::io's.
+const E_CONN_REFUSED: i64 = 9;
+const E_CONN_RESET: i64 = 10;
+const E_TIMED_OUT: i64 = 11;
+const E_ADDR_IN_USE: i64 = 12;
+const E_UNKNOWN_HOST: i64 = 13;
+
+/// The error for `r`, the negative result of a `sys_*` call on `path`.
+fn failure(r: i64, path: str | null) -> IoErr {
+    let code = -r;
+    if code == E_CONN_REFUSED { return ConnectionRefusedErr::new(path); }
+    if code == E_CONN_RESET { return ConnectionResetErr::new(path); }
+    if code == E_TIMED_OUT { return TimedOutErr::new(path); }
+    if code == E_ADDR_IN_USE { return AddrInUseErr::new(path); }
+    if code == E_UNKNOWN_HOST { return NetErr::new("unknown host", path: path); }
+    return std::io::failure(r, path);
+}
+
+/// `()`, or the error if `r` is a `sys_*` failure.
+fn check(r: i64, path: str | null) -> () | IoErr {
+    if r < 0 { return failure(r, path); }
+}
+
+/// The error for `r` from a call that makes a socket: any failure is a `NetErr`.
+fn net_failure(r: i64, path: str) -> NetErr {
+    let e = failure(r, path);
+    if e is NetErr { return e; }
+    return NetErr::new(sys_error(), path: path);
 }
 
 // ---- Addresses ----
@@ -245,3 +277,322 @@ fn hex_groups(g: [u16; 8], from: usize, to: usize) -> str {
     }
     return parts.join(":");
 }
+
+// ---- Names ----
+
+/// The addresses of `host`, from the system's resolver; an address's text is itself.
+pub fn lookup(host: str) -> [IpAddr] | NetErr {
+    let ip = parse_ip(host);
+    if !(ip is AddrParseErr) { return [ip]; }
+    let mut found: [str] = [];
+    let r = sys_lookup(host, found);
+    if r < 0 { return net_failure(r, host); }
+    let mut out: [IpAddr] = [];
+    for text in found {
+        let a = parse_ip(text);
+        if a is IpAddr { out.push(a); }
+    }
+    if out.len == 0 { return NetErr::new("no addresses", path: host); }
+    return out;
+}
+
+/// The addresses a target stands for: itself, or `host:port`'s host looked up.
+fn targets(addr: SocketAddr | str) -> [SocketAddr] | NetErr {
+    if addr is SocketAddr { return [addr]; }
+    let hp = host_port(addr)?;
+    if hp.2 { return [SocketAddr { ip: Ipv6Addr::parse(hp.0)?, port: hp.1 }]; }
+    let mut out: [SocketAddr] = [];
+    for ip in lookup(hp.0)? { out.push(SocketAddr { ip, port: hp.1 }); }
+    return out;
+}
+
+/// Calls `open` at each of `addr`'s addresses until one succeeds: its handle and address, or the
+/// last failure.
+fn first_of(addr: SocketAddr | str, open: fn(SocketAddr) -> i64) -> (i64, SocketAddr) | NetErr {
+    let all = targets(addr)?;
+    let mut last = NetErr::new("no addresses", path: addr.to_str());
+    for a in all {
+        let h = open(a);
+        if h >= 0 { return (h, a); }
+        last = net_failure(h, a.to_str());
+    }
+    return last;
+}
+
+/// The socket address of handle `h` (its peer's if `peer`), or `fallback` if it has none.
+fn addr_of(h: i64, peer: bool, fallback: SocketAddr) -> SocketAddr {
+    let a = SocketAddr::parse(sys_addr(h, peer));
+    return fallback if a is AddrParseErr else a;
+}
+
+/// A timeout in milliseconds for `sys_*`, where 0 is none; a non-positive `t` panics.
+fn millis(t: Duration | null) -> i64 {
+    if t == null { return 0; }
+    if t.nanos <= 0 { panic(f"std::net: timeout must be positive, got {t}"); }
+    return (t.nanos + 999_999) / 1_000_000;
+}
+
+// ---- TCP ----
+
+/// Which directions `TcpStream::shutdown` ends.
+pub enum Shutdown { Read, Write, Both }
+
+/// A socket listening for TCP connections.
+pub class TcpListener {
+    let handle: i64;     // -1 once closed
+    let local: SocketAddr;
+
+    /// Listens at `addr`, a `SocketAddr` or `"host:port"` text; port 0 picks a free port.
+    pub fn bind(addr: SocketAddr | str) -> TcpListener | NetErr {
+        let (h, a) = first_of(addr, a => sys_tcp_listen(a.ip.to_str(), a.port))?;
+        return TcpListener { handle: h, local: addr_of(h, false, a) };
+    }
+
+    /// The address it listens at, with the port picked if it was bound to port 0.
+    pub get fn local_addr(self) -> SocketAddr => self.local;
+    pub get fn closed(self) -> bool => self.handle < 0;
+
+    /// Waits for the next connection.
+    pub fn accept(mut self) -> TcpStream | IoErr {
+        if self.handle < 0 { return ClosedErr::new(self.local.to_str(), what: "socket"); }
+        let h = sys_accept(self.handle);
+        if h < 0 { return failure(h, self.local.to_str()); }
+        return TcpStream::of(h, self.local);
+    }
+
+    /// The connections as they arrive. An error ends the iteration, after being returned as an
+    /// element.
+    pub fn incoming(mut self) -> Iterator<TcpStream | IoErr> => Incoming::new(self);
+
+    /// Accepts connections until the listener is closed (from another thread, say), running
+    /// `handler` on a new thread for each and closing the stream when it returns. `()` when the
+    /// listener is closed; any other failure to accept is the result.
+    pub fn serve(mut self, handler: fn(TcpStream)) -> () | IoErr {
+        loop {
+            let s = self.accept();
+            if s is ClosedErr { return; }
+            if s is IoErr { return s; }
+            Thread::spawn(() => {
+                let mut stream = s;
+                defer stream.close();
+                handler(stream);
+            });
+        }
+    }
+
+    /// Stops listening; closing it again does nothing.
+    pub fn close(mut self) {
+        if self.handle < 0 { return; }
+        sys_close(self.handle);
+        self.handle = -1;
+    }
+}
+
+class Incoming : Iterator<TcpStream | IoErr> {
+    let listener: TcpListener;
+    let done: bool = false;
+
+    pub fn new(listener: TcpListener) -> Self => { listener };
+
+    pub fn next(mut self) -> TcpStream | IoErr | Done {
+        if self.done { return Done; }
+        let s = self.listener.accept();
+        if s is IoErr { self.done = true; }
+        return s;
+    }
+}
+
+/// A TCP connection. It reads and writes text (UTF-8) and bytes; reads are buffered, but writes
+/// are sent before they return. Close it when done: `defer s.close();`.
+pub class TcpStream : Read, Write {
+    let io: Buffered;
+    let local: SocketAddr;
+    let peer: SocketAddr;
+
+    /// Connects to `addr`, a `SocketAddr` or `"host:port"` text, giving up after `timeout` if
+    /// one is given.
+    pub fn connect(addr: SocketAddr | str, timeout: Duration | null = null) -> TcpStream | NetErr {
+        let ms = millis(timeout);
+        let (h, a) = first_of(addr, a => sys_tcp_connect(a.ip.to_str(), a.port, ms))?;
+        return TcpStream::of(h, a);
+    }
+
+    fn of(h: i64, fallback: SocketAddr) -> TcpStream {
+        let peer = addr_of(h, true, fallback);
+        return TcpStream { io: Buffered::new(h, peer.to_str(), failure: failure), local: addr_of(h, false, fallback), peer };
+    }
+
+    pub get fn local_addr(self) -> SocketAddr => self.local;
+    pub get fn peer_addr(self) -> SocketAddr => self.peer;
+    pub get fn closed(self) -> bool => self.io.handle < 0;
+
+    // ---- Reading ----
+
+    /// Everything until the peer closes its side.
+    pub fn read(mut self) -> str | IoErr {
+        self.demand()?;
+        return str::from_utf8(self.io.read_all()?);
+    }
+
+    /// The next line without its `\n` or `\r\n`, or null once the peer has closed its side.
+    pub fn read_line(mut self) -> str | null | IoErr {
+        self.demand()?;
+        return self.io.read_line();
+    }
+
+    /// Everything until the peer closes its side.
+    pub fn read_bytes(mut self) -> [u8] | IoErr {
+        self.demand()?;
+        return self.io.read_all();
+    }
+
+    /// `n` bytes, waiting for them; fewer only if the peer closes its side first.
+    pub fn read_bytes(mut self, n: usize) -> [u8] | IoErr {
+        self.demand()?;
+        return self.io.read_bytes(n);
+    }
+
+    // ---- Writing ----
+
+    pub fn write(mut self, s: str) -> () | IoErr {
+        self.demand()?;
+        check(sys_write_str(self.io.handle, s), self.peer.to_str())?;
+    }
+
+    pub fn write_bytes(mut self, bytes: [u8]) -> () | IoErr {
+        self.demand()?;
+        check(sys_write(self.io.handle, bytes), self.peer.to_str())?;
+    }
+
+    // ---- Options ----
+
+    /// Makes a read that waits longer than `t` a `TimedOutErr` (the stream stays usable); null
+    /// waits forever, as at the start. A zero or negative `t` panics.
+    pub fn set_read_timeout(mut self, t: Duration | null) -> () | IoErr {
+        self.demand()?;
+        check(sys_set_timeout(self.io.handle, millis(t)), self.peer.to_str())?;
+    }
+
+    /// Whether to send small writes at once (`TCP_NODELAY`) rather than gather them.
+    pub fn set_nodelay(mut self, on: bool) -> () | IoErr {
+        self.demand()?;
+        check(sys_set_nodelay(self.io.handle, on), self.peer.to_str())?;
+    }
+
+    /// Ends reading, writing or both; after `Write`, the peer reads the end of the input.
+    pub fn shutdown(mut self, how: Shutdown) -> () | IoErr {
+        self.demand()?;
+        check(sys_shutdown(self.io.handle, how as i32), self.peer.to_str())?;
+    }
+
+    /// Closes the connection; closing it again does nothing.
+    pub fn close(mut self) {
+        if self.io.handle < 0 { return; }
+        sys_close(self.io.handle);
+        self.io.handle = -1;
+        self.io.clear();
+    }
+
+    fn demand(self) -> () | IoErr {
+        if self.io.handle < 0 { return ClosedErr::new(self.peer.to_str(), what: "socket"); }
+    }
+}
+
+// ---- UDP ----
+
+/// The largest UDP payload over IPv4, and `recv_from`'s default limit.
+const MAX_DATAGRAM: usize = 65507;
+
+/// A UDP socket, sending and receiving datagrams.
+pub class UdpSocket {
+    let handle: i64;     // -1 once closed
+    let local: SocketAddr;
+
+    /// Binds to `addr`, a `SocketAddr` or `"host:port"` text; port 0 picks a free port.
+    pub fn bind(addr: SocketAddr | str) -> UdpSocket | NetErr {
+        let (h, a) = first_of(addr, a => sys_udp_bind(a.ip.to_str(), a.port))?;
+        return UdpSocket { handle: h, local: addr_of(h, false, a) };
+    }
+
+    pub get fn local_addr(self) -> SocketAddr => self.local;
+    pub get fn closed(self) -> bool => self.handle < 0;
+
+    /// Sends `bytes` as one datagram to `to`.
+    pub fn send_to(mut self, bytes: [u8], to: SocketAddr | str) -> () | IoErr {
+        self.demand()?;
+        let dest = targets(to)?[0];
+        check(sys_send_to(self.handle, bytes, dest.ip.to_str(), dest.port), dest.to_str())?;
+    }
+
+    /// Waits for the next datagram: its bytes (cut to `max`) and its sender.
+    pub fn recv_from(mut self, max: usize = MAX_DATAGRAM) -> ([u8], SocketAddr) | IoErr {
+        self.demand()?;
+        let mut bytes: [u8] = [];
+        let mut from: [str] = [];
+        check(sys_recv_from(self.handle, bytes, max, from), self.local.to_str())?;
+        return (bytes, SocketAddr::parse(from[0])?);
+    }
+
+    /// Makes `to` the socket's peer, for `send` and `recv`; datagrams from others are dropped.
+    pub fn connect(mut self, to: SocketAddr | str) -> () | IoErr {
+        self.demand()?;
+        let dest = targets(to)?[0];
+        check(sys_udp_connect(self.handle, dest.ip.to_str(), dest.port), dest.to_str())?;
+    }
+
+    /// Sends `bytes` as one datagram to the peer set by `connect`.
+    pub fn send(mut self, bytes: [u8]) -> () | IoErr {
+        self.demand()?;
+        check(sys_write(self.handle, bytes), self.local.to_str())?;
+    }
+
+    /// Waits for the next datagram from the peer set by `connect`, cut to `max` bytes.
+    pub fn recv(mut self, max: usize = MAX_DATAGRAM) -> [u8] | IoErr {
+        self.demand()?;
+        let mut bytes: [u8] = [];
+        let mut from: [str] = [];
+        check(sys_recv_from(self.handle, bytes, max, from), self.local.to_str())?;
+        return bytes;
+    }
+
+    /// As `TcpStream::set_read_timeout`, for `recv` and `recv_from`.
+    pub fn set_read_timeout(mut self, t: Duration | null) -> () | IoErr {
+        self.demand()?;
+        check(sys_set_timeout(self.handle, millis(t)), self.local.to_str())?;
+    }
+
+    /// Closes the socket; closing it again does nothing.
+    pub fn close(mut self) {
+        if self.handle < 0 { return; }
+        sys_close(self.handle);
+        self.handle = -1;
+    }
+
+    fn demand(self) -> () | IoErr {
+        if self.handle < 0 { return ClosedErr::new(self.local.to_str(), what: "socket"); }
+    }
+}
+
+// ---- System calls (interpreter intrinsics; reading, writing and closing are std::io's) ----
+
+/// Connects to `ip` (an address's text) and `port`, giving up after `timeout_ms` (0: never); a
+/// new handle.
+fn sys_tcp_connect(ip: str, port: u16, timeout_ms: i64) -> i64;
+fn sys_tcp_listen(ip: str, port: u16) -> i64;
+/// Waits for a connection on listener `h`; a new handle.
+fn sys_accept(h: i64) -> i64;
+fn sys_udp_bind(ip: str, port: u16) -> i64;
+fn sys_udp_connect(h: i64, ip: str, port: u16) -> i64;
+fn sys_send_to(h: i64, bytes: [u8], ip: str, port: u16) -> i64;
+/// Appends the next datagram, cut to `max` bytes, to `buf` and its sender's address to `from`;
+/// its length.
+fn sys_recv_from(h: i64, buf: [u8], max: usize, from: [str]) -> i64;
+/// A read timeout in milliseconds; 0 is none.
+fn sys_set_timeout(h: i64, ms: i64) -> i64;
+fn sys_set_nodelay(h: i64, on: bool) -> i64;
+/// 0 ends reading, 1 writing, 2 both.
+fn sys_shutdown(h: i64, how: i32) -> i64;
+/// The socket's address (its peer's if `peer`) as `ip:port` or `[ip]:port`; "" if none.
+fn sys_addr(h: i64, peer: bool) -> str;
+/// Appends the addresses of `host` to `out`; how many.
+fn sys_lookup(host: str, out: [str]) -> i64;

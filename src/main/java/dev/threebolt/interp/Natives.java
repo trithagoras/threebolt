@@ -66,6 +66,10 @@ final class Natives {
                 rt.checkAbort();
                 yield io.call(name, a);
             }
+            case "net" -> {
+                rt.checkAbort();
+                yield io.callNet(name, a);
+            }
             case "random" -> new Int(Prim.U64, ENTROPY.nextLong());
             case "time" -> new Int(Prim.I64, name.equals("monotonic_nanos") ? System.nanoTime() : wallNanos());
             // Collections lock themselves per operation (§13.4), but not around a callback.

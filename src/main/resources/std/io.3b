@@ -76,9 +76,9 @@ pub class NotEmptyErr : IoErr {
     pub fn new(path: str | null) -> Self => { ..IoErr::new("directory not empty", path: path) };
 }
 
-/// The file has been closed.
+/// The file (or socket, ...) has been closed.
 pub class ClosedErr : IoErr {
-    pub fn new(path: str | null) -> Self => { ..IoErr::new("file is closed", path: path) };
+    pub fn new(path: str | null, what: str = "file") -> Self => { ..IoErr::new(f"{what} is closed", path: path) };
 }
 
 /// The file's mode does not allow the operation: reading a file opened only for writing (or the
@@ -97,7 +97,7 @@ const E_NOT_EMPTY: i64 = 7;
 const E_BAD_HANDLE: i64 = 8;
 
 /// The error for `r`, the negative result of a `sys_*` call on `path`.
-fn failure(r: i64, path: str | null) -> IoErr {
+internal fn failure(r: i64, path: str | null) -> IoErr {
     let code = -r;
     if code == E_NOT_FOUND { return NotFoundErr::new(path); }
     if code == E_PERMISSION { return PermissionErr::new(path); }
@@ -187,10 +187,13 @@ pub trait Write {
 internal class Buffered {
     internal let handle: i64;     // -1 once closed
     let path: str | null;        // for errors
+    /// The error for a failed `sys_read` (std::net has its own codes).
+    let failure: fn(i64, str | null) -> IoErr;
     let buf: [u8] = [];
     let pos: usize = 0;
 
-    internal fn new(handle: i64, path: str | null) -> Self => { handle, path };
+    internal fn new(handle: i64, path: str | null, failure: fn(i64, str | null) -> IoErr = failure) -> Self
+        => { handle, path, failure };
 
     /// How many bytes were read ahead.
     internal get fn ahead(self) -> usize => self.buf.len - self.pos;
@@ -247,7 +250,7 @@ internal class Buffered {
             self.pos = 0;
         }
         let n = sys_read(self.handle, self.buf, CHUNK);
-        check(n, self.path)?;
+        if n < 0 { return (self.failure)(n, self.path); }
         return n > 0;
     }
 }
@@ -537,17 +540,17 @@ pub fn temp_dir() -> str => sys_temp_dir();
 
 /// Opens `path` with `O_*` flags; a new handle.
 fn sys_open(path: str, flags: u32) -> i64;
-fn sys_close(handle: i64) -> i64;
+internal fn sys_close(handle: i64) -> i64;
 /// Appends up to `max` bytes to `buf`; how many, 0 at the end of the file.
 fn sys_read(handle: i64, buf: [u8], max: usize) -> i64;
-fn sys_write(handle: i64, bytes: [u8]) -> i64;
+internal fn sys_write(handle: i64, bytes: [u8]) -> i64;
 /// Writes `s` in UTF-8.
-fn sys_write_str(handle: i64, s: str) -> i64;
+internal fn sys_write_str(handle: i64, s: str) -> i64;
 fn sys_flush(handle: i64) -> i64;
 /// Moves to `offset` from the start (0), the current position (1) or the end (2); the new position.
 fn sys_seek(handle: i64, offset: i64, whence: i32) -> i64;
 /// The description of this thread's last failed call.
-fn sys_error() -> str;
+internal fn sys_error() -> str;
 /// What is at `path`: 0 nothing, 1 a file, 2 a directory, 3 something else.
 fn sys_kind(path: str) -> i32;
 fn sys_size(path: str) -> i64;

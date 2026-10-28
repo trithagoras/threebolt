@@ -1,0 +1,48 @@
+// std::net UDP and lookup (§16): a loopback round trip, connected sockets, truncation, a read
+// timeout, and resolving names.
+use std::io::ClosedErr;
+use std::net;
+use std::net::{UdpSocket, SocketAddr, Ipv4Addr, Ipv6Addr, IpAddr, TimedOutErr, NetErr, AddrParseErr};
+use std::time::Duration;
+
+fn main() -> () | Err {
+    let mut a = UdpSocket::bind("127.0.0.1:0")?;
+    let mut b = UdpSocket::bind(SocketAddr::new(Ipv4Addr::LOCALHOST, 0))?;
+    println(a.local_addr.port != b.local_addr.port);
+
+    // Datagrams keep their boundaries; one longer than `max` is cut.
+    a.send_to("ping".to_utf8(), b.local_addr)?;
+    a.send_to("0123456789".to_utf8(), f"127.0.0.1:{b.local_addr.port}")?;
+    let (bytes, from) = b.recv_from()?;
+    println(f"{str::from_utf8(bytes)} from a: {from == a.local_addr}");
+    let (cut, _) = b.recv_from(max: 4)?;
+    println(str::from_utf8(cut));
+    b.send_to([], from)?;
+    println(a.recv_from()?.0.len);
+
+    // Connected: send and recv use the peer.
+    a.connect(b.local_addr)?;
+    b.connect(a.local_addr)?;
+    a.send("pong".to_utf8())?;
+    println(str::from_utf8(b.recv()?));
+
+    // A read timeout.
+    b.set_read_timeout(Duration::from_millis(20))?;
+    let t = b.recv();
+    println(f"{t is TimedOutErr} {t is NetErr}");
+    b.set_read_timeout(null)?;
+
+    a.close();
+    a.close();
+    println(f"{a.closed} {a.send([1]) is ClosedErr}");
+    b.close();
+
+    // Names.
+    let local = net::lookup("localhost")?;
+    println(local.contains(Ipv4Addr::LOCALHOST as IpAddr) || local.contains(Ipv6Addr::LOCALHOST as IpAddr));
+    println(net::lookup("10.0.0.7")?);
+    println(net::lookup("::1")?);
+    let bad = net::lookup("no-such-host.invalid");
+    println(f"{bad is NetErr} {(bad as NetErr).path}");
+    println(UdpSocket::bind("nonsense") is AddrParseErr);
+}

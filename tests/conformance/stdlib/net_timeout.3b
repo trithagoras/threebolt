@@ -1,0 +1,11 @@
+// A non-positive timeout is a bug, so it panics (§16 std::net).
+//! exit: 101
+use std::net::{TcpListener, TcpStream};
+use std::time::Duration;
+
+fn main() -> () | Err {
+    let mut l = TcpListener::bind("127.0.0.1:0")?;
+    defer l.close();
+    let mut c = TcpStream::connect(l.local_addr, timeout: Duration::from_millis(1500))?;
+    c.set_read_timeout(Duration::ZERO)?;
+}
