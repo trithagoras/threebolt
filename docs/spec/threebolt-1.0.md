@@ -96,6 +96,7 @@ use std::math::*;               // every pub item of a module
 - Each key is a module root within the depending package (`use shared::model::User;`). Dependencies are not transitive: a package sees only its own dependencies and `std`.
 - Package names and keys are identifiers other than `std`. A key that equals the name of a top-level module (`k.3b`) or directory (`k/`) of the depending package ⇒ error.
 - A package is identified by its directory (symbolic links resolved): dependency paths that reach the same directory are one package, whose modules and statics exist once in the program.
+- A subdirectory containing its own `package.toml` is a separate package, not part of the enclosing one: its files are not modules of the enclosing package, and its name is not a top-level module or directory of it (so `vendor/shared/` may be depended on from its parent).
 - The dependency graph must be acyclic; a cycle ⇒ error naming it. (Module cycles within a package are permitted, §2.2.)
 
 ---
@@ -1008,3 +1009,6 @@ Semantics the spec left open, decided while implementing:
 - §1, §2.3 New keyword and visibility `internal`: visible within the declaring package.
 - §2.2 Re-exports: `pub use` / `internal use` make the imported names visible to other modules as if declared there (was: `use` cannot be `pub`). Modules cannot be re-exported. Removed from "Not in 1.0".
 - §4.10 Orphan rule (replacing the non-normative note): an impl must be in the package declaring the trait or the target's type constructor, except in the application package.
+
+### 2026-10-28 — nested packages
+- §2.5 A subdirectory holding a `package.toml` is not part of the enclosing package (was: unspecified, so its files were modules of both packages).
