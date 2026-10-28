@@ -6,6 +6,7 @@ import dev.threebolt.diag.Code;
 import dev.threebolt.diag.Source;
 import dev.threebolt.ir.Local;
 import dev.threebolt.resolve.Module;
+import dev.threebolt.project.Manifest;
 import dev.threebolt.resolve.ModuleLoader;
 import dev.threebolt.types.SymbolIndex;
 import java.io.IOException;
@@ -167,32 +168,42 @@ final class CodeActions {
         for (var std : new TreeSet<>(ModuleLoader.STD_MODULES)) {
             if (!std.equals("prelude")) probe.append("use std::").append(std).append("::*;\n");
         }
-        for (var path : projectModules(root, file)) probe.append("use ").append(path).append("::*;\n");
+        for (var path : projectModules(root, file, "")) probe.append("use ").append(path).append("::*;\n");
+        workspace.dependencies(file).forEach((key, dir) -> {
+            for (var path : projectModules(dir, file, key + "::")) probe.append("use ").append(path).append("::*;\n");
+        });
         var program = workspace.load(file, probe.toString());
+        var self = program.moduleAt(file);
         var out = new TreeSet<String>();
         for (Module m : program.all()) {
             if (m.ast() == null || file.equals(m.file()) || m.path().segments().contains("builtin")) continue;
-            if (m.path().toString().equals("std::prelude")) continue;
-            if (m.path().last().equals(name)) out.add(m.path().toString());
+            if (m.isStd() && m.local().toString().equals("prelude")) continue;
+            // As the file names it: a dependency's modules under its key (§2.5).
+            var path = self == null ? m.path() : program.pathFrom(self, m);
+            if (path == null) continue;
+            if (path.last().equals(name)) out.add(path.toString());
             for (var d : m.scope().items(name)) {
-                if (visibleToUser(m, d.item()) && !(d.item() instanceof Item.Use)) {
-                    out.add(m.path() + "::" + name);
+                if (visibleToUser(m, d.item(), self) && !(d.item() instanceof Item.Use)) {
+                    out.add(path + "::" + name);
                 }
             }
         }
         return List.copyOf(out);
     }
 
-    /** The module paths of the `.3b` files under {@code root}, other than {@code file}. */
-    private static List<String> projectModules(Path root, Path file) {
+    /**
+     * The module paths, after {@code prefix}, of the `.3b` files under {@code root} other than
+     * {@code file}, outside nested packages.
+     */
+    private static List<String> projectModules(Path root, Path file, String prefix) {
         var out = new ArrayList<String>();
         if (root == null || !Files.isDirectory(root)) return out;
         try (var walk = Files.walk(root, 8)) {
             for (var p : walk.filter(p -> p.toString().endsWith(".3b") && Files.isRegularFile(p)).sorted().toList()) {
-                if (p.equals(file) || p.equals(root.resolve("main.3b"))) continue;
+                if (p.equals(file) || p.equals(root.resolve("main.3b")) || inNestedPackage(root, p)) continue;
                 var rel = root.relativize(p).toString();
                 var path = rel.substring(0, rel.length() - 3).replace(java.io.File.separatorChar, '/').replace("/", "::");
-                if (path.matches("[A-Za-z_][A-Za-z0-9_]*(::[A-Za-z_][A-Za-z0-9_]*)*")) out.add(path);
+                if (path.matches("[A-Za-z_][A-Za-z0-9_]*(::[A-Za-z_][A-Za-z0-9_]*)*")) out.add(prefix + path);
             }
         } catch (IOException e) {
             // Unreadable directories offer nothing.
@@ -215,8 +226,21 @@ final class CodeActions {
         return new Position(lastUse >= 0 ? lastUse : line, 0);
     }
 
+    private static boolean inNestedPackage(Path root, Path file) {
+        for (var dir = file.getParent(); dir != null && !dir.equals(root) && dir.startsWith(root); dir = dir.getParent()) {
+            if (Files.exists(dir.resolve(Manifest.FILE))) return true;
+        }
+        return false;
+    }
+
     /** Whether {@code item} of {@code m} can be imported by the user's (non-std) code (§2.3). */
     static boolean visibleToUser(Module m, Item item) {
         return item.visibility() == Visibility.PUB || item.visibility() == Visibility.INTERNAL && !m.isStd();
+    }
+
+    /** Whether {@code item} of {@code m} can be imported into {@code from} (any module of the program if null). */
+    static boolean visibleToUser(Module m, Item item, Module from) {
+        return from == null ? visibleToUser(m, item) : item.visibility() == Visibility.PUB
+                || item.visibility() == Visibility.INTERNAL && m.samePackage(from);
     }
 }

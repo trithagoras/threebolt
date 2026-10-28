@@ -2,6 +2,9 @@ package dev.threebolt.lsp;
 
 import dev.threebolt.diag.Diagnostic;
 import dev.threebolt.diag.Diagnostics;
+import dev.threebolt.diag.Source;
+import dev.threebolt.project.Manifest;
+import dev.threebolt.project.Project;
 import dev.threebolt.resolve.Module;
 import dev.threebolt.resolve.ModuleLoader;
 import dev.threebolt.resolve.Program;
@@ -25,9 +28,11 @@ import java.util.function.Consumer;
 import java.util.function.Function;
 
 /**
- * The open documents and the latest analysis of each program they belong to. A program is
- * checked from its entry file: the nearest {@code main.3b} at or above the edited file, or the
- * file itself when no such program includes it (§2.1: the source root is the entry's directory).
+ * The open documents and the latest analysis of each program they belong to. A file in a package
+ * (§2.5: the nearest `package.toml` at or above it within the editor's folder, or a member of a
+ * folder's workspace) is checked with the first of the package's bins whose program includes it,
+ * else with the whole package as a library. Other files keep the manifest-less rule: the nearest
+ * {@code main.3b} at or above the file, or the file itself when that program does not include it.
  *
  * <p>Analyses run one at a time on a thread with a large stack (the checker recurses), shortly
  * after the last edit. Queries read the newest analysis in which the file parsed, so hover and
@@ -123,9 +128,11 @@ final class Workspace {
     Analysis check(Path file, String text, Completion completion) throws Exception {
         Function<Path, String> reader = p -> p.equals(file) ? text : read(p);
         return executor.submit(() -> {
-            var entry = entryFor(file);
-            var a = Analysis.run(entry, reader, std, completion);
-            if (a.module(file) == null && !entry.equals(file)) a = Analysis.run(file, reader, std, completion);
+            Analysis a = null;
+            for (var t : targetsFor(file)) {
+                a = Analysis.run(t, reader, std, completion);
+                if (a.module(file) != null) break;
+            }
             return a;
         }).get();
     }
@@ -133,17 +140,33 @@ final class Workspace {
     /** Loads (does not check) {@code file}'s program with {@code text} in place of the file. */
     Program load(Path file, String text) {
         Function<Path, String> reader = p -> p.equals(file) ? text : read(p);
-        var entry = entryFor(file);
-        var program = new ModuleLoader(new Diagnostics(), reader).load(entry);
-        if (!entry.equals(file) && program.all().stream().noneMatch(m -> file.equals(m.file()))) {
-            program = new ModuleLoader(new Diagnostics(), reader).load(file);
+        Program program = null;
+        for (var t : targetsFor(file)) {
+            program = t.load(new ModuleLoader(new Diagnostics(), reader));
+            if (program.all().stream().anyMatch(m -> file.equals(m.file()))) break;
         }
         return program;
     }
 
-    /** The source root of {@code file}'s program: its entry file's directory (§2.1). */
+    /** The source root of {@code file}'s program: its package's directory, else its entry file's (§2.1, §2.5). */
     Path sourceRoot(Path file) {
-        return entryFor(file).getParent();
+        var t = targetsFor(file).getFirst();
+        return t.root() != null ? t.root() : t.entry().getParent();
+    }
+
+    /** The dependencies of {@code file}'s package (§2.5), by key, with their directories; empty without one. */
+    Map<String, Path> dependencies(Path file) {
+        var pkg = packageOf(file);
+        var out = new java.util.LinkedHashMap<String, Path>();
+        if (pkg != null) {
+            for (var d : pkg.manifest().dependencies()) out.put(d.key(), pkg.root().resolve(d.path()).normalize());
+        }
+        return out;
+    }
+
+    /** A `package.toml` or `workspace.toml` changed: packages may have, so every open file is checked again. */
+    void manifestsChanged() {
+        for (var file : open.keySet()) schedule(file, 0);
     }
 
     /** Waits for every scheduled analysis to finish (tests). */
@@ -164,16 +187,52 @@ final class Workspace {
 
     private void schedule(Path file, long delayMs) {
         if (!checkable(file)) return;
-        var entry = entryFor(file);
-        var old = pending.put(entry, executor.schedule(() -> analyze(entry, file), delayMs, TimeUnit.MILLISECONDS));
+        var targets = targetsFor(file);
+        var old = pending.put(targets.getFirst().key(), executor.schedule(() -> analyze(targets, file), delayMs, TimeUnit.MILLISECONDS));
         if (old != null) old.cancel(false);
     }
 
+    /** What to check {@code file} with, in order: the first whose program includes it wins (the last always does). */
+    private List<Analysis.Target> targetsFor(Path file) {
+        var out = new ArrayList<Analysis.Target>();
+        var pkg = packageOf(file);
+        if (pkg != null) {
+            var entries = pkg.manifest().bins().stream().map(b -> pkg.root().resolve(b.entry()).normalize())
+                    .filter(e -> e.equals(file) || open.containsKey(e) || Files.isRegularFile(e)).toList();
+            if (entries.contains(file)) out.add(new Analysis.Target(file, pkg.root(), true));
+            for (var e : entries) if (!e.equals(file)) out.add(new Analysis.Target(e, pkg.root(), true));
+            out.add(new Analysis.Target(null, pkg.root(), false));
+            return out;
+        }
+        var main = nearestMain(file);
+        out.add(Analysis.Target.script(main));
+        if (!main.equals(file)) out.add(Analysis.Target.script(file));
+        return out;
+    }
+
     /**
-     * The nearest `main.3b` at or above {@code file}, within a workspace root; else the file.
-     * (Checking may still fall back to the file alone when that program does not include it.)
+     * The package {@code file} is in: the nearest directory at or above it, within the editor's
+     * folder, holding a `package.toml`, or a member of a folder's workspace; null if none.
      */
-    private Path entryFor(Path file) {
+    private Project.Pkg packageOf(Path file) {
+        var stop = roots.stream().filter(file::startsWith).findFirst().orElse(file.getParent());
+        for (Path dir = file.getParent(); dir != null && dir.startsWith(stop); dir = dir.getParent()) {
+            var manifest = dir.resolve(Manifest.FILE);
+            if (Files.isRegularFile(manifest)) {
+                var text = read(manifest);
+                return new Project.Pkg(dir, Manifest.parse(new Source(Manifest.FILE, text), new Diagnostics()));
+            }
+        }
+        for (var root : roots) {
+            var project = Project.open(root, root, new Diagnostics());
+            var pkg = project == null ? null : project.packageOf(file);
+            if (pkg != null) return pkg;
+        }
+        return null;
+    }
+
+    /** The nearest `main.3b` at or above {@code file}, within a workspace root; else the file. */
+    private Path nearestMain(Path file) {
         var stop = roots.stream().filter(file::startsWith).findFirst().orElse(file.getParent());
         for (Path dir = file.getParent(); dir != null && dir.startsWith(stop); dir = dir.getParent()) {
             var main = dir.resolve("main.3b");
@@ -182,19 +241,21 @@ final class Workspace {
         return file;
     }
 
-    private void analyze(Path entry, Path file) {
+    private void analyze(List<Analysis.Target> targets, Path file) {
+        var target = targets.getFirst();
         try {
-            var a = Analysis.run(entry, this::read, std);
-            if (a.module(file) == null && !entry.equals(file)) {
-                // The nearest main.3b does not use this file: check it on its own.
-                entry = file;
-                a = Analysis.run(file, this::read, std);
+            Analysis a = null;
+            for (var t : targets) {
+                target = t;
+                a = Analysis.run(t, this::read, std);
+                // A target that does not include the file: try the next.
+                if (a.module(file) != null) break;
             }
             record(a);
         } catch (Throwable t) {
             var trace = new StringWriter();
             t.printStackTrace(new PrintWriter(trace));
-            log.accept("threebolt: checking " + entry + " failed:\n" + trace);
+            log.accept("threebolt: checking " + target.key() + " failed:\n" + trace);
         }
     }
 
@@ -211,6 +272,7 @@ final class Workspace {
             if (m.ast() != null) lastParsed.put(file, a);
             if (!m.isStd()) byFile.put(file, new ArrayList<>());
         }
+        for (var manifest : a.manifests()) byFile.put(manifest, new ArrayList<>());
         for (var d : a.diagnostics) {
             var list = byFile.get(a.file(d.span().source()));
             if (list != null) list.add(d);

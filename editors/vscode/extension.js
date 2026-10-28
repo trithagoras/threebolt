@@ -30,6 +30,8 @@ async function start(context) {
   const run = { command: java, args: ['--enable-native-access=ALL-UNNAMED', '-jar', jar, 'lsp'] };
   client = new LanguageClient('threebolt', 'Threebolt', { run, debug: run }, {
     documentSelector: [{ scheme: 'file', language: 'threebolt' }],
+    // Packages (spec §2.5) change when their manifests do; the server re-checks open files.
+    synchronize: { fileEvents: vscode.workspace.createFileSystemWatcher('**/{package,workspace}.toml') },
   });
   try {
     await client.start();

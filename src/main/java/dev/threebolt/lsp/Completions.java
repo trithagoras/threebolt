@@ -6,6 +6,7 @@ import dev.threebolt.diag.Diagnostics;
 import dev.threebolt.diag.Source;
 import dev.threebolt.parse.AstParser;
 import dev.threebolt.parser.ThreeboltLexer;
+import dev.threebolt.project.Manifest;
 import dev.threebolt.resolve.ModuleLoader;
 import dev.threebolt.resolve.ModulePath;
 import dev.threebolt.resolve.Symbol;
@@ -213,11 +214,12 @@ final class Completions {
             var path = new ModulePath(segments);
             var text = "use " + path + "::" + Completion.PLACEHOLDER + ";\n";
             var program = workspace.load(at.file, text);
-            var m = program.module(path);
+            var self = program.moduleAt(at.file);
+            var m = self == null ? program.module(path) : program.module(self, path);
             if (m != null && m.ast() != null) {
                 boolean own = at.file.equals(m.file());
                 m.scope().items().forEach((name, decls) -> {
-                    if (own || decls.stream().anyMatch(d -> CodeActions.visibleToUser(m, d.item()))) {
+                    if (own || decls.stream().anyMatch(d -> CodeActions.visibleToUser(m, d.item(), self))) {
                         add(out, prefix, name, kind(decls.getFirst()), 1);
                     }
                 });
@@ -231,23 +233,33 @@ final class Completions {
 
     /**
      * The modules directly under {@code parent} (null: the source root) on disk, or in std; the
-     * root also has `std`.
+     * root also has `std` and the package's dependency keys, whose modules are under their own
+     * roots (§2.5). Nested packages are not modules.
      */
     private List<String> moduleFiles(Path file, ModulePath parent) {
         var out = new ArrayList<String>();
-        if (parent == null) out.add("std");
+        var deps = workspace.dependencies(file);
+        if (parent == null) {
+            out.add("std");
+            out.addAll(deps.keySet());
+        }
         if (parent != null && parent.isStd()) {
             if (parent.segments().size() == 1) out.addAll(ModuleLoader.STD_MODULES.stream().sorted().toList());
             return out;
         }
         var dir = workspace.sourceRoot(file);
-        if (parent != null) for (var s : parent.segments()) dir = dir.resolve(s);
+        var segments = parent == null ? List.<String>of() : parent.segments();
+        if (!segments.isEmpty() && deps.containsKey(segments.getFirst())) {
+            dir = deps.get(segments.getFirst());
+            segments = segments.subList(1, segments.size());
+        }
+        for (var s : segments) dir = dir.resolve(s);
         if (!Files.isDirectory(dir)) return out;
         try (var entries = Files.list(dir)) {
             for (var p : entries.sorted().toList()) {
                 var name = p.getFileName().toString();
                 if (name.endsWith(".3b") && Files.isRegularFile(p)) name = name.substring(0, name.length() - 3);
-                else if (!Files.isDirectory(p)) continue;
+                else if (!Files.isDirectory(p) || Files.exists(p.resolve(Manifest.FILE))) continue;
                 if (isIdentifier(name) && !out.contains(name) && !p.equals(file)) out.add(name);
             }
         } catch (IOException e) {

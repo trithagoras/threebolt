@@ -86,6 +86,29 @@ public final class Program {
         return loc == null ? List.of() : under(loc.pkg(), loc.local());
     }
 
+    /** The module containing {@code file}; null if none. */
+    public Module moduleAt(java.nio.file.Path file) {
+        for (var m : modules) if (file.equals(m.file())) return m;
+        return null;
+    }
+
+    /**
+     * The path that code in {@code from} names {@code target} by (§2.5): its own package's
+     * modules from the root, std's under `std`, a dependency's under its key; null for a package
+     * {@code from} does not depend on.
+     */
+    public ModulePath pathFrom(Module from, Module target) {
+        var pkg = target.pkg();
+        if (pkg == from.pkg()) return target.local();
+        String key = pkg.isStd() ? "std" : null;
+        for (var e : from.pkg().dependencies().entrySet()) if (key == null && e.getValue() == pkg) key = e.getKey();
+        if (key == null) return null;
+        var s = new ArrayList<String>();
+        s.add(key);
+        s.addAll(target.local().segments());
+        return new ModulePath(s);
+    }
+
     private List<Module> under(Package pkg, ModulePath parent) {
         var out = new ArrayList<Module>();
         var mods = byPackage.get(pkg);
