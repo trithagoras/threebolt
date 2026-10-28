@@ -1,0 +1,26 @@
+// Character indexing, slicing and the str members task 1 moves into Threebolt.
+
+fn main() {
+    let mut words: [str] = [];
+    for i in 0..20000 { words.push(f"  word{i % 97}  "); }
+    let text = words.join(",");
+
+    // Indexing every character: quadratic while `s[i]` walks code points.
+    let mut commas = 0;
+    for i in 0..text.len {
+        if text[i] == ',' { commas += 1; }
+    }
+
+    let mut total = 0;
+    for _ in 0..200 {
+        for part in text.split(",") {
+            let w = part.trim();
+            if w.starts_with("word1") { total += 1; }
+            if w.ends_with("7") { total += 1; }
+            if let i = w.find("d") { total += i as i32; }
+        }
+        total += text.replace("word", "w").len as i32;
+        total += text[100..200].repeat(3).len as i32;
+    }
+    println(f"{commas} {total}");
+}

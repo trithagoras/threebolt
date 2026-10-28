@@ -1,0 +1,26 @@
+// Lists, maps and sets: the prelude helpers task 1 moves into Threebolt.
+use std::collections::Map;
+use std::collections::Set;
+
+fn main() {
+    let mut xs: [i64] = [];
+    for i in 0..300000 { xs.push((i as i64 * 7919) % 10007); }
+
+    let mut counts: Map<i64, i32> = [];
+    for x in xs {
+        let k = x % 100;
+        counts[k] = (counts.get(k) ?? 0) + 1;
+    }
+
+    let mut seen: Set<i64> = [];
+    for x in xs { seen.insert(x); }
+
+    let evens = xs.iter().filter(x => x % 2 == 0).map(x => x * 2).fold(0 as i64, (a, b) => a + b);
+    let mut hits = 0;
+    for i in 0..2000 {
+        if xs.contains(i) { hits += 1; }
+    }
+    let mut ys = xs[0..1000];
+    ys.reverse();
+    println(f"{counts.len} {seen.len} {evens} {hits} {ys[0]}");
+}

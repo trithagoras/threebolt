@@ -82,3 +82,24 @@ tasks.register<Copy>("vscodeServer") {
     from(serverJar)
     into("editors/vscode/server")
 }
+
+// `./gradlew bench [-Pbench=name]`: runs tests/bench/*.3b with the installed CLI and prints each one's
+// wall-clock time and output (see tests/bench/README.md).
+tasks.register("bench") {
+    dependsOn(tasks.installDist)
+    val only = providers.gradleProperty("bench")
+    val cli = layout.buildDirectory.file("install/threebolt/bin/threebolt")
+    val dir = layout.projectDirectory.dir("tests/bench")
+    doLast {
+        val files = dir.asFile.listFiles { f -> f.extension == "3b" }!!.sortedBy { it.name }
+            .filter { !only.isPresent || it.nameWithoutExtension == only.get() }
+        for (f in files) {
+            val start = System.nanoTime()
+            val proc = ProcessBuilder(cli.get().asFile.path, "run", f.path).redirectErrorStream(true).start()
+            val out = proc.inputStream.bufferedReader().readText().trim()
+            val code = proc.waitFor()
+            val ms = (System.nanoTime() - start) / 1_000_000
+            println("%-12s %7d ms  %s".format(f.nameWithoutExtension, ms, if (code == 0) out else "exit $code: $out"))
+        }
+    }
+}
