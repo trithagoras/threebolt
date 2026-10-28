@@ -19,6 +19,7 @@ import org.eclipse.lsp4j.Diagnostic;
 import org.eclipse.lsp4j.DidChangeTextDocumentParams;
 import org.eclipse.lsp4j.DidOpenTextDocumentParams;
 import org.eclipse.lsp4j.DocumentHighlightParams;
+import org.eclipse.lsp4j.DiagnosticSeverity;
 import org.eclipse.lsp4j.DocumentSymbol;
 import org.eclipse.lsp4j.DocumentSymbolParams;
 import org.eclipse.lsp4j.HoverParams;
@@ -189,7 +190,7 @@ class ServerTest {
 
     @Test
     void refusesToRenameAShorthandField() throws Exception {
-        var text = "struct P { let a: i32; }\nfn main() { let a = 1; let p: P = { a }; }\n";
+        var text = "struct P { let a: i32; }\nfn main() { let a = 1; let p: P = { a }; println(p.a); }\n";
         var file = Files.writeString(dir.resolve("short.3b"), text);
         open(file, text);
         assertEquals(List.of(), diagnostics.get(uri(file)));
@@ -214,7 +215,8 @@ class ServerTest {
         var text = "fn helper() -> i32 => 1 + true;\n";
         var file = Files.writeString(dir.resolve("loose.3b"), text);
         open(file, text);
-        assertEquals(1, diagnostics.get(uri(file)).size());
+        var errors = diagnostics.get(uri(file)).stream().filter(d -> d.getSeverity() == DiagnosticSeverity.Error).toList();
+        assertEquals(1, errors.size());
         assertNull(hover(file, "1 +"));
     }
 

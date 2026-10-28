@@ -20,7 +20,7 @@ import org.junit.jupiter.api.TestFactory;
 
 /**
  * Runs tests/conformance (see its README): each case is checked, and its diagnostics compared
- * with the case's `.err` file (none expected without one). A case without errors is then run and
+ * with the case's `.err` file (none expected without one; warnings only when there are no errors). A case without errors is then run and
  * its stdout, stderr and exit code compared with `.out`, `.stderr` and the `//! exit:` directive
  * (with `.in`, if present, as stdin).
  * `-PupdateGolden` rewrites the `.err`, `.out` and `.stderr` files instead.
@@ -58,7 +58,10 @@ class ConformanceTest {
         var diagnostics = new Diagnostics();
         var program = Driver.check(entry, diagnostics);
         var actual = new StringBuilder();
-        for (Diagnostic d : diagnostics.sorted()) actual.append(d.header()).append('\n');
+        for (Diagnostic d : diagnostics.sorted()) {
+            // Warnings are expected only of cases without errors: an error case's leftovers are noise.
+            if (!d.isWarning() || !diagnostics.hasErrors()) actual.append(d.header()).append('\n');
+        }
         golden(sibling(entry, ".err"), actual.toString());
         if (program == null) return;
 

@@ -1,0 +1,2 @@
+lambdas.3b:29:10: warning[W0001]: unused parameter 'f'; if this is intentional, name it `_f`
+lambdas.3b:30:10: warning[W0001]: unused parameter 'f'; if this is intentional, name it `_f`

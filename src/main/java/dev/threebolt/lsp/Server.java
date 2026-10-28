@@ -1,5 +1,6 @@
 package dev.threebolt.lsp;
 
+import dev.threebolt.diag.Code;
 import dev.threebolt.diag.Diagnostic;
 import dev.threebolt.diag.Span;
 import dev.threebolt.ir.Local;
@@ -27,6 +28,7 @@ import org.eclipse.lsp4j.DidOpenTextDocumentParams;
 import org.eclipse.lsp4j.DidSaveTextDocumentParams;
 import org.eclipse.lsp4j.DiagnosticRelatedInformation;
 import org.eclipse.lsp4j.DiagnosticSeverity;
+import org.eclipse.lsp4j.DiagnosticTag;
 import org.eclipse.lsp4j.DocumentHighlight;
 import org.eclipse.lsp4j.DocumentHighlightKind;
 import org.eclipse.lsp4j.DocumentHighlightParams;
@@ -164,8 +166,9 @@ public final class Server implements LanguageServer, LanguageClientAware, TextDo
     private void publish(Analysis a, Path file, List<Diagnostic> diagnostics) {
         var out = new ArrayList<org.eclipse.lsp4j.Diagnostic>();
         for (var d : diagnostics) {
-            var lsp = new org.eclipse.lsp4j.Diagnostic(Positions.range(d.span()), d.message(), DiagnosticSeverity.Error,
-                    "threebolt", d.code().id());
+            var lsp = new org.eclipse.lsp4j.Diagnostic(Positions.range(d.span()), d.message(),
+                    d.isWarning() ? DiagnosticSeverity.Warning : DiagnosticSeverity.Error, "threebolt", d.code().id());
+            if (unnecessary(d.code())) lsp.setTags(List.of(DiagnosticTag.Unnecessary));
             var related = new ArrayList<DiagnosticRelatedInformation>();
             for (var n : d.notes()) {
                 var loc = location(a, n.span());
@@ -175,6 +178,14 @@ public final class Server implements LanguageServer, LanguageClientAware, TextDo
             out.add(lsp);
         }
         client.publishDiagnostics(new PublishDiagnosticsParams(file.toUri().toString(), out));
+    }
+
+    /** Warnings about code that could go: editors fade it out. */
+    private static boolean unnecessary(Code code) {
+        return switch (code) {
+            case UNUSED_VARIABLE, UNUSED_IMPORT, UNUSED_ITEM, UNREACHABLE -> true;
+            default -> false;
+        };
     }
 
     private void log(String message) {

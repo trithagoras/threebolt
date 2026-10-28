@@ -1,0 +1,4 @@
+main.3b:3:35: warning[W0003]: unused import 'ExistsErr'
+main.3b:4:23: warning[W0003]: unused import 'floor'
+main.3b:5:1: warning[W0003]: unused import: nothing from 'std::random' is used
+main.3b:7:22: warning[W0003]: unused import 'whisper'

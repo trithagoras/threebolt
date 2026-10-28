@@ -52,7 +52,7 @@ class TypeSystemTest {
         var diagnostics = new Diagnostics();
         checker = new Checker(new ModuleLoader(diagnostics).load(entry), diagnostics);
         checker.check();
-        assertEquals(List.of(), diagnostics.sorted().stream().map(Diagnostic::header).toList());
+        assertEquals(List.of(), diagnostics.sorted().stream().filter(d -> !d.isWarning()).map(Diagnostic::header).toList());
         ts = checker.ts;
     }
 

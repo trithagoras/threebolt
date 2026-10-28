@@ -1,0 +1,10 @@
+flow.3b:4:5: warning[W0004]: unreachable code
+flow.3b:10:5: warning[W0004]: unreachable code
+flow.3b:10:5: warning[W0006]: this expression has no effect
+flow.3b:16:9: warning[W0004]: unreachable code
+flow.3b:19:5: warning[W0004]: unreachable code
+flow.3b:23:5: warning[W0006]: this comparison has no effect; to assign, write `=`
+flow.3b:24:5: warning[W0006]: this expression has no effect
+flow.3b:25:5: warning[W0006]: this expression has no effect
+flow.3b:26:5: warning[W0006]: this expression has no effect
+flow.3b:27:5: warning[W0006]: this lambda is never called

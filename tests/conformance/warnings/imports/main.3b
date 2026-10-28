@@ -1,0 +1,20 @@
+// W0003: unused imports. A name used only in a type, or as a path's first segment, is used.
+use std::io;
+use std::io::{IoErr, NotFoundErr, ExistsErr};
+use std::math::{sqrt, floor};
+use std::random::*;
+use std::collections::*;
+use helpers::{shout, whisper};
+use helpers as h;
+
+fn check(r: () | IoErr) -> bool => r is NotFoundErr;
+
+fn main() {
+    println(check(()));
+    println(sqrt(4.0));
+    println(shout("hi"));
+    println(io::exists("/definitely/not/here"));
+    println(h::whisper("x"));
+    let m: Map<str, i32> = ["a": 1];
+    println(m.len);
+}

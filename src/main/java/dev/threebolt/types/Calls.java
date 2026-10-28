@@ -177,7 +177,10 @@ final class Calls {
                 diag.error(Code.IMMUTABLE_RECEIVER, m.receiver().span(), "'" + name + "' takes `mut self`, but "
                         + lower(place.immutableWhy()));
             }
-            if (place != null) recvPlace = place.place();
+            if (place != null) {
+                recvPlace = place.place();
+                c.lints.mutated(recvPlace);
+            }
         }
         return build(bound, recvPlace == null ? r.value().ir() : null, recvPlace, e.span());
     }

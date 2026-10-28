@@ -5,15 +5,29 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.function.Supplier;
 
-/** Collects the diagnostics of one compilation; every stage keeps going after an error. */
+/**
+ * Collects the diagnostics of one compilation; every stage keeps going after an error. Warnings
+ * are kept with the errors but never count as errors.
+ */
 public final class Diagnostics {
     private final List<Diagnostic> all = new ArrayList<>();
+    private final java.util.Set<String> warned = new java.util.HashSet<>();
     private int muted;
     private int dropped;
+    private int errors;
 
     public void add(Diagnostic d) {
-        if (muted > 0) dropped++;
-        else all.add(d);
+        if (d.isWarning()) {
+            // Speculative checking says nothing, and a body checked twice warns once.
+            if (muted == 0 && warned.add(d.header())) all.add(d);
+            return;
+        }
+        if (muted > 0) {
+            dropped++;
+        } else {
+            all.add(d);
+            errors++;
+        }
     }
 
     /**
@@ -39,16 +53,21 @@ public final class Diagnostics {
         return dropped;
     }
 
+    /** How many errors (not warnings) were reported. */
     public int count() {
-        return all.size();
+        return errors;
     }
 
     public void error(Code code, Span span, String message) {
         add(new Diagnostic(code, span, message));
     }
 
+    public void warning(Code code, Span span, String message) {
+        add(new Diagnostic(code, span, message));
+    }
+
     public boolean hasErrors() {
-        return !all.isEmpty();
+        return errors > 0;
     }
 
     /** Sorted by file name, then position; stable for equal positions. */

@@ -36,6 +36,10 @@ public final class SymbolIndex {
     public record EnumMember(TypeInfo owner, String name) {}
 
     private final boolean enabled;
+    /** Told of every use of a name (also when this index is disabled). */
+    Lints lints;
+    /** Recording the paths in `use` items, which are not uses. */
+    private boolean inUse;
     /** A completion or signature-help request to answer while checking, or null. */
     final Completion completion;
     private Diagnostics diag;
@@ -82,6 +86,7 @@ public final class SymbolIndex {
     }
 
     private void put(Ref r) {
+        if (lints != null && !r.isDecl() && !inUse && r.target() != null) lints.used(r.target());
         if (!enabled || r.span() == null || r.target() == null) return;
         var bySpan = refs.computeIfAbsent(r.span().source(), k -> new TreeMap<>());
         boolean muted = isMuted();
@@ -141,12 +146,14 @@ public final class SymbolIndex {
     /** Records the names of every declaration the checker knows about, and the paths in `use` items. */
     void declarations(Program program, Declarer decls) {
         if (!enabled) return;
+        inUse = true;
         for (Module m : program.all()) {
             if (m.ast() == null) continue;
             for (Item item : m.ast().items()) {
                 if (item instanceof Item.Use u) use(program, decls.names, m, u);
             }
         }
+        inUse = false;
         for (TypeInfo t : decls.allTypes) {
             if (t.item == null) continue;
             decl(itemName(t.item), t);

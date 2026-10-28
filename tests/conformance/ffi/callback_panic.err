@@ -1,0 +1,2 @@
+callback_panic.3b:8:12: warning[W0001]: unused parameter 'a'; if this is intentional, name it `_a`
+callback_panic.3b:8:25: warning[W0001]: unused parameter 'b'; if this is intentional, name it `_b`
