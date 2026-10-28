@@ -150,6 +150,14 @@ final class Natives {
         }
     }
 
+    /** {@code s[i]}: the {@code i}th character (§3.1). */
+    static Char get(Str s, Object index) {
+        long i = ((Int) index).v();
+        // usize values above i64::MAX are negative here; they are out of range anyway.
+        if (i < 0 || i >= s.len()) throw new Panic("index " + Long.toUnsignedString(i) + " out of range for a string of length " + s.len());
+        return new Char(s.at((int) i));
+    }
+
     static void set(ListVal l, Object index, Object value) {
         synchronized (l) {
             l.items.set(checkIndex(index, l.items.size()), value);
@@ -547,32 +555,9 @@ final class Natives {
     }
 
     private Object str(String name, Str s, Object[] a) {
-        String text = s.toString();
         return switch (name) {
             case "len" -> usize(s.len());
-            case "truthy" -> !s.isEmpty();
-            case "index" -> {
-                long i = ((Int) a[0]).v();
-                // usize values above i64::MAX are negative here; they are out of range anyway.
-                if (i < 0 || i >= s.len()) throw new Panic("index " + Long.toUnsignedString(i) + " out of range for a string of length " + s.len());
-                yield new Char(s.at((int) i));
-            }
-            case "chars" -> {
-                int[] i = {0};
-                yield generate(Prim.CHAR, () -> i[0] < s.len() ? new Char(s.at(i[0]++)) : rt.done());
-            }
-            case "bytes" -> {
-                var bytes = text.getBytes(StandardCharsets.UTF_8);
-                int[] i = {0};
-                yield generate(Prim.U8, () -> i[0] < bytes.length ? new Int(Prim.U8, bytes[i[0]++] & 0xff) : rt.done());
-            }
-            case "contains" -> text.contains(a[0].toString());
-            case "starts_with" -> text.startsWith(a[0].toString());
-            case "ends_with" -> text.endsWith(a[0].toString());
-            case "find" -> {
-                int i = text.indexOf(a[0].toString());
-                yield i < 0 ? null : usize(text.codePointCount(0, i));
-            }
+            case "index" -> get(s, a[0]);
             case "slice" -> {
                 long start = ((Int) a[0]).v(), end = ((Int) a[1]).v();
                 if (start < 0 || end < 0 || end > s.len() || start > end) {
@@ -581,32 +566,20 @@ final class Natives {
                 }
                 yield s.slice((int) start, (int) end);
             }
-            case "upper" -> Str.of(text.toUpperCase(Locale.ROOT));
-            case "lower" -> Str.of(text.toLowerCase(Locale.ROOT));
-            case "trim" -> Str.of(text.strip());
-            case "split" -> {
-                var parts = new ArrayList<Object>();
-                String sep = a[0].toString();
-                if (sep.isEmpty()) {
-                    text.codePoints().forEach(cp -> parts.add(Str.of(Character.toString(cp))));
-                } else {
-                    int from = 0;
-                    while (true) {
-                        int i = text.indexOf(sep, from);
-                        if (i < 0) break;
-                        parts.add(Str.of(text.substring(from, i)));
-                        from = i + sep.length();
-                    }
-                    parts.add(Str.of(text.substring(from)));
-                }
-                yield new ListVal(Prim.STR, parts);
+            case "chars" -> {
+                int[] i = {0};
+                yield generate(Prim.CHAR, () -> i[0] < s.len() ? new Char(s.at(i[0]++)) : rt.done());
             }
-            case "replace" -> Str.of(text.replace(a[0].toString(), a[1].toString()));
-            case "repeat" -> Str.of(text.repeat((int) ((Int) a[0]).v()));
-            case "to_str" -> s;
+            case "bytes" -> {
+                var bytes = s.toString().getBytes(StandardCharsets.UTF_8);
+                int[] i = {0};
+                yield generate(Prim.U8, () -> i[0] < bytes.length ? new Int(Prim.U8, bytes[i[0]++] & 0xff) : rt.done());
+            }
+            case "upper" -> Str.of(s.toString().toUpperCase(Locale.ROOT));
+            case "lower" -> Str.of(s.toString().toLowerCase(Locale.ROOT));
             case "eq" -> s.equals(a[0]);
             case "cmp" -> new Int(Prim.I32, Integer.signum(s.compareTo((Str) a[0])));
-            case "hash" -> new Int(Prim.U64, Ops.hashStr(text));
+            case "hash" -> new Int(Prim.U64, Ops.hashStr(s.toString()));
             case "add" -> s.concat((Str) a[0]);
             default -> unknown("str." + name);
         };

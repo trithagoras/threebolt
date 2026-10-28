@@ -1004,6 +1004,7 @@ public final class Interpreter implements Callbacks {
             case ListVal l -> Natives.get(l, index);
             case ArrayVal a -> Natives.get(a, index);
             case MapVal m -> Natives.get(this, m, index);
+            case Str str -> Natives.get(str, index);
             default -> callTrait(container, ts.index, "index", index);
         };
     }

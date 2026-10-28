@@ -1,21 +1,23 @@
 // Members of str. Lengths and offsets count characters (Unicode scalar values), not bytes.
+// `len`, `index` and `slice` take constant time (spec §3.1); the members with bodies are written
+// over them.
 
 /// The number of characters (not bytes).
 pub get fn len(self) -> usize;
 /// Whether the string is not empty.
-pub fn truthy(self) -> bool;
+pub fn truthy(self) -> bool => self.len > 0;
 /// The characters, in order.
 pub fn chars(self) -> Iterator<char>;
 /// The UTF-8 encoding.
 pub fn bytes(self) -> Iterator<u8>;
 /// Whether `s` occurs in this string.
-pub fn contains(self, s: str) -> bool;
+pub fn contains(self, s: str) -> bool => self.find(s) != null;
 /// Whether this string begins with `s`.
-pub fn starts_with(self, s: str) -> bool;
+pub fn starts_with(self, s: str) -> bool => s.len <= self.len && self.matches_at(s, 0);
 /// Whether this string ends with `s`.
-pub fn ends_with(self, s: str) -> bool;
+pub fn ends_with(self, s: str) -> bool => s.len <= self.len && self.matches_at(s, self.len - s.len);
 /// The character offset of the first occurrence of `s`, or `null` if there is none.
-pub fn find(self, s: str) -> usize | null;
+pub fn find(self, s: str) -> usize | null => self.find_from(s, 0);
 /// The characters from `start` up to `end` (`s[start..end]`); panics unless `start <= end <= len`.
 pub fn slice(self, start: usize, end: usize) -> str;
 /// `s[i]`: the `i`th character; panics if out of range.
@@ -25,14 +27,44 @@ pub fn upper(self) -> str;
 /// The string in lower case.
 pub fn lower(self) -> str;
 /// The string without leading and trailing whitespace.
-pub fn trim(self) -> str;
+pub fn trim(self) -> str {
+    let mut start: usize = 0;
+    let mut end = self.len;
+    while start < end && self[start].is_whitespace() { start += 1; }
+    while end > start && self[end - 1].is_whitespace() { end -= 1; }
+    return self[start..end];
+}
 /// The parts between occurrences of `sep` (`"a,b,".split(",")` is `["a", "b", ""]`); an empty
 /// `sep` splits into characters.
-pub fn split(self, sep: str) -> [str];
+pub fn split(self, sep: str) -> [str] {
+    let mut parts: [str] = [];
+    if sep.len == 0 {
+        for c in self.chars() { parts.push(c.to_str()); }
+        return parts;
+    }
+    let mut from: usize = 0;
+    while let i = self.find_from(sep, from) {
+        parts.push(self[from..i]);
+        from = i + sep.len;
+    }
+    parts.push(self[from..]);
+    return parts;
+}
 /// The string with every occurrence of `from` replaced by `to`.
-pub fn replace(self, from: str, to: str) -> str;
+/// An empty `from` matches before every character and at the end (`"ab".replace("", "-")` is `"-a-b-"`).
+pub fn replace(self, from: str, to: str) -> str {
+    if from.len > 0 { return self.split(from).join(to); }
+    let mut parts: [str] = [""];
+    for c in self.chars() { parts.push(c.to_str()); }
+    parts.push("");
+    return parts.join(to);
+}
 /// The string `n` times over.
-pub fn repeat(self, n: usize) -> str;
+pub fn repeat(self, n: usize) -> str {
+    let mut parts: [str] = [];
+    for _ in 0..n { parts.push(self); }
+    return parts.join("");
+}
 /// A NUL-terminated UTF-8 copy in C memory (§14.4), for passing to C.
 pub fn to_cstr(self) -> Ptr<std::c::char>;
 /// The NUL-terminated UTF-8 string at `p`.
@@ -45,7 +77,7 @@ pub fn from_chars(cs: Iterator<char>) -> str;
 pub fn from_utf8(bytes: [u8]) -> str;
 
 /// The string itself.
-pub fn to_str(self) -> str;
+pub fn to_str(self) -> str => self;
 /// Whether the strings have the same characters.
 pub fn eq(self, o: Self) -> bool;
 /// Compares character by character (by code point).
@@ -53,3 +85,29 @@ pub fn cmp(self, o: Self) -> i32;
 pub fn hash(self) -> u64;
 /// `a + b`: the concatenation.
 pub fn add(self, o: Self) -> Self;
+
+/// Whether `s` occurs at character offset `at`; needs `at + s.len <= self.len`.
+fn matches_at(self, s: str, at: usize) -> bool {
+    let n = s.len;
+    let mut i: usize = 0;
+    while i < n {
+        if self[at + i] != s[i] { return false; }
+        i += 1;
+    }
+    return true;
+}
+
+/// The offset of the first occurrence of `s` at or after `from`, or `null`.
+fn find_from(self, s: str, from: usize) -> usize | null {
+    let n = s.len;
+    if n > self.len { return null; }
+    if n == 0 { return from; }
+    let last = self.len - n;
+    let first = s[0];
+    let mut i = from;
+    while i <= last {
+        if self[i] == first && self.matches_at(s, i) { return i; }
+        i += 1;
+    }
+    return null;
+}

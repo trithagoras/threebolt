@@ -1,0 +1,4 @@
+// Private helpers of std/builtin are not visible outside it (§2.3).
+fn main() {
+    println("abc".matches_at("b", 1));
+}
