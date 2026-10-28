@@ -1,0 +1,60 @@
+// §7.7: comprehensions — clauses nest left to right, filters narrow, target typing.
+
+struct Leaf { let v: i32; }
+
+fn parse_all(xs: [str]) -> [i32] | Err {
+    // Not a lambda: `?` propagates from parse_all.
+    return [(i32::parse(s) ?? error(f"bad number '{s}'"))? for s in xs];
+}
+
+fn main() {
+    let xs = [1, 2, 3, 4, 5];
+    println([x + 1 for x in xs if x % 2 == 0]);
+
+    // Several clauses; later ones see earlier bindings, each filter applies at its level.
+    println([f"{x}{y}" for x in 0..3, y in 0..3 if x != y]);
+    let grid: [[i32]] = [[1, 2], [3], []];
+    println([cell * 10 for row in grid, cell in row]);
+    println([f"{x}{y}" for x in 0..4 if x % 2 == 1, y in x..4]);
+
+    // Filters narrow the later clauses and the element.
+    let items: [str | i32] = ["a", 1, "bcd"];
+    let lens = [s.len for s in items if s is str];
+    println(f"{lens} {lens.type()}");
+    let nodes: [Leaf | null] = [Leaf { v: 7 }, null, Leaf { v: 9 }];
+    println([v for n in nodes if n is Leaf { v }]);
+    println([n.v for n in nodes if n != null]);
+
+    // Destructuring patterns, iterators, strings.
+    let pairs = [(1, "a"), (2, "b")];
+    println([f"{n}{t}" for (n, t) in pairs]);
+    println([i * c.len for (i, c) in ["x", "yy"].enumerate()]);
+    println(str::from_chars([c.to_upper() for c in "hello" if c != 'l']));
+
+    // Target typing: sets and maps.
+    let rems: Set<i32> = [x % 3 for x in xs];
+    println(rems.len);
+    println(([x / 2 for x in xs] as Set<i32>).len);
+    let squares = [x: x * x for x in xs if x > 2];
+    println(f"{squares.len} {squares[4]}");
+    let firsts: Map<char, str> = [w[0]: w for w in ["apple", "avocado", "banana"]];
+    println(f"{firsts['a']} {firsts['b']}");
+
+    // Each iteration binds afresh (§6.4), so closures capture per-iteration values.
+    let fs = [() => i for i in 0..3];
+    println([f() for f in fs]);
+
+    // A conditional element; a parenthesized conditional iterable.
+    let words = ["a", "bb"];
+    println([w if w.len > 1 else "short" for w in words]);
+    println([x for x in (xs if words.len > 5 else [9])]);
+
+    // Shadowing an earlier clause's binding.
+    println([x for x in 1..4, x in 0..x]);
+
+    println(parse_all(["1", "2"]));
+    match parse_all(["1", "x"]) {
+        e is Err => println(e.message()),
+        _ => {}
+    }
+}

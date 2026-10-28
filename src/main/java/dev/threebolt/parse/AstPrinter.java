@@ -662,6 +662,24 @@ public final class AstPrinter {
                 });
                 out.append(']');
             }
+            case Expr.ListComp l -> {
+                out.append('[');
+                nested(() -> {
+                    expr(l.element(), 0, false);
+                    compClauses(l.clauses());
+                });
+                out.append(']');
+            }
+            case Expr.MapComp m -> {
+                out.append('[');
+                nested(() -> {
+                    expr(m.entry().key(), 0, false);
+                    out.append(": ");
+                    expr(m.entry().value(), 0, false);
+                    compClauses(m.clauses());
+                });
+                out.append(']');
+            }
             case Expr.Tuple t -> {
                 out.append('(');
                 list(t.elements(), x -> expr(x, 0, false));
@@ -1025,6 +1043,22 @@ public final class AstPrinter {
         for (int i = 0; i < items.size(); i++) {
             if (i > 0) out.append(separator);
             print.accept(items.get(i));
+        }
+    }
+
+    /** Iterables and filters stop at `??` precedence (§17.19). */
+    private void compClauses(List<Expr.CompClause> clauses) {
+        out.append(" for ");
+        for (int i = 0; i < clauses.size(); i++) {
+            var c = clauses.get(i);
+            if (i > 0) out.append(", ");
+            pattern(c.pattern());
+            out.append(" in ");
+            expr(c.iterable(), COALESCE, false);
+            if (c.filter() != null) {
+                out.append(" if ");
+                expr(c.filter(), COALESCE, false);
+            }
         }
     }
 

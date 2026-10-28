@@ -1113,6 +1113,23 @@ public final class Interpreter implements Callbacks {
         }
     }
 
+    /** Runs comprehension clauses {@code i}.. as nested loops (§7.7), calling {@code add} innermost. */
+    private void comprehend(List<Ir.CompClause> clauses, int i, Frame f, Runnable add) {
+        if (i == clauses.size()) {
+            add.run();
+            return;
+        }
+        var clause = clauses.get(i);
+        var it = eval(clause.iterator(), f);
+        while (true) {
+            checkAbort();
+            var v = next(it);
+            if (isDone(v)) break;
+            bind(clause.pattern(), v, f);
+            if (clause.filter() == null || (Boolean) eval(clause.filter(), f)) comprehend(clauses, i + 1, f, add);
+        }
+    }
+
     /** Runs one iteration; false on `break`. */
     private boolean loopBody(Ir.Block body, Frame f) {
         checkAbort();
@@ -1315,6 +1332,28 @@ public final class Interpreter implements Callbacks {
                     var k = eval(m.keys().get(i), f);
                     map.entries.put(new Key(k, this), eval(m.values().get(i), f));
                 }
+                yield map;
+            }
+            case Ir.ListComp lc -> {
+                var element = subst(lc.element(), f);
+                if (lc.kind() == Ir.CollectionKind.SET) {
+                    var set = new SetVal(element);
+                    comprehend(lc.clauses(), 0, f, () -> {
+                        var x = eval(lc.value(), f);
+                        set.entries.put(new Key(x, this), x);
+                    });
+                    yield set;
+                }
+                var items = new ArrayList<Object>();
+                comprehend(lc.clauses(), 0, f, () -> items.add(eval(lc.value(), f)));
+                yield new ListVal(element, items);
+            }
+            case Ir.MapComp mc -> {
+                var map = new MapVal(subst(mc.key(), f), subst(mc.value(), f));
+                comprehend(mc.clauses(), 0, f, () -> {
+                    var k = eval(mc.keyValue(), f);
+                    map.entries.put(new Key(k, this), eval(mc.valueValue(), f));
+                });
                 yield map;
             }
             case Ir.Repeat r -> {

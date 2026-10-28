@@ -548,33 +548,36 @@ public final class Checker {
 
     private Ir.Stmt forStmt(Stmt.For f) {
         forgetAssigned(f);
-        var iterable = exprs.expr(f.iterable(), null);
-        Type element = Type.ERROR;
-        Ir.Expr iterator = iterable.ir();
-        var t = iterable.type();
-        if (t != Type.ERROR) {
-            var asIterator = ts.implementsAs(t, ts.iterator);
-            var asIterable = asIterator == null ? ts.implementsAs(t, ts.iterable) : null;
-            if (asIterator != null) {
-                element = asIterator.args().getFirst();
-            } else if (asIterable != null) {
-                element = asIterable.args().getFirst();
-                var iter = ts.iterable.methods("iter").getFirst();
-                iterator = new Ir.Call(iter, Ir.CallKind.TRAIT, iterable.ir(), null, List.of(), new int[0],
-                        List.of(), null, null, f.iterable().span());
-            } else {
-                diag.error(Code.TYPE_MISMATCH, f.iterable().span(), "'" + t + "' is not iterable: it implements neither `Iterable` nor `Iterator`");
-            }
-        }
+        var iteration = iteration(f.iterable());
         var outer = ctx.scope;
         ctx.scope = new Scope(outer);
         var saved = ctx.narrowed;
-        var pat = patterns.irrefutable(f.pattern(), element);
+        var pat = patterns.irrefutable(f.pattern(), iteration.element());
         var body = loopBody(f.body());
         ctx.scope = outer;
         ctx.narrowed = saved;
         ctx.reachable = true;
-        return new Ir.For(pat, iterator, body);
+        return new Ir.For(pat, iteration.iterator(), body);
+    }
+
+    /** What a `for` (or comprehension clause) iterates: an iterator and its element type. */
+    record Iteration(Ir.Expr iterator, Type element) {}
+
+    /** §6.4: {@code e} must implement `Iterator<T>`, or `Iterable<T>` (then `iter()` is applied). */
+    Iteration iteration(Expr e) {
+        var iterable = exprs.expr(e, null);
+        var t = iterable.type();
+        if (t == Type.ERROR) return new Iteration(iterable.ir(), Type.ERROR);
+        var asIterator = ts.implementsAs(t, ts.iterator);
+        if (asIterator != null) return new Iteration(iterable.ir(), asIterator.args().getFirst());
+        var asIterable = ts.implementsAs(t, ts.iterable);
+        if (asIterable != null) {
+            var iter = ts.iterable.methods("iter").getFirst();
+            return new Iteration(new Ir.Call(iter, Ir.CallKind.TRAIT, iterable.ir(), null, List.of(), new int[0],
+                    List.of(), null, null, e.span()), asIterable.args().getFirst());
+        }
+        diag.error(Code.TYPE_MISMATCH, e.span(), "'" + t + "' is not iterable: it implements neither `Iterable` nor `Iterator`");
+        return new Iteration(iterable.ir(), Type.ERROR);
     }
 
     private Ir.Stmt jump(Span span, String what, Ir.Stmt ir) {

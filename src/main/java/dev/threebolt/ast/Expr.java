@@ -125,6 +125,15 @@ public sealed interface Expr extends Body {
 
     record MapEntry(Expr key, Expr value, Span span) implements Node {}
 
+    /** {@code [element for p in it if c, ...]}. */
+    record ListComp(Expr element, List<CompClause> clauses, Span span) implements Expr {}
+
+    /** {@code [k: v for p in it if c, ...]}. */
+    record MapComp(MapEntry entry, List<CompClause> clauses, Span span) implements Expr {}
+
+    /** {@code pattern in iterable if filter}; {@code filter} is null without {@code if}. */
+    record CompClause(Pattern pattern, Expr iterable, Expr filter, Span span) implements Node {}
+
     /** Two or more elements, or one for {@code (a,)}. */
     record Tuple(List<Expr> elements, Span span) implements Expr {}
 

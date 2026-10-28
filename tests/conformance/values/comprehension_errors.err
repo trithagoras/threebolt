@@ -1,0 +1,10 @@
+comprehension_errors.3b:5:26: error[E0200]: '5' is not iterable: it implements neither `Iterable` nor `Iterator`
+comprehension_errors.3b:6:24: error[E0200]: a comprehension cannot create a '[i32; 3]': its length is not known
+comprehension_errors.3b:7:29: error[E0200]: a comprehension cannot create a 'Map<i32, i32>'; write `[k: v for ...]`
+comprehension_errors.3b:8:21: error[E0200]: a map comprehension cannot create a '[i32]'
+comprehension_errors.3b:9:22: error[E0200]: expected 'str', found 'i32'
+comprehension_errors.3b:10:32: error[E0208]: a condition must be `bool` or implement `Truthy`, found 'i32'
+comprehension_errors.3b:11:35: error[E0200]: 'i32' is not iterable: it implements neither `Iterable` nor `Iterator`
+comprehension_errors.3b:13:13: error[E0107]: cannot find 'x' in this scope
+comprehension_errors.3b:14:13: error[E0216]: '[i32]' does not implement 'Hash' (required by 'T')
+comprehension_errors.3b:14:26: error[E0216]: '[i32]' does not implement 'Hash' (required for set elements and map keys)

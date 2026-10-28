@@ -410,18 +410,26 @@ initField
     | DOTDOT expr             # spreadField
     ;
 
-// [a, b]  [v; n]  [k: v]  [:]  [] (§7.7)
+// [a, b]  [v; n]  [k: v]  [:]  []  [e for p in it if c]  [k: v for p in it] (§7.7)
 collectionLiteral
     @init { pushStruct(true); }
     : LBRACKET RBRACKET                                              # emptyCollection
     | LBRACKET COLON RBRACKET                                        # emptyMap
     | LBRACKET expr SEMI expr RBRACKET                               # repeatCollection
+    | LBRACKET mapEntry compClauses RBRACKET                         # mapComprehension
+    | LBRACKET expr compClauses RBRACKET                             # listComprehension
     | LBRACKET mapEntry (COMMA mapEntry)* COMMA? RBRACKET            # mapCollection
     | LBRACKET expr (COMMA expr)* COMMA? RBRACKET                    # listCollection
     ;
     finally { popStruct(); }
 
 mapEntry : expr COLON expr ;
+
+// Iterables and filters stop below the conditional level (§17.19): `if` after an iterable starts
+// its filter, and a filter can't swallow the next clause.
+compClauses : FOR compClause (COMMA compClause)* ;
+
+compClause : pattern IN coalesceExpr (IF coalesceExpr)? ;
 
 matchExpr : MATCH noStructExpr matchBody ;
 

@@ -1,0 +1,15 @@
+// Compile errors for comprehensions (§7.7).
+
+fn main() {
+    let xs = [1, 2, 3];
+    let _a = [x for x in 5];                      // not iterable
+    let _b: [i32; 3] = [x for x in xs];           // length unknown
+    let _c: Map<i32, i32> = [x for x in xs];      // needs the entry form
+    let _d: [i32] = [x: x for x in xs];           // the entry form builds maps
+    let _e: [str] = [x for x in xs];              // element type
+    let _f = [x for x in xs if x];                // i32 is not a condition
+    let _g = [y for y in xs, z in y];             // i32 is not iterable
+    let _h = [x for x in xs];
+    println(x);                                   // bindings are scoped to the comprehension
+    let _k: Set<[i32]> = [[x] for x in xs];       // set elements need Hash
+}
