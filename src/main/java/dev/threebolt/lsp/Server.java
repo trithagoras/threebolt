@@ -15,6 +15,11 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import org.antlr.v4.runtime.CharStreams;
+import org.eclipse.lsp4j.CodeAction;
+import org.eclipse.lsp4j.CodeActionKind;
+import org.eclipse.lsp4j.CodeActionOptions;
+import org.eclipse.lsp4j.CodeActionParams;
+import org.eclipse.lsp4j.Command;
 import org.eclipse.lsp4j.CompletionItem;
 import org.eclipse.lsp4j.CompletionList;
 import org.eclipse.lsp4j.CompletionOptions;
@@ -82,6 +87,7 @@ public final class Server implements LanguageServer, LanguageClientAware, TextDo
     private LanguageClient client;
     private final Workspace workspace = new Workspace(this::publish, this::log);
     private final Completions completions = new Completions(workspace);
+    private final CodeActions codeActions = new CodeActions(workspace);
 
     Workspace workspace() {
         return workspace;
@@ -107,6 +113,7 @@ public final class Server implements LanguageServer, LanguageClientAware, TextDo
         caps.setDocumentHighlightProvider(true);
         caps.setDocumentSymbolProvider(true);
         caps.setRenameProvider(new RenameOptions(true));
+        caps.setCodeActionProvider(new CodeActionOptions(List.of(CodeActionKind.QuickFix)));
         caps.setCompletionProvider(new CompletionOptions(false, List.of(".", ":")));
         caps.setSignatureHelpProvider(new SignatureHelpOptions(List.of("(", ","), List.of(")")));
         return CompletableFuture.completedFuture(new InitializeResult(caps, new ServerInfo("threebolt", "0.1")));
@@ -278,6 +285,19 @@ public final class Server implements LanguageServer, LanguageClientAware, TextDo
             } catch (Exception e) {
                 log("threebolt: completion failed: " + e);
                 return Either.forLeft(List.of());
+            }
+        });
+    }
+
+    @Override
+    public CompletableFuture<List<Either<Command, CodeAction>>> codeAction(CodeActionParams params) {
+        return CompletableFuture.supplyAsync(() -> {
+            try {
+                return codeActions.actions(path(params.getTextDocument().getUri()), params).stream()
+                        .map(Either::<Command, CodeAction>forRight).toList();
+            } catch (Exception e) {
+                log("threebolt: code actions failed: " + e);
+                return List.of();
             }
         });
     }

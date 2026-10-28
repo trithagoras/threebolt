@@ -14,6 +14,8 @@ import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutionException;
+import org.eclipse.lsp4j.CodeActionContext;
+import org.eclipse.lsp4j.CodeActionParams;
 import org.eclipse.lsp4j.DefinitionParams;
 import org.eclipse.lsp4j.Diagnostic;
 import org.eclipse.lsp4j.DidChangeTextDocumentParams;
@@ -265,6 +267,49 @@ class ServerTest {
     }
 
     @Test
+    void quickFixesSilenceWarnings() throws Exception {
+        var text = """
+                use std::math::{sqrt, floor};
+                use std::random;
+
+                fn main() {
+                    let x = 1;
+                    let mut y = 2;
+                    println(y + sqrt(4.0) as i32);
+                    y == 3;
+                }
+                """;
+        var file = Files.writeString(dir.resolve("fixes.3b"), text);
+        open(file, text);
+        assertEquals(text.replace("let x", "let _x"), fix(file, text, "Rename to `_x`"));
+        assertEquals(text.replace("let mut y", "let y"), fix(file, text, "Remove `mut`"));
+        assertEquals(text.replace("use std::random;\n", ""), fix(file, text, "Remove unused import", "random"));
+        assertEquals(text.replace("{sqrt, floor}", "{sqrt}"), fix(file, text, "Remove unused import", "floor"));
+        assertEquals(text.replace("y == 3", "y = 3"), fix(file, text, "Change `==` to `=`"));
+    }
+
+    @Test
+    void quickFixesImportAndMakeMutable() throws Exception {
+        var text = """
+                // A header comment.
+                use shapes::Point;
+
+                fn main() {
+                    let n = 0;
+                    n = sqrt(2.0) as i32 + norm(Point::origin());
+                    println(n);
+                }
+                """;
+        var file = Files.writeString(dir.resolve("imports.3b"), text);
+        open(file, text);
+        assertEquals(text.replace("use shapes::Point;\n", "use shapes::Point;\nuse std::math::sqrt;\n"),
+                fix(file, text, "Import `std::math::sqrt`"));
+        assertEquals(text.replace("use shapes::Point;\n", "use shapes::Point;\nuse shapes::norm;\n"),
+                fix(file, text, "Import `shapes::norm`"));
+        assertEquals(text.replace("let n", "let mut n"), fix(file, text, "Declare it `let mut`"));
+    }
+
+    @Test
     void checksAFileThatNoMainUsesOnItsOwn() throws Exception {
         var text = "fn helper() -> i32 => 1 + true;\n";
         var file = Files.writeString(dir.resolve("loose.3b"), text);
@@ -304,6 +349,35 @@ class ServerTest {
     private void open(Path file, String text) throws Exception {
         server.didOpen(new DidOpenTextDocumentParams(new TextDocumentItem(uri(file), "threebolt", 1, text)));
         server.workspace().awaitIdle();
+    }
+
+    /**
+     * Applies the quick fix titled {@code title} (for a diagnostic whose text contains
+     * {@code near}, if given) to {@code text}.
+     */
+    private String fix(Path file, String text, String title, String... near) throws Exception {
+        var ds = diagnostics.get(uri(file)).stream()
+                .filter(d -> near.length == 0 || slice(text, d.getRange()).contains(near[0])).toList();
+        var params = new CodeActionParams(doc(file), ds.getFirst().getRange(), new CodeActionContext(ds));
+        var actions = server.codeAction(params).get().stream().map(e -> e.getRight())
+                .filter(a -> a.getTitle().equals(title)).toList();
+        assertEquals(1, actions.size(), title + " among " + server.codeAction(params).get().stream()
+                .map(e -> e.getRight().getTitle()).toList());
+        var edits = actions.getFirst().getEdit().getChanges().get(uri(file));
+        assertEquals(1, edits.size());
+        var e = edits.getFirst();
+        return text.substring(0, index(text, e.getRange().getStart())) + e.getNewText()
+                + text.substring(index(text, e.getRange().getEnd()));
+    }
+
+    private static String slice(String text, org.eclipse.lsp4j.Range r) {
+        return text.substring(index(text, r.getStart()), index(text, r.getEnd()));
+    }
+
+    private static int index(String text, Position p) {
+        int i = 0;
+        for (int line = 0; line < p.getLine(); line++) i = text.indexOf('\n', i) + 1;
+        return i + p.getCharacter();
     }
 
     private void change(Path file, String text) throws Exception {
