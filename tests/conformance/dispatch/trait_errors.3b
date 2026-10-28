@@ -44,3 +44,7 @@ fn main() {
     s.grow();                             // immutable binding
     _ = Both.side();                      // ambiguous between Left and Right
 }
+
+impl<T> Display for [T] {                 // std already implements it; blamed here, not in std
+    fn to_str(self) -> str => "mine";
+}

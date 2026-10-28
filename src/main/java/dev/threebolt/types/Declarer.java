@@ -545,11 +545,16 @@ public final class Declarer {
     }
 
     private void register(ImplInfo impl, Span span) {
+        impl.headSpan = span;
         var existing = ts.addImpl(impl);
         if (existing != null) {
-            diagnostics.add(new Diagnostic(Code.DUPLICATE_IMPL, span,
+            // Std is declared after user modules; a clash with std is always the user's impl's fault.
+            boolean blameExisting = impl.module.isStd() && !existing.module.isStd();
+            var dup = blameExisting ? existing : impl;
+            var prev = blameExisting ? impl : existing;
+            diagnostics.add(new Diagnostic(Code.DUPLICATE_IMPL, dup.headSpan,
                     "'" + impl.trait.decl().name() + "' is already implemented for '" + impl.targetDecl.name() + "'",
-                    List.of(new Diagnostic.Note(existing.span, "previous implementation"))));
+                    List.of(new Diagnostic.Note(prev.span, blameExisting ? "implemented by the standard library" : "previous implementation"))));
             return;
         }
         userImpls.add(impl);

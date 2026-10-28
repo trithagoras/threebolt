@@ -22,6 +22,8 @@ public final class ImplInfo {
     public final Map<String, List<FnInfo>> methods = new LinkedHashMap<>();
     public final Module module;
     public final Span span;
+    /** Where a duplicate of this impl is reported: the trait name in its header. */
+    public Span headSpan;
 
     public ImplInfo(Type.Nominal trait, TypeInfo targetDecl, Module module, Span span) {
         this.trait = trait;
