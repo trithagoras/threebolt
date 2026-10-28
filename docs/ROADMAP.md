@@ -51,8 +51,8 @@ other backend and for dogfooding the language.)
    from ~1.9 s to ~31 s (~16×): searching now runs character by character in the tree-walker. The other
    benchmarks are unchanged. Candidates if it matters before a backend: a faster evaluator (slot-indexed locals
    instead of `HashMap` environments, no exception per `return`), or keeping `find_from` as an intrinsic.
-5. **Literal defaulting to `f64`** (§5.2, decided): spec, checker and conformance cases, before `std::math` moves,
-   so its float functions can become generic over `Float` as they move.
+5. ~~**Literal defaulting to `f64`**~~ — done (`4057ed3`): spec §10.1, `Calls.literalDefault`, conformance
+   `numeric/literal_default*`. No slowdown.
 6. **Move the rest** module by module (prelude collections, `int`/`float`, `sync`), each with the conformance
    suite as the oracle. Behaviour must not change; `.err` goldens may only change if a diagnostic's wording or
    span legitimately moves.
