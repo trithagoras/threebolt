@@ -2,7 +2,7 @@
   "name": "threebolt",
   "displayName": "Threebolt",
   "description": "Threebolt (.3b) support: syntax highlighting, and a language server for errors and warnings, quick fixes, hover with doc comments, go to definition and implementation, references, rename, completion, signature help, inferred-type hints and semantic highlighting",
-  "version": "0.4.1",
+  "version": "0.4.2",
   "publisher": "threebolt",
   "private": true,
   "license": "UNLICENSED",

@@ -362,7 +362,13 @@ final class Calls {
     /** Method visibility (§2.3); trait members and their implementations are always public. */
     void checkMethodAccess(FnInfo f, Span span) {
         if (f.visibility() == Visibility.PUB) return;
-        if (!(f.owner instanceof TypeInfo owner) || owner.isTrait() || owner.kind() == TypeInfo.Kind.PRIMITIVE) return;
+        if (!(f.owner instanceof TypeInfo owner) || owner.isTrait()) return;
+        // A private member from std/builtin/*.3b is a std helper: other members of std/builtin see
+        // it, but not the owner's own code (a user enum's methods).
+        if (f.module != owner.module && c.ctx.module != f.module) {
+            c.exprs.checkAccess(owner, f.visibility(), "method '" + f.name() + "'", span, null);
+            return;
+        }
         for (ImplInfo impl : ts.implsOf(owner)) {
             for (var fns : impl.methods.values()) if (fns.contains(f)) return;
         }

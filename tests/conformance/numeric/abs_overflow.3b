@@ -1,0 +1,5 @@
+//! exit: 101
+fn main() {
+    let m: i32 = -2147483648;
+    println(m.abs());
+}

@@ -539,8 +539,12 @@ final class Exprs {
 
     /** Member visibility (§2.3); reports and returns false when not accessible. */
     boolean checkAccess(TypeInfo owner, Visibility vis, String what, Span span) {
+        return checkAccess(owner, vis, what, span, c.ctx.enclosing);
+    }
+
+    /** {@link #checkAccess} from code enclosed by {@code here}. */
+    boolean checkAccess(TypeInfo owner, Visibility vis, String what, Span span, TypeInfo here) {
         if (vis == Visibility.PUB) return true;
-        var here = c.ctx.enclosing;
         boolean ok = switch (vis) {
             case PRIVATE -> here == owner;
             case PROT -> here != null && here.isSubclassOf(owner);

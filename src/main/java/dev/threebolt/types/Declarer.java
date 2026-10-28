@@ -252,7 +252,10 @@ public final class Declarer {
         return (TypeInfo) names.infos.get(decls.getFirst().item());
     }
 
-    /** Attaches the intrinsic members of std/builtin/*.3b to the primitives. */
+    /**
+     * Attaches the members of std/builtin/*.3b to the primitives, enums and `@c struct`s. Bodyless
+     * members are intrinsics; members with bodies are Threebolt, checked once per owner type.
+     */
     private void primitiveMembers() {
         var lists = new HashMap<String, List<Member>>();
         for (String cat : List.of("int", "float", "str", "char", "bool", "enum", "flags", "cstruct")) {
@@ -277,7 +280,8 @@ public final class Declarer {
         for (Member m : members) {
             if (!(m instanceof Item.Fn f)) continue;
             var info = new FnInfo(f.name().text(), f, prelude, owner);
-            info.intrinsic = category + "." + info.name();
+            if (f.body() == null) info.intrinsic = category + "." + info.name();
+            else allFns.add(info);
             fnTypeParams(info);
             signature(info, scope.with(info.typeParams));
             owner.addMethod(info);
@@ -311,7 +315,8 @@ public final class Declarer {
     /** The scope of a function's signature and body. */
     TypeResolver.Scope scopeOf(FnInfo f) {
         TypeResolver.Scope base = switch (f.owner) {
-            case TypeInfo t when t.kind() == TypeInfo.Kind.PRIMITIVE || (t.isEnum() && f.intrinsic != null) ->
+            // Members from std/builtin/*.3b, declared in the prelude whatever their owner.
+            case TypeInfo t when t.kind() == TypeInfo.Kind.PRIMITIVE || f.module != t.module ->
                     new TypeResolver.Scope(prelude, Map.of(), ts.selfType(t));
             case TypeInfo t -> scopeOf(t);
             case ImplInfo i -> scopeOf(i);

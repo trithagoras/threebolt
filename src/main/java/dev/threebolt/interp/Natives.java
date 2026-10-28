@@ -391,9 +391,6 @@ final class Natives {
         var x = (Int) self;
         var k = x.kind();
         return switch (name) {
-            case "abs" -> k.isSigned() && x.v() < 0 ? Ops.neg(x) : x;
-            case "min" -> Ops.compare(x, (Int) a[0]) <= 0 ? x : a[0];
-            case "max" -> Ops.compare(x, (Int) a[0]) >= 0 ? x : a[0];
             case "pow" -> Ops.pow(x, ((Int) a[0]).v());
             case "to_str" -> x.toString();
             case "eq" -> x.equals(a[0]);
@@ -618,7 +615,6 @@ final class Natives {
     private Object character(String name, Char c, Object[] a) {
         int cp = c.cp();
         return switch (name) {
-            case "is_digit" -> cp >= '0' && cp <= '9';
             case "is_alphabetic" -> Character.isLetter(cp);
             case "is_alphanumeric" -> Character.isLetterOrDigit(cp);
             case "is_whitespace" -> Character.isWhitespace(cp);
@@ -640,10 +636,6 @@ final class Natives {
             case "eq" -> e.equals(a[0]);
             case "cmp" -> new Int(Prim.I32, Long.compare(e.v(), ((EnumVal) a[0]).v()));
             case "hash" -> new Int(Prim.U64, Ops.mix(e.v()));
-            case "has" -> {
-                long flag = ((EnumVal) a[0]).v();
-                yield (e.v() & flag) == flag;
-            }
             case "bitand" -> new EnumVal(e.decl(), e.v() & ((EnumVal) a[0]).v());
             case "bitor" -> new EnumVal(e.decl(), e.v() | ((EnumVal) a[0]).v());
             case "bitxor" -> new EnumVal(e.decl(), e.v() ^ ((EnumVal) a[0]).v());

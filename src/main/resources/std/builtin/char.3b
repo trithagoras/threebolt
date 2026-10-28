@@ -1,7 +1,7 @@
 // Members of char.
 
 /// Whether this is an ASCII digit, `'0'` to `'9'`.
-pub fn is_digit(self) -> bool;
+pub fn is_digit(self) -> bool => self >= '0' && self <= '9';
 /// Whether this is a letter (Unicode).
 pub fn is_alphabetic(self) -> bool;
 /// Whether this is a letter or a digit (Unicode).
