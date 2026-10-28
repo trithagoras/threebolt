@@ -1,0 +1,20 @@
+// Thread spawn and join, a contended Mutex, and an Atomic counter.
+use std::thread::Thread;
+use std::sync::Mutex;
+use std::sync::Atomic;
+
+fn main() {
+    let counter = Atomic::new(0);
+    let total = Mutex::new(0 as i64);
+    let mut workers: [Thread<()>] = [];
+    for t in 0..8 {
+        workers.push(Thread::spawn(() => {
+            for i in 0..100000 {
+                counter.fetch_add(1);
+                total.lock((mut g) => { g.value += (i + t) as i64; });
+            }
+        }));
+    }
+    for w in workers { w.join(); }
+    println(f"{counter.load()} {total.lock(g => g.value)}");
+}

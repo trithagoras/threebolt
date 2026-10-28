@@ -38,7 +38,7 @@ final class Io {
     // `sys_open` flags; keep in step with the `O_*` constants in std/io.3b.
     private static final long READ = 1, WRITE = 2, APPEND = 4, CREATE = 8, TRUNCATE = 16, CREATE_NEW = 32;
 
-    private final Interpreter in;
+    private final Callbacks rt;
     private final Map<Long, Handle> handles = new ConcurrentHashMap<>();
     private final AtomicLong nextHandle = new AtomicLong(3);
     private final ThreadLocal<String> lastError = ThreadLocal.withInitial(() -> "");
@@ -46,13 +46,13 @@ final class Io {
     /** An open file. Java cannot combine READ with APPEND, so appending seeks to the end itself. */
     private record Handle(FileChannel channel, boolean append) {}
 
-    Io(Interpreter in) {
-        this.in = in;
+    Io(Callbacks rt) {
+        this.rt = rt;
     }
 
     Object call(String name, Object[] a) {
-        if (name.equals("sys_error")) return lastError.get();
-        if (name.equals("sys_temp_dir")) return System.getProperty("java.io.tmpdir").replaceAll("(?<=.)[/\\\\]+$", "");
+        if (name.equals("sys_error")) return Values.Str.of(lastError.get());
+        if (name.equals("sys_temp_dir")) return Values.Str.of(System.getProperty("java.io.tmpdir").replaceAll("(?<=.)[/\\\\]+$", ""));
         long r = switch (name) {
             case "sys_open" -> open(str(a[0]), num(a[1]));
             case "sys_close" -> close(num(a[0]));
@@ -82,7 +82,7 @@ final class Io {
     }
 
     private static String str(Object v) {
-        return (String) v;
+        return ((Values.Str) v).toString();
     }
 
     private static long num(Object v) {
@@ -179,10 +179,10 @@ final class Io {
         byte[] bytes = new byte[(int) Math.min(Math.max(max, 0), 1 << 20)];
         long n;
         if (h == 0) {
-            in.out.flush();
+            rt.out().flush();
             n = attempt(null, () -> {
-                synchronized (in.stdin) {
-                    return Math.max(in.stdin.read(bytes), 0);
+                synchronized (rt.stdin()) {
+                    return Math.max(rt.stdin().read(bytes), 0);
                 }
             });
         } else {
@@ -208,8 +208,8 @@ final class Io {
 
     private long write(long h, byte[] bytes) {
         if (h == 1 || h == 2) {
-            if (h == 2) in.out.flush();
-            (h == 1 ? in.out : in.err).write(bytes, 0, bytes.length);
+            if (h == 2) rt.out().flush();
+            (h == 1 ? rt.out() : rt.err()).write(bytes, 0, bytes.length);
             return bytes.length;
         }
         var f = handle(h);
@@ -225,8 +225,8 @@ final class Io {
     }
 
     private long flush(long h) {
-        if (h == 1) in.out.flush();
-        else if (h == 2) in.err.flush();
+        if (h == 1) rt.out().flush();
+        else if (h == 2) rt.err().flush();
         else if (h != 0 && handle(h) == null) return badHandle();
         return 0;
     }
@@ -269,7 +269,7 @@ final class Io {
             try (var entries = Files.list(path(p))) {
                 var names = entries.map(e -> e.getFileName().toString()).sorted().toList();
                 synchronized (out) {
-                    out.items.addAll(names);
+                    for (String n : names) out.items.add(Values.Str.of(n));
                 }
                 return names.size();
             }

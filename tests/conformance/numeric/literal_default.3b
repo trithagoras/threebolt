@@ -1,0 +1,15 @@
+// §10.1: integer literals that alone determine a `T: Float` make it `f64`.
+fn half<T: Float>(x: T) -> T => x / T::from_f64(2.0);
+fn hyp<T: Float>(a: T, b: T) -> T => (a * a + b * b).sqrt();
+fn twice<T: Num>(x: T) -> T => x * 2;
+fn same<T>(x: T) -> T => x;
+
+fn main() {
+    println(f"{half(3)} {half(3).type()} {half(-1)}");
+    println(f"{hyp(3, 4)} {hyp(3, 4.5)}");
+    // An expected type wins over the default.
+    let f: f32 = half(3);
+    println(f"{f} {f.type()}");
+    // Bounds that `i32` meets keep `i32`.
+    println(f"{twice(3).type()} {same(1).type()}");
+}

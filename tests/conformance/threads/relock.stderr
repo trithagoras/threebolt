@@ -1,3 +1,5 @@
 panic: mutex is already locked by this thread
+    at Mutex::lock (std/sync.3b:12:9)
     at <lambda> (relock.3b:7:25)
+    at Mutex::lock (std/sync.3b:15:22)
     at main (relock.3b:7:13)

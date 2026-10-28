@@ -11,4 +11,4 @@ trait_errors.3b:39:15: error[E0202]: no static function 'make' in the bounds of 
 trait_errors.3b:44:5: error[E0301]: 'grow' takes `mut self`, but cannot assign to immutable binding 's'; declare it `let mut`
 trait_errors.3b:45:9: error[E0205]: call to 'side' is ambiguous between 'Left::side()' and 'Right::side()'
 trait_errors.3b:48:9: error[E0404]: 'Display' is already implemented for 'List'
-std/prelude.3b:458:1: note: implemented by the standard library
+std/prelude.3b:473:1: note: implemented by the standard library

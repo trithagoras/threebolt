@@ -1,0 +1,12 @@
+// §16 str members written in Threebolt over len, s[i] and slicing; edge cases of the Java versions they replace.
+fn main() {
+    let s = "  héllo😀 wörld  ";
+    println(f"[{s.trim()}] [{"   ".trim()}] [{"\tx\n".trim()}]");
+    println(f"{s.contains("😀")} {s.contains("")} {"".contains("a")}");
+    println(f"{s.find("ö") ?? 99} {"".find("") ?? 99} {"abc".find("") ?? 99} {"ab".find("abc") ?? 99} {"aab".find("ab") ?? 99}");
+    println(f"{s.starts_with("  h")} {s.starts_with("")} {"a".starts_with("ab")} {s.ends_with("d  ")} {"a".ends_with("ba")}");
+    println(f"{"a,b,,c,".split(",")} {"a😀b".split("")} {"".split(",")} {"abab".split("ab")} {"x".split("xyz")}");
+    println(f"{"abc".replace("", "-")} {"".replace("", "-")} {"aaa".replace("aa", "b")} {"a😀a".replace("a", "😀")}");
+    println(f"{"ab".repeat(3)} [{"x".repeat(0)}] [{"".repeat(5)}] {"😀".repeat(2).len}");
+    println(f"{"x".to_str()} {"" || ""} {"set" && "x"} {"set" && ""}");
+}

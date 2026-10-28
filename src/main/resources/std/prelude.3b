@@ -7,6 +7,8 @@
 /// Aborts the program: prints `msg` and a stack trace to stderr and exits with code 101 (§13.1).
 /// Pending `defer`s do not run.
 pub fn panic(msg: str) -> !;
+/// `a == b` (§7.3) for any `T`: for std code generic over an unbounded `T` whose callers need `T: Eq`.
+fn equal<T>(a: T, b: T) -> bool;
 /// An error carrying just `msg` (a `MsgErr`), for `return error("...")` (§12).
 pub fn error(msg: str) -> Err => MsgErr::new(msg);
 /// The length of `x`: characters of a `str`, elements of a collection.
@@ -296,7 +298,7 @@ pub class List<T> : Len, Truthy, Iterable<T>, Index<usize, T>, IndexMut<usize, T
     /// The number of elements.
     pub get fn len(self) -> usize;
     /// Whether the list is not empty.
-    pub fn truthy(self) -> bool;
+    pub fn truthy(self) -> bool => self.len > 0;
     /// The elements in order.
     pub fn iter(self) -> Iterator<T>;
     /// The element at `i` (`xs[i]`); panics if `i >= len`.
@@ -314,15 +316,28 @@ pub class List<T> : Len, Truthy, Iterable<T>, Index<usize, T>, IndexMut<usize, T
     /// Removes every element.
     pub fn clear(mut self);
     /// Reverses the elements in place.
-    pub fn reverse(mut self);
+    pub fn reverse(mut self) {
+        let n = self.len;
+        let mut i: usize = 0;
+        while i < n / 2 {
+            let t = self[i];
+            self[i] = self[n - 1 - i];
+            self[n - 1 - i] = t;
+            i += 1;
+        }
+    }
     /// Whether some element equals `v`.
-    pub fn contains(self, v: T) -> bool;
-    /// The elements' `to_str()` with `sep` between them; `T` must implement `Display`.
+    pub fn contains(self, v: T) -> bool {
+        for x in self { if equal(x, v) { return true; } }
+        return false;
+    }
+    /// The elements' `to_str()` with `sep` between them; `T` must implement `Display`. In linear
+    /// time, so it is the way to build a string from parts.
     pub fn join(self, sep: str) -> str;
     /// The first element, or `null` if the list is empty.
-    pub get fn first(self) -> T | null;
+    pub get fn first(self) -> T | null => self[0] if self.len > 0 else null;
     /// The last element, or `null` if the list is empty.
-    pub get fn last(self) -> T | null;
+    pub get fn last(self) -> T | null => self[self.len - 1] if self.len > 0 else null;
     /// Each element with its index: `(i, element)`.
     pub fn enumerate(self) -> Iterator<(usize, T)> => self.iter().enumerate();
     /// Pins the elements for the duration of `f` and passes a pointer to the first (§14.5).

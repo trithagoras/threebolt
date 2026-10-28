@@ -72,7 +72,7 @@ Built in one go rather than slice by slice, because one checker and one interpre
 - `ir/`: `Ir` (typed, resolved program: places, `Call` with `CallKind` DIRECT/VIRTUAL/TRAIT/TRAIT_STATIC, `Coerce` for widening/boxing, `Unbox`, `Hole` for compound assignment), `Local`.
 - `interp/`: `Interpreter` (tree walker; `store()` implements in-place `mut self` and read-modify-write through indexers; reified generics via per-frame type env + owner bindings from the receiver's runtime type; defers per block; panics carry a trace), `Values` (runtime values; structs/tuples/arrays copied on place reads), `Ops` (checked arithmetic, casts, float display, parsing), `Natives` (intrinsics), `Ffi` (minimal FFM: extern calls with scalar/`Ptr` args incl. variadics and `@link`, `Ptr` basics, `c::alloc/free`, `to_cstr/from_cstr`), `Panic`.
 - `Driver` (check + run on a 1 GiB-stack thread), CLI `threebolt run <file> [args]`; `check` now type-checks.
-- std: `prelude.3b` (Iterator adapters `map filter enumerate of_type for_each fold any all count to_list first` written **in Threebolt** with private `MapIter`/`FilterIter`/`EnumerateIter`/`OfTypeIter`; `NativeIter` for interpreter-backed iterators; `List`, `Range` (struct with start/end/inclusive), `Type`, `Ptr`, `Err` trait with `MsgErr`), `collections.3b` (Map/Set), `process.3b` (`exit`). Bodyless std functions are intrinsics keyed `Owner.name`. `std/builtin/{int,float,str,char,bool,enum,flags}.3b` are member lists (not modules) attached to primitives/enums by the declarer; `AstRoundTripTest.builtinMembers` round-trips them.
+- std: `prelude.3b` (Iterator adapters `map filter enumerate of_type for_each fold any all count to_list first` written **in Threebolt** with private `MapIter`/`FilterIter`/`EnumerateIter`/`OfTypeIter`; `NativeIter` for interpreter-backed iterators; `List`, `Range` (struct with start/end/inclusive), `Type`, `Ptr`, `Err` trait with `MsgErr`), `collections.3b` (Map/Set), `process.3b` (`exit`). Bodyless std functions are intrinsics keyed `Owner.name`. `std/builtin/{int,float,str,char,bool,enum,flags}.3b` are member lists (not modules) attached to primitives/enums by the declarer; bodyless members are intrinsics, members with bodies are checked once per owner type in the prelude's scope, and a private member is visible only to the other members of std/builtin (`Calls.checkMethodAccess`); `AstRoundTripTest.builtinMembers` round-trips them.
 - Loader: discovers modules named by fully-qualified paths (§2.2) syntactically (paths whose first segment is not an item/import/prelude/primitive/type-param name).
 - Conformance runner: cases without errors are run; stdout/stderr compared with `.out`/`.stderr`; `//! exit: N` and `//! args: a b` directives. Documented in `tests/conformance/README.md`.
 
@@ -96,7 +96,7 @@ Built in one go rather than slice by slice, because one checker and one interpre
 **Decisions made while implementing:** confirmed by the user on 2026-10-27 and written into the spec (see its changelog entry "checker and interpreter (0.1 Phases 4–7)"). Implementation-only choices, not in the spec:
 - Error recovery: a module with syntax errors is skipped by the checker; the checker runs even after loader errors.
 - Diagnostic codes: E00xx syntax, E01xx modules/names (E0107–E0110 added: names, `main`), E02xx types/expressions, E03xx mutability, E04xx declarations; see `diag/Code.java`. Never renumber them.
-- std intrinsics: bodyless std functions are keyed `Owner.name`; `std/builtin/*.3b` member lists attach to primitives/enums.
+- std intrinsics: bodyless std functions are keyed `Owner.name`; `std/builtin/*.3b` member lists attach to primitives/enums. Intrinsics reach the evaluator only through `interp.Callbacks` (`BoundaryTest`).
 
 ### Phase 8 — C interop & threads ✅ — status (branch `phase-8-ffi-threads`)
 `extern "C"`, `@link`, `@c struct`, `Ptr<T>`, `c::*` aliases, `with_ptr` pinning, `unsafe` checking, callbacks — all via FFM (`Linker.nativeLinker()`, `MemorySegment`, `Arena`, upcall stubs). Then `Thread`, `Mutex`, `Atomic` on Java threads (no GIL needed — JVM is thread-safe; interpreter state must be).
@@ -174,6 +174,64 @@ Checker warnings, `W0xxx` codes (`diag.Code.isWarning`): they never count as err
 - **Workspace symbols** (declarations outside std, letters of the query in order) and **go to implementation** (a trait's impls, a class's subclasses, a method's overrides and implementations; `TypeSystem.implsOfTrait`).
 - Member completion sorts methods that operators call (`add`, `eq`, `cmp`, `truthy`, ...) after the rest when the receiver implements their trait.
 - Not done: a warning for a `///` that documents nothing; formatting.
+
+## Runtime boundary (roadmap task 1)
+
+Std is Threebolt except for its **intrinsics**: bodyless functions in `src/main/resources/std` (keyed `Owner.name`,
+dispatched by `interp.Natives`). This section is what a new backend must provide. Signatures are in the std sources;
+listed here is what they do not say. Every intrinsic is value-in/value-out: it receives evaluated arguments (and
+`self`), returns a value, and may panic (`Panic`, process exit 101 with the message shown). Intrinsics reach the
+evaluator only through `interp.Callbacks` (`BoundaryTest` checks this):
+
+| `Callbacks` member | Contract |
+|---|---|
+| `call(f, args…)` | calls a function value: closure, named function or C function pointer |
+| `callTrait(recv, trait, name, args…)` | calls trait member `name` on `recv`'s runtime type (§8.3), including the automatic `Eq`/`Hash`/`Display` of structs, tuples and `null` |
+| `equal`, `hash`, `display`, `debug`, `next`, `done()`, `typeOf` | `==` (§7.3), `Hash`, `Display` text, display-or-type-name for messages, one `Iterator::next` step, the `Done` sentinel, the runtime type (§15) |
+| `out()`, `err()`, `stdin()` | the process streams (stdin read under its own lock) |
+| `checkAbort`, `isTerminating`, `startThread`, `panicked`, `terminate` | process control (§13.1): stop this thread if the process is ending; start a Threebolt thread; report a panic that cannot unwind (C upcalls); end the process |
+| `Abort`, `ExitSignal` | the unwinding signals: process ending elsewhere (no defers run), `process::exit` |
+
+Values (`interp.Values`): integers carry their kind (`u64`/`usize` hold raw two's-complement bits), `f32` values are
+kept rounded to `f32`, `str` is `Str` (UTF-16 + character count + offsets outside the BMP: O(1) `len`/`s[i]`, §3.1),
+lists/maps/sets are mutable reference objects that lock themselves per operation (§13.4), arrays/tuples/structs are
+copied on read (§5.3). Reading an element out of a collection yields a copy (§16).
+
+### Primitive operations (every backend emits these directly)
+
+| Owner | Intrinsics | Contract |
+|---|---|---|
+| integer types (`builtin/int.3b`) | `add sub mul div rem neg`, `shl shr`, `bitand bitor bitxor not`, `eq cmp hash` | §13.2: overflow panics `integer overflow (T)`; `div`/`rem` by zero panic `division by zero` / `remainder by zero` (`rem` takes the dividend's sign); a shift amount outside `0..bits` panics `shift amount n out of range for T`. `cmp` is `-1/0/1`; `hash` mixes the value (64-bit finalizer) |
+| | `wrapping_* checked_* saturating_*` (`add sub mul neg shl shr`) | modulo 2^bits / `null` on overflow / clamped to `MIN`/`MAX`. Shifts: `wrapping_` masks the amount; `checked_` is `null` outside `0..bits`; `saturating_` gives `0` (or `-1` for a negative `shr`) |
+| | `from_i64(n)`, `bits()`, `parse(s)`, `to_str` | `from_i64` panics `n does not fit in 'T'`; `parse` accepts `[+-]?[0-9]+` (ASCII digits, no spaces or `_`) whose value fits, else `null`; `to_str` is decimal (unsigned for `u64`/`usize`) |
+| float types (`builtin/float.3b`) | `add sub mul div rem neg eq cmp`, `abs min max pow sqrt floor ceil trunc round sin cos tan exp ln log10 is_nan is_infinite`, `from_i64 from_f64 parse to_str` | IEEE 754 in `f64`, rounded to `f32` for `f32`. `round` is half away from zero; `min`/`max` follow Java's `Math.min/max` (NaN wins, `-0 < 0`); `cmp` orders NaN above everything (Java `Double.compare`). `parse` accepts decimal (`1`, `.5`, `-1e3`) and exactly `inf`, `+inf`, `infinity`, `-inf`, `-infinity`, `NaN`. `to_str` per §16's float format |
+| `bool`, `char`, enums | `to_str eq cmp hash`; `flags`: `bitand bitor bitxor not` | enum `to_str` is the member name, `A \| B` for flag combinations, the integer for undeclared bits; `not` keeps to the backing type's bits |
+| `char` | `is_alphabetic is_alphanumeric is_whitespace is_uppercase is_lowercase to_upper to_lower` | Unicode properties and simple case mapping (Java `Character`) |
+| `str` (`builtin/str.3b`) | `len`, `index` (`s[i]`), `slice` (`s[a..b]`), `add`, `eq`, `cmp`, `hash` | counts characters (§3.1), O(1) `len`/`index`; out-of-range `index`/`slice` panic `index i out of range for a string of length n` / `slice a..b out of range for a string of length n`; `cmp` is code-point order; `hash` is FNV-1a over UTF-8 |
+| | `chars bytes upper lower from_chars from_utf8` | `bytes` is UTF-8; `upper`/`lower` are full Unicode case mapping (may change the length: `"ß".upper()` is `"SS"`); `from_utf8` replaces invalid sequences with U+FFFD |
+| `Range` | `iter`, `contains` | over integers (any kind; never overflows, the end may be the type's `MAX`) and `char`s (surrogates skipped); `contains` by `<`/`<=` on the bounds |
+| `Type` | `name to_str eq hash is_subtype_of` | reflection (§15) |
+| prelude | `panic(msg)` | panics with `msg` |
+
+### Host capabilities (thin, platform-provided)
+
+| Owner | Intrinsics | Contract |
+|---|---|---|
+| `[T]` (`List`, also `[T; N]`) | `len index set push pop insert remove clear iter` | the representation core; each call is atomic (§13.4: only these primitive operations are). `index`/`set`/`remove` panic `index out of range: i >= n`, `insert` panics `insert index out of range: i > n`; `pop` is `null` when empty; `iter` visits elements pushed during the loop |
+| | `join(sep)` | linear-time concatenation of the elements' `to_str()`, the way to build a string; reads a snapshot, then calls `to_str` outside the lock. `T: Display` is checked at the call (`Calls.stdCallRules`) |
+| prelude (private) | `equal(a, b)` | §7.3 `==` on any `T`, for std members generic over an unbounded `T` whose callers need `T: Eq` (`[T].contains`) |
+| `Map`, `Set` (`collections.3b`) | `len iter index set get contains_key remove clear keys values` / `len iter insert contains remove clear` | insertion-ordered hash tables keyed by `Eq`/`Hash` (`Callbacks.equal`/`hash`); `index` panics `key not found in map: <key>`; iterators walk a snapshot |
+| `std::thread` | `Thread::spawn`, `join`, `sleep(ms)` | OS threads (§13.4); `join` returns a copy of the result and may be repeated; a panic on any thread ends the process |
+| `std::sync` | `Atomic::new load store swap compare_exchange fetch_*`; private `RawLock::new acquire release`, `guard` | sequentially consistent, wrapping; `Atomic<bool>` arithmetic panics. `acquire` waits interruptibly and panics `mutex is already locked by this thread` on a relock; `guard(v)` builds a `Guard { value: v }` (`Mutex` itself is Threebolt) |
+| `std::io` (private) | `sys_open close read write write_str flush seek error kind size remove rename mkdir list_dir temp_dir` | POSIX-shaped: numbered handles (0–2 are the standard streams), results ≥ 0 or a negated `E_*` code with a per-thread description for `sys_error`; `sys_kind` is 0 none, 1 file, 2 directory, 3 other. Constants are shared with `io.3b` (`Io.java`) |
+| `std::process` | `exit(code)` | flushes stdout and ends the process; no defers run (§2.4) |
+| `std::random` (private) | `entropy()` | 64 bits from the OS's secure generator |
+| `std::math` | `copysign cbrt expm1 log2 log1p asin acos atan atan2 hypot sinh cosh tanh asinh acosh atanh` | libm on `f64`; `log2` is exact for powers of two |
+| C interop (§14) | `c::alloc free`, `Ptr::null from_addr is_null addr read write offset cast`, `str::to_cstr from_cstr`, `with_ptr` (lists, arrays, `@c struct`s), `extern` calls and upcalls | `malloc`/`free`; `read`/`write` through a null pointer panic `null pointer dereference`; `offset` scales by the target's size; `to_cstr` is NUL-terminated UTF-8 in `malloc`ed memory; `with_ptr` copies into native memory for the call and back after it (roadmap §5.1). A panic in an upcall ends the process; C gets a zero result |
+
+Moved to Threebolt in task 1 (no longer intrinsics): `str` `trim split replace repeat starts_with ends_with find
+contains truthy to_str`; integer `abs min max pow zero one min_value max_value`; float `zero one nan infinity epsilon`;
+`char::is_digit`; `flags::has`; collection `truthy`; `[T]` `contains reverse first last`; `Mutex`; `math::isqrt factorial comb perm`.
 
 ## Conventions for the implementing agent
 - The spec is the source of truth; if code and spec disagree, fix one deliberately and record it.

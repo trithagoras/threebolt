@@ -507,7 +507,7 @@ final class Patterns {
 
     private static boolean sameLiteral(Object value, Type.Lit lit) {
         return switch (value) {
-            case String s -> s.equals(lit.value());
+            case Values.Str s -> s.toString().equals(lit.value());
             case Values.Int i -> lit.value() instanceof BigInteger b && i.big().equals(b);
             case Boolean b -> b.equals(lit.value());
             case Values.Char ch -> lit.value() instanceof Integer cp && ch.cp() == cp;

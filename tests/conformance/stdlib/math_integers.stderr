@@ -1,0 +1,3 @@
+panic: math::comb: the result does not fit in a u64
+    at comb (std/math.3b:172:27)
+    at main (math_integers.3b:9:13)

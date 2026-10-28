@@ -94,7 +94,7 @@ use std::math::*;               // every pub item of a module
 `i8 i16 i32 i64 isize u8 u16 u32 u64 usize f32 f64 bool char str`
 
 - Primitive names are lowercase and predeclared, not keywords; static members use paths as for any type (`i32::parse(s)`, `u64::MAX`, `str::from_cstr(p)`). Declaring a type with a primitive's name is an error (outside the standard library: `c::char`, §14.2, is an alias in `std::c`). Nominal and stdlib types are PascalCase (`Type`, `MsgErr`, `List`, `Ptr`, …).
-- `str`: immutable Unicode text, reference semantics but immutable (identity unobservable). A `str` is a sequence of characters (Unicode scalar values, i.e. `char`s), and every length, index and offset counts characters, as in Python: `.len`, `s[i]` (a `char`), `s[a..b]` (a `str`, §7.6), `.find`, `.slice`. `.bytes()` gives its UTF-8 encoding. Operations by index may take time linear in the string's length.
+- `str`: immutable Unicode text, reference semantics but immutable (identity unobservable). A `str` is a sequence of characters (Unicode scalar values, i.e. `char`s), and every length, index and offset counts characters, as in Python: `.len`, `s[i]` (a `char`), `s[a..b]` (a `str`, §7.6), `.find`, `.slice`. `.bytes()` gives its UTF-8 encoding. `.len` and `s[i]` take constant time, and `s[a..b]` (like `.slice`) time proportional to the slice's length, whatever the string holds. Concatenation copies, so building a string by repeated `+` in a loop is quadratic; collect the parts and use `[str].join` or `str::from_chars`.
 - `char`: Unicode scalar value (32-bit).
 - `()`: unit, the empty tuple; sole value `()`.
 - `null`: the null type; sole value `null`.
@@ -567,6 +567,7 @@ Prelude traits for code generic over numbers, after Haskell's numeric classes:
 
 - Every integer and float type implements `Num`; the signed integers and floats `Signed`; the integers `Integer`; `f32`/`f64` `Float`. User types may implement them like any trait.
 - **Literals:** an unsuffixed integer literal whose expected type is a type parameter `T` with `T: Num` is `T::from_i64(n)` (the literal must fit in `i64`, else error); a float literal whose expected type is a `T: Float` is `T::from_f64(x)`. So `fn double<T: Num>(x: T) -> T => x * 2;` works for every number type, and a literal that does not fit the type argument panics at runtime (`double` cannot overflow-check `2` against `u8` statically).
+- **Defaulting to `f64`:** when every argument that determines a type parameter `T` is an unsuffixed integer literal passed for a parameter of type `T` (so inference would give `i32`), and `i32` does not meet `T`'s bounds but `f64` does, `T` is `f64` and the literals are `f64` values: with `fn sqrt<T: Float>(x: T) -> T`, `sqrt(2)` is `sqrt<f64>(2.0)`. An expected type takes precedence (§10: `let r: f32 = sqrt(2);` is `sqrt<f32>`). A variable of type `i32` is never converted: `sqrt(n)` with `n: i32` is still an error.
 - **Conversions:** `x as U` where `x` or `U` involves a type parameter converts numerically (§7.9) when, after substitution, the value is a primitive number and `U` a primitive numeric type; otherwise it is the ordinary checked cast.
 - Unions never implement these traits (§3.4).
 
@@ -624,7 +625,7 @@ Prelude traits for code generic over numbers, after Haskell's numeric classes:
 - When `main` returns (or the process otherwise ends, §2.4, §13.1), threads still running are stopped; their `defer`s do not run.
 - `std::sync::Mutex<T>`: `Mutex::new(v)`, `m.lock<R>(f: fn(Guard<T>) -> R) -> R` where `Guard<T>` is a class with `pub let value: T` valid only during `f`. When `f` returns, the guard's `value` is stored back into the mutex (so `(mut g) => g.value += 1` works for value types). Locking a mutex the current thread already holds panics.
 - `std::sync::Atomic<T>` for integer and `bool` `T` (checked at `Atomic::new`): `load`, `store`, `swap`, `compare_exchange(expected, desired)`, `fetch_add`, `fetch_sub` (integers only), `fetch_and`, `fetch_or`, `fetch_xor`. All are sequentially consistent; `swap`, `compare_exchange` and the `fetch_*` operations return the previous value (`compare_exchange` succeeded iff that equals `expected`); arithmetic wraps.
-- Data races do not corrupt memory or produce invalid references; a racy read returns some previously written value, but value types wider than a machine word may tear. Each operation on a `[T]`, `Map` or `Set` is atomic with respect to the others. Implementations may use a global interpreter lock.
+- Data races do not corrupt memory or produce invalid references; a racy read returns some previously written value, but value types wider than a machine word may tear. The primitive operations on a `[T]`, `Map` or `Set` are each atomic with respect to the others: length, indexing and index assignment, `push`, `pop`, `insert`, `remove`, `clear`, one step of iteration, and `Map`/`Set` insertion, lookup and removal. Members built from several of them (`contains`, `reverse`, `first`, `last`, `join`, …) are not atomic as a whole; a thread that reads a collection while another writes it may observe intermediate states, so share a collection between threads under a `Mutex` (or don't). Implementations may use a global interpreter lock.
 
 ### 13.5 Initialization order
 - Module-level and type-level statics: lazy on first access (§4.2). No module initializers otherwise; `main` is the only entry.
@@ -980,3 +981,12 @@ Semantics the spec left open, decided while implementing:
 
 ### 2026-10-28 — orphan impls
 - §4.10 Non-normative note: a future package system will add an orphan rule for library packages only; 1.0 keeps impls unrestricted. A duplicate of a standard-library impl is reported at the program's impl, with the std impl as the note (was: reported in std, since std is declared last).
+
+### 2026-10-28 — constant-time `str` indexing
+- §3.1 `.len` and `s[i]` take constant time, and slicing time proportional to the slice (was: operations by index may take time linear in the string's length). Semantics are unchanged: lengths, indices and offsets still count characters. Implementations keep a character count per string and, for strings with characters outside the BMP, an offset table (as Python's PEP 393 does with its flexible layout).
+
+### 2026-10-28 — literals default to `f64` for `Float` parameters
+- §10.1 A type parameter determined only by unsuffixed integer literals is `f64`, not `i32`, when its bounds exclude `i32` and admit `f64` (`sqrt(2)` for `sqrt<T: Float>`), so float functions can be generic over `Float` without breaking calls with integer literals. Narrow by design: variables are never converted, and other bounds (`T: Num`) still infer `i32`.
+
+### 2026-10-28 — collection atomicity narrowed
+- §13.4 Only the primitive collection operations are atomic (length, indexing, index assignment, `push`, `pop`, `insert`, `remove`, `clear`, one iteration step, `Map`/`Set` insertion, lookup and removal); members composed of several (`contains`, `reverse`, `first`, `last`, `join`, …) are not atomic as a whole (was: every operation). Races still never corrupt a collection. As in C#, Java and Go, concurrent reading and writing of one collection should go through a `Mutex`; dedicated concurrent collections may come with the standard library.

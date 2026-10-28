@@ -5,15 +5,15 @@ pub fn from_i64(n: i64) -> Self;
 /// The nearest value to `x`.
 pub fn from_f64(x: f64) -> Self;
 /// `0.0`.
-pub fn zero() -> Self;
+pub fn zero() -> Self => 0.0;
 /// `1.0`.
-pub fn one() -> Self;
+pub fn one() -> Self => 1.0;
 /// Not a number (`NAN`).
-pub fn nan() -> Self;
+pub fn nan() -> Self => Self::NAN;
 /// Positive infinity (`INFINITY`).
-pub fn infinity() -> Self;
+pub fn infinity() -> Self => Self::INFINITY;
 /// The difference between `1.0` and the next larger value (`EPSILON`).
-pub fn epsilon() -> Self;
+pub fn epsilon() -> Self => Self::EPSILON;
 
 /// The absolute value.
 pub fn abs(self) -> Self;

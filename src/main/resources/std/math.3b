@@ -147,12 +147,47 @@ pub fn lcm<T: Integer>(a: T, b: T) -> T {
 }
 
 /// The integer square root: the largest `r` with `r * r <= n`.
-pub fn isqrt(n: u64) -> u64;
+pub fn isqrt(n: u64) -> u64 {
+    if n < 2 { return n; }
+    // The float estimate is within one of the answer; correct it without overflowing `x * x`.
+    let mut x = (n as f64).sqrt() as u64;
+    while x > n / x { x -= 1; }
+    while x + 1 <= n / (x + 1) { x += 1; }
+    return x;
+}
 /// `n!`; panics if the result does not fit in a `u64` (`n > 20`).
-pub fn factorial(n: u64) -> u64;
+pub fn factorial(n: u64) -> u64 => falling("factorial", n, n);
 /// The number of ways to choose `k` of `n` items without order; `0` if `k > n`. Panics if the
 /// result does not fit in a `u64`.
-pub fn comb(n: u64, k: u64) -> u64;
+pub fn comb(n: u64, k: u64) -> u64 {
+    if k > n { return 0; }
+    let m = n - k if k > n - k else k;
+    let mut r: u64 = 1;
+    let mut i: u64 = 0;
+    while i < m {
+        // r is comb(n, i), and comb(n, i + 1) = r * (n - i) / (i + 1). Dividing by the common factor
+        // first keeps every step exact, so only a result that does not fit can overflow.
+        let g = gcd(r, i + 1);
+        let next = (r / g).checked_mul((n - i) / ((i + 1) / g));
+        if next == null { panic("math::comb: the result does not fit in a u64"); }
+        r = next;
+        i += 1;
+    }
+    return r;
+}
 /// The number of ways to choose `k` of `n` items in order; `0` if `k > n`. Panics if the result
 /// does not fit in a `u64`.
-pub fn perm(n: u64, k: u64) -> u64;
+pub fn perm(n: u64, k: u64) -> u64 => 0 if k > n else falling("perm", n, k);
+
+/// `n * (n - 1) * ...`, `k` factors (`k <= n`); panics, naming `what`, if it does not fit in a `u64`.
+fn falling(what: str, n: u64, k: u64) -> u64 {
+    let mut r: u64 = 1;
+    let mut i: u64 = 0;
+    while i < k {
+        let next = r.checked_mul(n - i);
+        if next == null { panic(f"math::{what}: the result does not fit in a u64"); }
+        r = next;
+        i += 1;
+    }
+    return r;
+}

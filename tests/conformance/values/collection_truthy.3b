@@ -1,0 +1,15 @@
+// §6.6, §16: collections are truthy when not empty (`truthy` is written in Threebolt over `len`).
+fn show<T: Truthy>(x: T) -> str => "yes" if x else "no";
+
+fn main() {
+    let mut xs: [i32] = [];
+    let arr = [1, 2];
+    let empty_arr: [i32; 0] = [];
+    let mut m: Map<str, i32> = [:];
+    let s: Set<i32> = [1];
+    let none: Set<i32> = [];
+    println(f"{show(xs)} {show(arr)} {show(empty_arr)} {show(m)} {show(s)}");
+    xs.push(1);
+    m["a"] = 1;
+    println(f"{xs.truthy()} {arr.truthy()} {empty_arr.truthy()} {m.truthy()} {none.truthy()}");
+}

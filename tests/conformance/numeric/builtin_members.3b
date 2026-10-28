@@ -1,0 +1,15 @@
+// Members of primitives and enums written in Threebolt (std/builtin/*.3b), one copy per owner type.
+@flags
+enum Perm : u8 { None = 0, Read = 1, Write = 2 }
+
+fn main() {
+    let a: i8 = -5;
+    let b: u8 = 7;
+    let c: i64 = -9000000000;
+    let d: usize = 3;
+    println(f"{a.abs()} {b.abs()} {c.abs()} {d.abs()}");
+    println(f"{a.min(3)} {a.max(3)} {b.min(2)} {b.max(200)} {c.max(0)} {d.min(10)}");
+    println(f"{'7'.is_digit()} {'x'.is_digit()} {'٣'.is_digit()}");
+    let p = Perm::Read | Perm::Write;
+    println(f"{p.has(Perm::Read)} {Perm::Read.has(p)} {p.has(Perm::None)}");
+}

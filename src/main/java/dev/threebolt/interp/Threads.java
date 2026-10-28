@@ -17,14 +17,14 @@ import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.LongBinaryOperator;
 
 /**
- * `std::thread` and `std::sync` (§13.4) on Java platform threads. `Thread`, `Mutex` and `Atomic`
- * are std classes whose Java state is kept in {@link Obj#nat}.
+ * `std::thread` and `std::sync` (§13.4) on Java platform threads. `Thread`, `Atomic` and `sync`'s
+ * private `RawLock` are std classes whose Java state is kept in {@link Obj#nat}.
  */
 final class Threads {
-    private final Interpreter in;
+    private final Callbacks rt;
 
-    Threads(Interpreter in) {
-        this.in = in;
+    Threads(Callbacks rt) {
+        this.rt = rt;
     }
 
     /** A spawned thread and, once it has finished, its result. */
@@ -39,18 +39,29 @@ final class Threads {
                 try {
                     Thread.sleep(((Int) a[0]).v());
                 } catch (InterruptedException e) {
-                    throw new Interpreter.Abort();
+                    throw new Callbacks.Abort();
                 }
                 yield Unit.UNIT;
             }
             case "Thread.spawn" -> spawn((FnVal) a[0], fn, typeEnv);
             case "Thread.join" -> join((Obj) self);
-            case "Mutex.new" -> {
-                var m = construct(fn, typeEnv, a[0]);
-                m.nat = new ReentrantLock();
-                yield m;
+            case "RawLock.new" -> {
+                var lock = new Obj((TypeInfo) fn.owner, List.of(), new Object[0]);
+                lock.nat = new ReentrantLock();
+                yield lock;
             }
-            case "Mutex.lock" -> lock((Obj) self, (FnVal) a[0], fn);
+            case "RawLock.acquire" -> {
+                acquire((ReentrantLock) ((Obj) self).nat);
+                yield Unit.UNIT;
+            }
+            case "RawLock.release" -> {
+                ((ReentrantLock) ((Obj) self).nat).unlock();
+                yield Unit.UNIT;
+            }
+            case "sync.guard" -> {
+                var guard = (Type.Nominal) TypeSystem.subst(fn.ret, typeEnv);
+                yield new Obj(guard.decl(), guard.args(), new Object[] {a[0]});
+            }
             case "Atomic.new" -> {
                 var m = construct(fn, typeEnv);
                 m.nat = new AtomicLong(raw(a[0]));
@@ -73,7 +84,7 @@ final class Threads {
         var thread = construct(fn, typeEnv);
         var running = new Running();
         thread.nat = running;
-        running.thread = in.startThread(() -> running.result = in.callFn(f, new Object[0]));
+        running.thread = rt.startThread(() -> running.result = rt.call(f));
         return thread;
     }
 
@@ -82,35 +93,22 @@ final class Threads {
         try {
             running.thread.join();
         } catch (InterruptedException e) {
-            throw new Interpreter.Abort();
+            throw new Callbacks.Abort();
         }
         // The thread may have ended the process (a panic) rather than returned.
-        in.checkAbort();
+        rt.checkAbort();
         return Values.copy(running.result);
     }
 
-    // ---- Mutex ----
+    // ---- RawLock (std::sync's Mutex is Threebolt over it) ----
 
-    /**
-     * Runs {@code f} with a `Guard` over the mutex's value while holding its lock, then stores
-     * the guard's value back (§13.4). Locking a mutex twice on one thread would deadlock; it panics.
-     */
-    private Object lock(Obj mutex, FnVal f, FnInfo fn) {
-        var lock = (ReentrantLock) mutex.nat;
+    /** Takes the lock, waiting while another thread holds it; taking it twice on one thread would deadlock, so it panics. */
+    private static void acquire(ReentrantLock lock) {
         if (lock.isHeldByCurrentThread()) throw new Panic("mutex is already locked by this thread");
         try {
             lock.lockInterruptibly();
         } catch (InterruptedException e) {
-            throw new Interpreter.Abort();
-        }
-        try {
-            var guardType = (Type.Nominal) ((Type.Fn) fn.params.getFirst().type()).params().getFirst();
-            var guard = new Obj(guardType.decl(), mutex.args, new Object[] {mutex.fields[0]});
-            var result = in.callFn(f, new Object[] {guard});
-            mutex.fields[0] = guard.fields[0];
-            return result;
-        } finally {
-            lock.unlock();
+            throw new Callbacks.Abort();
         }
     }
 

@@ -1,0 +1,10 @@
+// std::math integer functions (written in Threebolt): exact up to the u64 limit.
+//! exit: 101
+use std::math;
+fn main() {
+    let big: u64 = 18446744073709551615;
+    println(f"{math::isqrt(0)} {math::isqrt(1)} {math::isqrt(15)} {math::isqrt(16)} {math::isqrt(big)} {math::isqrt(big - 1)} {math::isqrt(4294967295 * 4294967295)} {math::isqrt(9007199254740993)}");
+    println(f"{math::factorial(0)} {math::factorial(20)} {math::perm(5, 2)} {math::perm(2, 5)} {math::perm(20, 20)}");
+    println(f"{math::comb(5, 2)} {math::comb(2, 5)} {math::comb(67, 33)} {math::comb(100, 0)} {math::comb(100, 100)} {math::comb(1000000, 3)}");
+    println(math::comb(68, 33));
+}

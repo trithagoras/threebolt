@@ -1,27 +1,39 @@
 // Members of every integer type (spec §16); `Self` is the integer type. Not a module: the
-// checker attaches these intrinsics to the primitive types.
+// checker attaches these members to the primitive types. Bodyless members are intrinsics; the
+// others are checked once per integer type.
 
 /// The value `n`; panics if it does not fit.
 pub fn from_i64(n: i64) -> Self;
 /// `0`.
-pub fn zero() -> Self;
+pub fn zero() -> Self => 0;
 /// `1`.
-pub fn one() -> Self;
+pub fn one() -> Self => 1;
 /// The smallest value (`MIN`).
-pub fn min_value() -> Self;
+pub fn min_value() -> Self => Self::MIN;
 /// The largest value (`MAX`).
-pub fn max_value() -> Self;
+pub fn max_value() -> Self => Self::MAX;
 /// The width in bits.
 pub fn bits() -> u32;
 
 /// The absolute value; `MIN.abs()` overflows and panics (§13.2).
-pub fn abs(self) -> Self;
+pub fn abs(self) -> Self => 0 - self if self < 0 else self;
 /// The smaller of `self` and `o`.
-pub fn min(self, o: Self) -> Self;
+pub fn min(self, o: Self) -> Self => self if self <= o else o;
 /// The larger of `self` and `o`.
-pub fn max(self, o: Self) -> Self;
+pub fn max(self, o: Self) -> Self => self if self >= o else o;
 /// `self` raised to `exp`; overflow panics (§13.2).
-pub fn pow(self, exp: u32) -> Self;
+pub fn pow(self, exp: u32) -> Self {
+    // By squaring; the base is squared only while bits remain, so it overflows only if the result does.
+    let mut result: Self = 1;
+    let mut base = self;
+    let mut e = exp;
+    while e > 0 {
+        if (e & 1) == 1 { result = result * base; }
+        e = e >> 1;
+        if e > 0 { base = base * base; }
+    }
+    return result;
+}
 
 /// `self + o`, wrapping around on overflow.
 pub fn wrapping_add(self, o: Self) -> Self;

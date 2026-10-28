@@ -45,7 +45,7 @@ import java.util.concurrent.ConcurrentHashMap;
  * native buffer for the duration of the callback and copies them back when it returns.
  */
 final class Ffi {
-    private final Interpreter in;
+    private final Callbacks rt;
     private final Linker linker = Linker.nativeLinker();
     private final Map<String, SymbolLookup> libraries = new ConcurrentHashMap<>();
     private final Map<FnInfo, MethodHandle> handles = new ConcurrentHashMap<>();
@@ -69,8 +69,8 @@ final class Ffi {
         }
     }
 
-    Ffi(Interpreter in) {
-        this.in = in;
+    Ffi(Callbacks rt) {
+        this.rt = rt;
     }
 
     // ---- Layouts (§14.2, §14.3) ----
@@ -195,7 +195,7 @@ final class Ffi {
             case EnumVal e -> toJava(new Int(e.decl().backing, e.v()), layout);
             case PtrVal p -> MemorySegment.ofAddress(p.addr());
             case FnVal f -> MemorySegment.ofAddress(address(f));
-            default -> throw new Panic("cannot pass " + in.debug(v) + " to C");
+            default -> throw new Panic("cannot pass " + rt.debug(v) + " to C");
         };
     }
 
@@ -280,7 +280,7 @@ final class Ffi {
                 var l = layouts.get(i);
                 if (l instanceof GroupLayout g) {
                     var seg = arena.allocate(g);
-                    store(seg, 0, in.typeOf(Interpreter.unbox(args[i])), args[i]);
+                    store(seg, 0, rt.typeOf(Interpreter.unbox(args[i])), args[i]);
                     javaArgs.add(seg);
                 } else {
                     javaArgs.add(toJava(args[i], l));
@@ -288,10 +288,10 @@ final class Ffi {
             }
             var result = handle.invokeWithArguments(javaArgs);
             // A callback may have panicked; C has returned, so the process can now stop.
-            in.checkAbort();
+            rt.checkAbort();
             if (retType == Type.UNIT) return Unit.UNIT;
             return structRet ? load((MemorySegment) result, 0, retType) : fromJava(result, retType);
-        } catch (Panic | Interpreter.Abort | Interpreter.ExitSignal e) {
+        } catch (Panic | Callbacks.Abort | Callbacks.ExitSignal e) {
             throw e;
         } catch (Throwable t) {
             throw new Panic("call to " + what + " failed: " + t);
@@ -313,7 +313,7 @@ final class Ffi {
             case EnumVal e -> e.decl().backing.bits() <= 32 ? ValueLayout.JAVA_INT : ValueLayout.JAVA_LONG;
             case PtrVal p -> ValueLayout.ADDRESS;
             case FnVal f -> ValueLayout.ADDRESS;
-            default -> throw new Panic("cannot pass " + in.debug(v) + " as a C variadic argument");
+            default -> throw new Panic("cannot pass " + rt.debug(v) + " as a C variadic argument");
         };
     }
 
@@ -364,6 +364,13 @@ final class Ffi {
         return stub.address();
     }
 
+    /** {@code fn} as a function value, to call it like any other callback. */
+    private static FnVal named(FnInfo fn) {
+        var params = new ArrayList<Type>();
+        for (var p : fn.params) params.add(p.type());
+        return new FnVal(new Type.Fn(params, fn.ret, true), null, null, Map.of(), fn, List.of());
+    }
+
     /**
      * Runs a callback. Nothing may unwind through the C frames, so a panic or `exit` here ends the
      * process (§13.1) and C gets a zero result; the calling Threebolt code stops when C returns.
@@ -371,24 +378,24 @@ final class Ffi {
     @SuppressWarnings("unused") // called through ON_UPCALL
     private Object onUpcall(FnInfo fn, Object[] args) {
         try {
-            if (!in.isTerminating()) {
+            if (!rt.isTerminating()) {
                 var values = new Object[args.length];
                 for (int i = 0; i < args.length; i++) {
                     var t = fn.params.get(i).type();
                     values[i] = args[i] instanceof MemorySegment seg && layout(t) instanceof GroupLayout
                             ? load(seg, 0, t) : fromJava(args[i], t);
                 }
-                var result = in.invoke(fn, null, values, List.of(), null, null, null);
+                var result = rt.call(named(fn), values);
                 return toC(result, fn.ret);
             }
         } catch (Panic p) {
-            in.panicked(p);
-        } catch (Interpreter.ExitSignal e) {
-            in.terminate(e.code);
-        } catch (Interpreter.Abort a) {
+            rt.panicked(p);
+        } catch (Callbacks.ExitSignal e) {
+            rt.terminate(e.code);
+        } catch (Callbacks.Abort a) {
             // The process is already ending.
         } catch (RuntimeException e) {
-            in.panicked(new Panic("callback '" + fn.qualifiedName() + "' failed: " + e));
+            rt.panicked(new Panic("callback '" + fn.qualifiedName() + "' failed: " + e));
         }
         return zero(fn.ret);
     }
@@ -447,7 +454,7 @@ final class Ffi {
         try (var arena = Arena.ofConfined()) {
             var seg = arena.allocate(Math.max(1, size * count), layout(element).byteAlignment());
             for (int i = 0; i < count; i++) store(seg, i * size, element, item(self, i));
-            var result = in.callFn(f, new Object[] {new PtrVal(element, seg.address())});
+            var result = rt.call(f, new PtrVal(element, seg.address()));
             for (int i = 0; i < count; i++) setItem(self, i, load(seg, i * size, element));
             return result;
         }
@@ -504,7 +511,7 @@ final class Ffi {
     // ---- Intrinsics: c::alloc/free, Ptr<T>, str C strings (§14.2, §14.4) ----
 
     Object intrinsic(String owner, String name, Object self, Object[] a, Map<TypeParamInfo, Type> typeEnv, FnInfo fn) {
-        var ptr = in.ts.ptr;
+        var ptr = rt.ts().ptr;
         Type target = typeEnv.getOrDefault(ptr.typeParams.getFirst(), Type.ERROR);
         switch (owner + "." + name) {
             case "c.alloc" -> {
@@ -545,7 +552,7 @@ final class Ffi {
                 return Unit.UNIT;
             }
             case "str.to_cstr" -> {
-                var bytes = ((String) self).getBytes(StandardCharsets.UTF_8);
+                var bytes = self.toString().getBytes(StandardCharsets.UTF_8);
                 long addr = malloc(bytes.length + 1);
                 var seg = MemorySegment.ofAddress(addr).reinterpret(bytes.length + 1);
                 MemorySegment.copy(bytes, 0, seg, ValueLayout.JAVA_BYTE, 0, bytes.length);
@@ -554,7 +561,7 @@ final class Ffi {
             }
             case "str.from_cstr" -> {
                 var p = nonNull((PtrVal) a[0]);
-                return MemorySegment.ofAddress(p.addr()).reinterpret(Long.MAX_VALUE).getString(0);
+                return Values.Str.of(MemorySegment.ofAddress(p.addr()).reinterpret(Long.MAX_VALUE).getString(0));
             }
             default -> throw new IllegalStateException("unknown intrinsic " + owner + "." + name);
         }
