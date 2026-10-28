@@ -99,6 +99,11 @@ final class Lints {
         if (active()) diag.warning(Code.UNREACHABLE, s.span().to(end), "unreachable code");
     }
 
+    /** A `match` arm that can never be chosen; {@code why} says what covers it. */
+    void unreachableArm(Expr.MatchArm arm, String why) {
+        if (active()) diag.warning(Code.UNREACHABLE, arm.span(), "unreachable arm: " + why);
+    }
+
     /** An expression statement: warns when evaluating it can do nothing. */
     void exprStmt(Expr e) {
         if (!active() || !noEffect(e)) return;

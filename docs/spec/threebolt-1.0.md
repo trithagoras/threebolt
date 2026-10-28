@@ -610,6 +610,7 @@ Prelude traits for code generic over numbers, after Haskell's numeric classes:
 
 - Patterns appear in `match` arms, `let`, `for`, lambda parameters (§7.8), and after `is` (§7.3).
 - `let`, `for` and lambda parameters require irrefutable patterns (tuples, struct destructure, bindings, `_`).
+- A binding (here, in `let`, or a function or lambda parameter) cannot have the name of a type in scope: a primitive, a type or alias declared or imported in the module, or a type parameter. `let str = s;`, `fn f(T: T)` and `match x { bool => … }` are errors (the last would be a catch-all binding; a type test is `is bool`). Struct shorthand binds the field's name, so a field named like a type is destructured as `Type { str: s }`.
 
 ---
 
@@ -1055,3 +1056,6 @@ Semantics the spec left open, decided while implementing:
 
 ### 2026-10-29 — collection literals against unions
 - §7.7 Against a union, a collection literal builds the member of its own form (`[k: v]` a `Map`, `[a, b]` and `[]` a list, set or array; was: the first collection member, so a map literal against `Json` was an error). More than one member of that form is an error.
+
+### 2026-10-29 — bindings cannot be named after types
+- §11 A binding cannot have the name of a type in scope (primitives, the module's types, aliases and imported types, type parameters); was unspecified, and `match x { bool => … }` silently bound everything.

@@ -1,0 +1,16 @@
+type_name_bindings.3b:8:10: error[E0115]: 'bool' is a type, so it cannot name a binding
+type_name_bindings.3b:10:28: error[E0115]: 'str' is a type, so it cannot name a binding
+type_name_bindings.3b:11:21: error[E0115]: 'i32' is a type, so it cannot name a binding
+type_name_bindings.3b:13:15: error[E0115]: 'T' is a type, so it cannot name a binding
+type_name_bindings.3b:16:5: error[E0115]: 'bool' is a type, so it cannot name a binding; to test the type, write `is bool`
+type_name_bindings.3b:20:20: error[E0115]: 'str' is a type, so it cannot name a binding
+type_name_bindings.3b:25:9: error[E0115]: 'str' is a type, so it cannot name a binding
+type_name_bindings.3b:26:13: error[E0115]: 'char' is a type, so it cannot name a binding
+type_name_bindings.3b:28:9: error[E0115]: 'i32' is a type, so it cannot name a binding
+type_name_bindings.3b:29:14: error[E0115]: 'u8' is a type, so it cannot name a binding
+type_name_bindings.3b:30:9: error[E0115]: 'Point' is a type, so it cannot name a binding
+type_name_bindings.3b:31:9: error[E0115]: 'Meters' is a type, so it cannot name a binding
+type_name_bindings.3b:32:9: error[E0115]: 'File' is a type, so it cannot name a binding
+type_name_bindings.3b:33:10: error[E0115]: 'f64' is a type, so it cannot name a binding
+type_name_bindings.3b:34:29: error[E0115]: 'i64' is a type, so it cannot name a binding; after `is`, `[` and `(` start a pattern (§7.3); test a list type with `List<T>`, a tuple's element types with `(is A, is B)`
+type_name_bindings.3b:35:17: error[E0115]: 'usize' is a type, so it cannot name a binding; after `is`, `[` and `(` start a pattern (§7.3); test a list type with `List<T>`, a tuple's element types with `(is A, is B)`

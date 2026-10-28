@@ -1,0 +1,38 @@
+// A binding cannot have the name of a type in scope (§11): primitives, the module's types,
+// aliases, imports and type parameters.
+use std::io::File;
+
+struct Point { let x: i32; let str: str; }
+type Meters = f64;
+
+fn param(bool: i32) -> i32 => bool;
+
+trait Show { fn show(self, str: i32) -> str; }   // bodyless functions too
+extern "C" { fn abs(i32: c::int) -> c::int; }
+
+fn generic<T>(T: T) -> T => T;
+
+fn kind(x: bool | str) -> str => match x {
+    bool => "bool",                   // a binding, not a type test
+};
+
+fn shorthand(p: Point) -> str {
+    let Point { x, str } = p;         // struct shorthand binds the field's name
+    return f"{x} {str}";
+}
+
+fn main() {
+    let str = "s";
+    let mut char = 'c';
+    char = 'd';
+    for i32 in [1, 2] { println(i32); }
+    let f = (u8: i32) => u8;
+    let Point = 1;
+    let Meters = 2.0;
+    let File = 3;
+    let (f64, ok) = (1.0, true);
+    if (1 as i32 | str) is (i64) { }
+    _ = [1] is [usize];
+    let fine = 1;                     // ordinary names are fine
+    println(f"{str} {char} {f(1)} {Point} {Meters} {File} {f64} {ok} {fine} {param(1)} {generic(1)} {kind(true)}");
+}

@@ -1,0 +1,45 @@
+// W0004 for `match` arms that can never be chosen (§7.11).
+enum Color { Red, Green }
+
+fn after_catch_all(x: i32 | str) -> i32 => match x {
+    is i32 => 1,
+    _ => 2,
+    is str => 3,                      // after `_`
+};
+
+fn after_binding(x: i32 | str) -> str => match x {
+    _v => "any",
+    is str => "str",                  // `_v` already matched everything
+};
+
+fn after_all(b: bool) -> i32 => match b {
+    true => 1,
+    false => 2,
+    _ => 3,                           // `true` and `false` are every bool
+};
+
+fn repeated(n: i32, c: Color) -> i32 {
+    let a = match n {
+        1 => 1,
+        2 | 1 => 2,                   // reachable: 2 is new
+        1 | 2 => 3,                   // both already matched
+        _ => 4,
+    };
+    let b = match c {
+        Color::Red => 1,
+        Color::Red => 2,
+        Color::Green => 3,
+    };
+    return a + b;
+}
+
+fn guarded(n: i32) -> i32 => match n {
+    1 if n > 0 => 1,
+    1 => 2,                           // reachable: the guard may fail
+    _ if n > 5 => 3,
+    _ => 4,                           // reachable: so may this one
+};
+
+fn main() {
+    println(f"{after_catch_all(1)} {after_binding("s")} {after_all(true)} {repeated(1, Color::Red)} {guarded(1)}");
+}
