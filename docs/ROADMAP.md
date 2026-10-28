@@ -196,11 +196,24 @@ the exemption keeps "add `Display` to a dependency's type" a one-liner in apps.
 ### 2.2 Steps
 1. ~~Spec~~ — done (`fdb3b8e`): §1 keyword `internal`; §2.1 packages and source roots; §2.2 `pub use`; §2.3 `internal`; §4.10 orphan rule
    (normative, application exempt); intro's "Not in 1.0" loses re-exports and package manager; changelog entry.
-2. ~~`internal` and `pub use` in grammar and checker (testable without packages); TextMate grammar~~ — done. Std's private
-   `str` helpers are `internal`, replacing the std/builtin visibility special case.
-3. Manifest loading (TOML library), package graph (DAG, key clashes, canonical identity), per-package source
-   roots, `internal` across packages, orphan rule. Conformance: multi-package cases (a case directory holding
-   `package.toml`s; README extended).
+2. ~~`internal` and `pub use` in grammar and checker (testable without packages); TextMate grammar~~ — done (`3e99db4`).
+   Std's private `str` helpers are `internal`, replacing the std/builtin visibility special case. Re-exports resolve
+   on demand in `ModuleLoader` (`resolveUse`/`reexport`), so they chain and may form cycles; a glob re-exports each
+   name at the lesser visibility. `Module.samePackage` is a placeholder (std vs everything else) until step 3.
+3. Manifest loading, package graph (DAG, key clashes, canonical identity), per-package source roots, `internal`
+   across packages, orphan rule. Conformance: multi-package cases (a case directory holding `package.toml`s;
+   README extended). Notes:
+   - TOML library: night-config (`com.electronwill.night-config:toml`) is the candidate; avoid tomlj, which pins
+     an older ANTLR runtime than ours (4.13.2) and would likely print a version-mismatch warning at run time. Check
+     the latest version on Maven Central before adding it.
+   - `ModuleLoader` today assumes one `root` and `ModulePath`s relative to it; `std::` is special-cased by its first
+     segment. Packages need a module to know its package (root directory, dependency keys), with `std` becoming
+     one more package; `Module.samePackage` then compares packages. A dependency key is the first path segment.
+   - Without a manifest nothing changes: one application package rooted at the entry file's directory.
+   - The orphan rule is a new check beside the duplicate-impl one (`Declarer`, E0404, which stays); it only
+     bites outside the application package, so existing conformance cases are unaffected.
+   - Until step 4 the CLI is still `threebolt run <file>`; step 3 can take the manifest from the entry file's
+     directory for tests, with step 4 switching to the current directory and `--project`.
 4. CLI: `applicationName = "bolt"`, the commands above, `--project`, the hint.
 5. Language server: manifest-based roots; the VS Code extension activates on `package.toml`/`workspace.toml`.
 
