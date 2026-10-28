@@ -39,9 +39,9 @@ other backend and for dogfooding the language.)
 1. ~~**Benchmarks first**~~ — done (`4d29fa5`): `tests/bench/` (five programs printing checksums),
    `./gradlew bench [-Pbench=name]`, baseline times in `tests/bench/README.md`. Re-run after each step;
    a changed checksum is a bug, a slower time is a cost to note.
-2. **One callback interface**: every intrinsic that calls back into Threebolt (comparators, `Thread::spawn`,
-   `Mutex::lock`, `with_ptr`, C upcalls, iterator adaptors) goes through `call(FnVal, args) -> Object` instead of
-   reaching into `Interpreter`. No intrinsic touches the AST or frames.
+2. ~~**One callback interface**~~ — done (`5504a3b`): `interp.Callbacks` (`call(FnVal, args)`, `callTrait`,
+   `equal`/`hash`/`display`/`next`, process hooks) is all `Natives`, `Threads`, `Ffi` and `Io` see; `BoundaryTest`
+   enforces it. No measurable slowdown.
 3. **Bodied members in `builtin/*.3b`**: primitive member files are all bodyless today; check the checker and
    interpreter accept members with bodies there, and private (non-`pub`) bodyless helpers, as `io.3b` does.
 4. **`str` representation** (§1.1), then move the derivable `str` members.
