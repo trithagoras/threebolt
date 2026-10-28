@@ -1,0 +1,16 @@
+// Read and Write are contracts: every required member must be implemented.
+use std::io::{Read, Write, IoErr};
+
+class Half : Read {
+    pub fn read(mut self) -> str | IoErr => "";
+    pub fn read_line(mut self) -> str | null | IoErr => null;
+}
+
+class Mute : Write {
+    pub fn write(self, s: str) -> () | IoErr {}
+    pub fn write_bytes(mut self, bytes: [u8]) -> () | IoErr {}
+}
+
+fn main() {
+    let r: Read = 5;
+}
