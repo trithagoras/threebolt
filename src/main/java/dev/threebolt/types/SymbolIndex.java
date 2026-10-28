@@ -28,9 +28,14 @@ import java.util.TreeMap;
 public final class SymbolIndex {
     /**
      * One occurrence of a name. {@code type} is its type at that point (narrowed, instantiated),
-     * or null to use the target's declared type.
+     * or null to use the target's declared type. For a function called here, {@code env} binds its
+     * type parameters (and its owner's) as the call instantiated them.
      */
-    public record Ref(Span span, Object target, Type type, boolean isDecl) {}
+    public record Ref(Span span, Object target, Type type, boolean isDecl, Map<TypeParamInfo, Type> env) {
+        public Ref(Span span, Object target, Type type, boolean isDecl) {
+            this(span, target, type, isDecl, Map.of());
+        }
+    }
 
     /** An enum member, which has no info object of its own. */
     public record EnumMember(TypeInfo owner, String name) {}
@@ -78,6 +83,11 @@ public final class SymbolIndex {
 
     void ref(Span span, Object target, Type type) {
         put(new Ref(span, target, type, false));
+    }
+
+    /** A call of {@code fn}, instantiated by {@code env}. */
+    void call(Span span, FnInfo fn, Map<TypeParamInfo, Type> env) {
+        put(new Ref(span, fn, null, false, env));
     }
 
     /** A declaration's own name. */
@@ -287,18 +297,26 @@ public final class SymbolIndex {
     /** A one-line, source-like description of {@code r}'s target, for hovers. */
     public static String describe(Ref r) {
         return switch (r.target()) {
+            case Local l when l.name().equals("self") -> (l.isMutable() ? "mut self: " : "self: ") + l.type;
             case Local l -> "let " + (l.isMutable() ? "mut " : "") + l.name() + ": " + (r.type() != null ? r.type() : l.type);
-            case FnInfo f -> signature(f);
+            case FnInfo f -> signature(f, r.env(), null, false);
             case TypeInfo t -> typeHeader(t);
             case FieldInfo f -> "let " + f.owner().name() + "." + f.name() + ": " + (r.type() != null ? r.type() : f.type);
             case StaticInfo s -> "static let " + (s.isMutable() ? "mut " : "") + qualified(s.owner, s.name()) + ": " + s.type;
-            case ConstInfo c -> "const " + c.name() + ": " + c.type;
+            case ConstInfo c -> "const " + c.name() + ": " + c.type + " = " + source(c.ast.value());
             case TypeParamInfo p -> p.name() + (p.bounds.isEmpty() ? ""
                     : ": " + String.join(" + ", p.bounds.stream().map(Type::toString).toList()));
-            case EnumMember m -> m.owner().name() + "::" + m.name();
+            case EnumMember m -> m.owner().name() + "::" + m.name()
+                    + (m.owner().enumMembers.containsKey(m.name()) ? " = " + m.owner().enumMembers.get(m.name()) : "");
             case Module m -> "mod " + m.path();
             default -> r.target().toString();
         };
+    }
+
+    /** {@code e} as source, shortened when long. */
+    private static String source(dev.threebolt.ast.Expr e) {
+        var s = dev.threebolt.parse.AstPrinter.print(e).strip().replaceAll("\\s+", " ");
+        return s.length() <= 40 ? s : s.substring(0, 37) + "...";
     }
 
     private static String qualified(TypeInfo owner, String name) {
@@ -320,14 +338,15 @@ public final class SymbolIndex {
         if (f.isExtern) sb.append("extern ");
         if (f.isUnsafe() && !f.isExtern) sb.append("unsafe ");
         sb.append(f.isGetter() ? "get fn " : "fn ").append(f.qualifiedName());
-        if (!f.typeParams.isEmpty()) sb.append(params(f.typeParams));
+        // Type parameters the call bound are substituted below rather than declared.
+        if (!f.typeParams.isEmpty() && !env.keySet().containsAll(f.typeParams)) sb.append(params(f.typeParams));
         var parts = new ArrayList<String>();
         if (f.receiver == FnInfo.Receiver.SELF) parts.add("self");
         if (f.receiver == FnInfo.Receiver.MUT_SELF) parts.add("mut self");
         boolean receiver = !parts.isEmpty();
         for (var p : f.params) {
             parts.add((p.isMutable() ? "mut " : "") + p.name() + ": " + TypeSystem.subst(p.type(), env)
-                    + (p.isOptional() ? " = ..." : ""));
+                    + (p.isOptional() ? " = " + source(p.defaultValue()) : ""));
         }
         if (f.isVariadic) parts.add("...");
         sb.append('(');

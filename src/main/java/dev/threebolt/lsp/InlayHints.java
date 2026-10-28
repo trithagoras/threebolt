@@ -12,7 +12,7 @@ import org.eclipse.lsp4j.jsonrpc.messages.Either;
 
 /**
  * Inferred types after bindings written without one: `let x = 1` shows `x: i32`, as do
- * pattern bindings and lambda parameters. A name followed by `:` already has its type.
+ * pattern bindings and lambda parameters. A name followed by `:` or `is` already has its type.
  */
 final class InlayHints {
     private InlayHints() {}
@@ -28,6 +28,8 @@ final class InlayHints {
             int i = end;
             while (i < text.length && (text[i] == ' ' || text[i] == '\t')) i++;
             if (i < text.length && text[i] == ':' && (i + 1 >= text.length || text[i + 1] != ':')) continue;
+            // `w is Knight` already says what it is.
+            if (i + 2 < text.length && text[i] == 'i' && text[i + 1] == 's' && !Character.isJavaIdentifierPart(text[i + 2])) continue;
             var at = Positions.position(m.source(), end);
             if (!within(at, range)) continue;
             var hint = new InlayHint(at, Either.forLeft(": " + l.type));

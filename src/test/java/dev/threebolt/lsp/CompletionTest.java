@@ -451,7 +451,7 @@ class CompletionTest {
                 """);
         assertEquals(1, help.getSignatures().size());
         assertEquals(2, help.getActiveParameter());
-        assertEquals("suffix: str = ...", label(help, 0, 2));
+        assertEquals("suffix: str = \"\"", label(help, 0, 2));
     }
 
     @Test

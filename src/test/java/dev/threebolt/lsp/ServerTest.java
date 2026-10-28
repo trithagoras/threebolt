@@ -124,7 +124,7 @@ class ServerTest {
         assertEquals("fn norm(p: Point) -> i32", hover(main, "norm"));
         assertEquals("struct Point", hover(main, "Point::"));
         assertEquals("mod shapes", hover(main, "shapes::norm"));
-        assertEquals("fn println<T: Display>(x: T)\n\n---\n\nWrites `x.to_str()` and a newline to stdout.", hover(main, "println"));
+        assertEquals("fn println(x: str)\n\n---\n\nWrites `x.to_str()` and a newline to stdout.", hover(main, "println"));
     }
 
     @Test
@@ -253,6 +253,7 @@ class ServerTest {
                     println(Dir::Up as i32 + Dir::Down as i32);
                     plain();
                     println("ab".upper() + f"{5.abs()}");
+                    println([true].iter().map(b => 1).count());
                 }
                 """;
         var file = Files.writeString(dir.resolve("docs.3b"), text);
@@ -263,9 +264,13 @@ class ServerTest {
         // Square::area has no doc of its own: it shows the trait member's.
         assertEquals("fn Square::area(self) -> f64\n\n---\n\nThe area, in square units.", hover(file, "area(self) -> f64 =>"));
         assertEquals("fn Shape::area(self) -> f64\n\n---\n\nThe area, in square units.", hover(file, "area());"));
-        assertEquals("Dir::Up\n\n---\n\nUp the screen.", hover(file, "Up as"));
-        assertEquals("Dir::Down", hover(file, "Down as"));
+        assertEquals("Dir::Up = 0\n\n---\n\nUp the screen.", hover(file, "Up as"));
+        assertEquals("Dir::Down = 1", hover(file, "Down as"));
         assertEquals("fn plain()", hover(file, "plain();"));
+        // A generic method shows what the call instantiated it with.
+        assertEquals("fn List::iter(self) -> Iterator<bool>\n\n---\n\nThe elements in order.", hover(file, "iter()"));
+        assertEquals("fn Iterator::map(self, f: fn(bool) -> i32) -> Iterator<i32>\n\n---\n\nThe values passed through `f`, lazily.",
+                hover(file, "map("));
         // Primitive members are documented in std.
         assertEquals("fn str::upper(self) -> str\n\n---\n\nThe string in upper case.", hover(file, "upper"));
         assertEquals("fn i32::abs(self) -> i32\n\n---\n\nThe absolute value; `MIN.abs()` overflows and panics (§13.2).",

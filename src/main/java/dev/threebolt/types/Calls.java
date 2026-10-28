@@ -101,7 +101,7 @@ final class Calls {
             case Exprs.FnTarget f -> {
                 if (c.completer != null) c.completer.call(e, f.candidates());
                 var bound = resolve(f.candidates(), null, e.args(), f.typeArgs(), e.span(), f.name());
-                if (bound != null) c.index.ref(p.segments().getLast().name().span(), bound.cand().fn(), null);
+                if (bound != null) c.index.call(p.segments().getLast().name().span(), bound.cand().fn(), env(bound));
                 yield bound == null ? Exprs.error() : build(bound, null, null, e.span());
             }
             case Exprs.TypeTarget t -> {
@@ -168,7 +168,7 @@ final class Calls {
         if (c.completer != null) c.completer.call(e, instance);
         var bound = resolve(instance, r.value().type(), e.args(), m.typeArgs(), e.span(), name);
         if (bound == null) return Exprs.error();
-        c.index.ref(m.name().span(), bound.cand().fn(), null);
+        c.index.call(m.name().span(), bound.cand().fn(), env(bound));
         checkMethodAccess(bound.cand().fn(), m.name().span());
         Ir.Place recvPlace = null;
         if (bound.cand().fn().receiver == FnInfo.Receiver.MUT_SELF) {
@@ -183,6 +183,21 @@ final class Calls {
             }
         }
         return build(bound, recvPlace == null ? r.value().ir() : null, recvPlace, e.span());
+    }
+
+    /** The type arguments of a resolved call: the owner's (from the receiver) and the function's own. */
+    static Map<TypeParamInfo, Type> env(Bound b) {
+        var env = new java.util.HashMap<>(b.cand().env());
+        var f = b.cand().fn();
+        if (b.typeArgs() != null && b.typeArgs().size() == f.typeParams.size()) {
+            for (int i = 0; i < f.typeParams.size(); i++) env.put(f.typeParams.get(i), b.typeArgs().get(i));
+        }
+        var owner = f.ownerType();
+        if (owner != null && b.ownerArgs() != null && b.ownerArgs().size() == owner.typeParams.size()) {
+            for (int i = 0; i < owner.typeParams.size(); i++) env.putIfAbsent(owner.typeParams.get(i), b.ownerArgs().get(i));
+        }
+        env.values().removeIf(t -> t == null || t == Type.ERROR);
+        return env;
     }
 
     private static String lower(String s) {
@@ -207,7 +222,7 @@ final class Calls {
         if (c.completer != null) c.completer.call(e, cands);
         var bound = resolve(cands, owner.base, e.args(), m.typeArgs(), e.span(), m.name().text());
         if (bound == null) return Exprs.error();
-        c.index.ref(m.name().span(), bound.cand().fn(), null);
+        c.index.call(m.name().span(), bound.cand().fn(), env(bound));
         if (bound.cand().fn().dispatch() == Dispatch.ABSTRACT) {
             diag.error(Code.BAD_SUPER, m.name().span(), "'" + bound.cand().fn().qualifiedName() + "' is abstract");
         }
