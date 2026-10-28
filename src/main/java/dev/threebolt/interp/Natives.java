@@ -496,23 +496,6 @@ final class Natives {
     private static final java.security.SecureRandom ENTROPY = new java.security.SecureRandom();
 
     private static Object math(String name, Object[] a) {
-        if (name.equals("isqrt")) {
-            return new Int(Prim.U64, unsigned((Int) a[0]).sqrt().longValue());
-        }
-        if (name.equals("factorial") || name.equals("comb") || name.equals("perm")) {
-            var n = unsigned((Int) a[0]);
-            var k = name.equals("factorial") ? n : unsigned((Int) a[1]);
-            if (k.compareTo(n) > 0) return new Int(Prim.U64, 0);
-            // n! / (n-k)!, then / k! for comb (using the smaller of k and n-k).
-            if (name.equals("comb") && k.compareTo(n.subtract(k)) > 0) k = n.subtract(k);
-            var r = BigInteger.ONE;
-            for (var i = BigInteger.ZERO; i.compareTo(k) < 0; i = i.add(BigInteger.ONE)) {
-                r = r.multiply(n.subtract(i));
-                if (name.equals("comb")) r = r.divide(i.add(BigInteger.ONE));
-                if (r.bitLength() > 64) throw new Panic("math::" + name + ": the result does not fit in a u64");
-            }
-            return new Int(Prim.U64, r.longValue());
-        }
         double x = ((Flt) a[0]).v();
         return Ops.flt(Prim.F64, switch (name) {
             case "copysign" -> Math.copySign(x, ((Flt) a[1]).v());
@@ -534,10 +517,6 @@ final class Natives {
             case "atanh" -> 0.5 * Math.log1p(2 * x / (1 - x));
             default -> throw new IllegalStateException("unknown intrinsic math." + name);
         });
-    }
-
-    private static BigInteger unsigned(Int x) {
-        return new BigInteger(Long.toUnsignedString(x.v()));
     }
 
     private Object str(String name, Str s, Object[] a) {

@@ -1,2 +1,4 @@
 panic: math::factorial: the result does not fit in a u64
+    at falling (std/math.3b:188:27)
+    at factorial (std/math.3b:159:36)
     at main (math_overflow.3b:7:13)
