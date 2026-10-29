@@ -312,9 +312,9 @@ match server.join(Duration::from_secs(2)) {
 - Files: keep them on stream APIs that ignore interrupts (`FileChannel` closes itself when its thread is
   interrupted); check the flag on entry and between chunks in the Threebolt-side loops.
 - Channels and `select`: a Threebolt runtime structure (lock + wait queues), so `select` can wait on several.
-- **Risk — stack depth.** The tree-walking interpreter runs Threebolt threads on 1 GiB platform stacks
-  today. Virtual thread stacks live on the heap but are capped by the maximum thread stack size; measure deep
-  recursion on a virtual thread before switching. A fallback is to keep `main` on a large platform thread.
+- **Stack depth (resolved).** Virtual thread stacks live on the heap but are capped by `-Xss`: ~38K Java
+  frames by default, ~44M with `-Xss1g` (as the old 1 GiB platform threads). The launcher passes `-Xss1g`;
+  a JVM started without it falls back to large platform threads.
 - **Risk — pinning.** An FFM downcall pins its carrier thread for the call's duration. A C call that
   blocks for a long time occupies a carrier; many of them at once starve the scheduler. Document under §14.
 - The JVM bytecode backend changes none of this: virtual threads are the JVM's.

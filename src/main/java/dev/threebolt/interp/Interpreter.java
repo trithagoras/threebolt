@@ -259,7 +259,7 @@ public final class Interpreter implements Callbacks {
     /** Starts a Threebolt thread (§13.4) running {@code body}; a panic in it ends the process. */
     @Override
     public Thread startThread(Runnable body) {
-        var t = new Thread(null, () -> {
+        var t = threads("threebolt-thread").unstarted(() -> {
             try {
                 body.run();
             } catch (Panic p) {
@@ -273,16 +273,35 @@ public final class Interpreter implements Callbacks {
             } finally {
                 running.remove(Thread.currentThread());
             }
-        }, "threebolt-thread", STACK_SIZE);
-        t.setDaemon(true);
+        });
         running.add(t);
         checkAbort();
         t.start();
         return t;
     }
 
-    /** The evaluator recurses deeply; threads get a large stack. */
-    public static final long STACK_SIZE = 1L << 30;
+    /** The stack the evaluator needs: it recurses deeply. */
+    private static final long STACK_SIZE = 1L << 30;
+
+    /**
+     * Builds Threebolt threads: virtual threads (§13.4: lightweight), whose stacks the JVM's {@code -Xss}
+     * caps, so the launcher passes {@code -Xss1g}. Without it (a plain {@code java -jar}), platform threads
+     * with a large stack instead.
+     */
+    public static Thread.Builder threads(String name) {
+        return VIRTUAL ? Thread.ofVirtual().name(name) : Thread.ofPlatform().name(name).daemon().stackSize(STACK_SIZE);
+    }
+
+    private static final boolean VIRTUAL = maxStackKiB() >= STACK_SIZE >> 10;
+
+    private static long maxStackKiB() {
+        try {
+            var vm = java.lang.management.ManagementFactory.getPlatformMXBean(com.sun.management.HotSpotDiagnosticMXBean.class);
+            return Long.parseLong(vm.getVMOption("ThreadStackSize").getValue());
+        } catch (RuntimeException e) {
+            return 0;
+        }
+    }
 
     // ---- Calls ----
 

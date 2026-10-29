@@ -1,0 +1,23 @@
+// §13.4: threads are lightweight, and each one recurses as deeply as `main`.
+use std::thread::Thread;
+use std::sync::Atomic;
+
+fn depth(n: i32) -> i32 {
+    if n == 0 { return 0; }
+    return 1 + depth(n - 1);
+}
+
+fn main() {
+    // Deep recursion on `main` and on a spawned thread.
+    println(depth(15_000));
+    println(Thread::spawn(() => depth(15_000)).join());
+
+    // Ten thousand threads at once.
+    let counter = Atomic::new(0);
+    let mut workers: [Thread<()>] = [];
+    for _ in 0..10_000 {
+        workers.push(Thread::spawn(() => { _ = counter.fetch_add(1); }));
+    }
+    for w in workers { w.join(); }
+    println(counter.load());
+}

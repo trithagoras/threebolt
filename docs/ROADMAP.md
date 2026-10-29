@@ -292,9 +292,11 @@ reported unused**.
 Spec §1 (contextual `select`), §6.4 (`for p? in`), §7.14 (`select`), §13.4, §16; rationale, JVM mapping and
 risks in `docs/plans/concurrency.md`. 0.1 still implements the old §13.4 (platform threads, `join() -> R`,
 `sleep -> ()`). Suggested steps, each with conformance cases and an errors case:
-1. **Virtual threads**: `Threads.startThread` on `Thread.ofVirtual()`. Virtual thread stacks are capped by
-   `-Xss` (measured 2026-10-30: ~38K frames by default, ~44M with `-Xss1g`, as a 1 GiB platform thread), so
-   the launcher and test JVMs pass `-Xss1g`.
+1. ~~**Virtual threads**~~ — done: `Interpreter.threads` builds every Threebolt thread, `main` included, as a
+   virtual thread. Their stacks are capped by `-Xss` (measured: ~38K Java frames by default, ~44M with `-Xss1g`,
+   as a 1 GiB platform thread), so the launcher and test JVMs pass `-Xss1g`; without it, 1 GiB platform
+   threads as before. Conformance `threads/virtual` (deep recursion on a thread, 10,000 threads). Benchmarks
+   unchanged.
 2. **Cancellation and scopes** (`std::thread`): flag, propagation, `cancel`, `cancelled`, `check`,
    `scope`/`Scope`, `CancelledErr`; `join`/`sleep` signatures; `TimedOutErr` to `std::time`.
 3. **`std::sync`**: `Semaphore`, `Sender`/`Receiver`, `Channel` (Threebolt-owned, lock + wait queues).
