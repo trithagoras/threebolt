@@ -1,0 +1,87 @@
+// hub.3b — the chat server: one broadcaster, two threads per guest (reader and writer).
+
+use std::io::IoErr;
+use std::net::{TcpListener, TcpStream};
+use std::sync::{Atomic, Channel, Mutex};
+use std::thread;
+use std::thread::CancelledErr;
+use pow;
+
+/// One line said in the room.
+struct Said {
+    let from: i64;
+    let text: str;
+}
+
+pub class Hub {
+    /// Every guest's outbox, by guest id.
+    let clients: Mutex<Map<i64, Channel<str>>> = Mutex::new([:] as Map<i64, Channel<str>>);
+    /// Everything said, waiting to be fanned out.
+    let inbox: Channel<Said> = Channel<Said>::new(1024);
+    let next_id: Atomic<i64> = Atomic<i64>::new(0);
+    pub let messages: Atomic<u64> = Atomic<u64>::new(0);
+
+    pub fn new() -> Self => {};
+
+    /// Serves until the listener closes (open sessions finish first) or this thread is cancelled
+    /// (open sessions are cancelled).
+    pub fn run(self, mut listener: TcpListener, max_connections: usize) -> () | IoErr | CancelledErr {
+        return thread::scope((s) => {
+            // Lives as long as the server. When `serve` returns, every session has ended, so closing
+            // the inbox lets the broadcaster fan out what is left and stop. (If this thread is
+            // cancelled instead, the broadcaster is cancelled along with it.)
+            s.spawn(() => self.broadcast());
+            defer self.inbox.close();
+            // Beyond `max_connections`, serve stops accepting until a guest leaves (the kernel's
+            // backlog holds the rest). Each handler runs on its own thread.
+            return listener.serve((conn) => { _ = self.session(conn); }, max_connections: max_connections);
+        });
+    }
+
+    /// Fans each line out to every other guest. A guest whose outbox is full misses the line,
+    /// rather than one slow reader stalling the whole room.
+    fn broadcast(self) -> () | CancelledErr {
+        for said in self.inbox {                          // ends when the inbox closes
+            let said = said?;                             // or stops here when cancelled
+            let outboxes = self.clients.lock<[Channel<str>]>(g => [out for (id, out) in g.value if id != said.from]);
+            for out in outboxes { out.try_send(said.text); }
+            self.messages.fetch_add(1);
+        }
+    }
+
+    /// One guest: prove you did some work, then chat until you leave.
+    fn session(self, mut conn: TcpStream) -> () | IoErr | CancelledErr {
+        let id = self.next_id.fetch_add(1);
+        let challenge = f"guest{id}";
+        conn.write_line(f"prove {challenge}")?;
+        let answer = conn.read_line()?;
+        if answer == null || !pow::valid(challenge, answer) {
+            conn.write_line("bad proof, bye")?;
+            return;
+        }
+
+        let outbox = Channel<str>::new(64);
+        self.clients.lock((mut g) => { g.value.set(id, outbox); });
+        defer self.clients.lock((mut g) => { g.value.remove(id); });
+        conn.write_line(f"welcome, {challenge}")?;
+
+        return thread::scope((s) => {
+            // However the reader leaves, closing the outbox lets the writer flush it and stop.
+            defer outbox.close();
+            // Writer: drains the outbox onto the socket.
+            s.spawn(() => {
+                for line in outbox {                      // ends when the outbox closes
+                    if line is CancelledErr { return; }   // or when the server is cancelled
+                    if conn.write_line(line) is Err { return; }
+                }
+            });
+            // Reader (this thread). When the server is cancelled, the blocked read yields
+            // CancelledErr and `?` leaves.
+            for line in conn.lines() {
+                let line = line?;
+                if line == "/quit" { return; }
+                self.inbox.send(Said { from: id, text: f"{challenge}: {line}" })?;
+            }
+        });
+    }
+}

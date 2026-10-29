@@ -10,7 +10,10 @@ implementation), and strike it here.
 1. Runtime boundary: move std into Threebolt over a small, documented intrinsic layer; backend prerequisites.
 2. Projects and packages: manifest, workspaces, path dependencies, multiple executables, `internal`, `pub use`.
 3. Standard library expansion, one module per session: `time` → `env`/`process` → `net`.
-4. JVM bytecode backend, when benchmarks show a need or the language has settled.
+4. Concurrency (spec'd 2026-10-30, §6 below): virtual threads, scopes, cancellation, channels, `select`.
+   Moved ahead of the backend 2026-10-30: nearly all of it is front end and Threebolt std, shared by both
+   backends, and its breaking signature changes should land before a second backend exists.
+5. JVM bytecode backend, when benchmarks show a need or the language has settled.
 
 The small open decisions (§5) are deferred, except 5.2, which is decided and lands in task 1.
 
@@ -249,7 +252,7 @@ GC for free, FFM interop unchanged, and Java intrinsics callable directly. Rejec
 (an interpreter loop on the JVM is slower than generated classes) and native code via LLVM/C (needs its own
 GC and runtime; far beyond 1.0).
 
-**Timing: after 1–3**, when the task-1 benchmarks show performance hurting or the language has settled.
+**Timing: after 1–3 and concurrency (§6)**, when the task-1 benchmarks show performance hurting or the language has settled.
 Building it earlier means implementing every language change twice (interpreter and codegen) unless the
 interpreter is retired. Known hard parts: struct value semantics (no value types on the JVM: explicit copies),
 generics under erasure, unions boxed as `Object`, closures, panics, and intrinsics that call back into
@@ -283,3 +286,22 @@ reported unused**.
 - **Recommendation:** add one informative sentence to spec §1 (identifiers) so it is not a hidden rule;
   keep the warning list itself in `PLAN.md`.
 - Also: should `///` that documents nothing (inside a body, before a statement) warn? Cheap to add.
+
+## 6. Concurrency — **spec'd 2026-10-30; not implemented**
+
+Spec §1 (contextual `select`), §6.4 (`for p? in`), §7.14 (`select`), §13.4, §16; rationale, JVM mapping and
+risks in `docs/plans/concurrency.md`. 0.1 still implements the old §13.4 (platform threads, `join() -> R`,
+`sleep -> ()`). Suggested steps, each with conformance cases and an errors case:
+1. **Virtual threads**: `Threads.startThread` on `Thread.ofVirtual()`. Virtual thread stacks are capped by
+   `-Xss` (measured 2026-10-30: ~38K frames by default, ~44M with `-Xss1g`, as a 1 GiB platform thread), so
+   the launcher and test JVMs pass `-Xss1g`.
+2. **Cancellation and scopes** (`std::thread`): flag, propagation, `cancel`, `cancelled`, `check`,
+   `scope`/`Scope`, `CancelledErr`; `join`/`sleep` signatures; `TimedOutErr` to `std::time`.
+3. **`std::sync`**: `Semaphore`, `Sender`/`Receiver`, `Channel` (Threebolt-owned, lock + wait queues).
+4. **`std::io`/`std::net` cancellation points**: `CancelledErr` in every result, entry checks, chunked file
+   loops, socket interruption; `serve` with `max_connections` and its own scope.
+5. **`for p? in e`**: grammar, AST, checker, interpreter, LSP, TextMate grammar (VS Code bump).
+6. **`select`**: contextual keyword in the grammar, case forms in the checker, runtime intrinsic.
+   Then switch the spec's §7.14 snippet fence from `rust` to `rs` so `ParserAcceptanceTest` covers it,
+   and put the `for line? in` example back in §6.4's loop block.
+7. Make `examples/chatroom/` type-check and run, using `for x? in`.
