@@ -417,7 +417,7 @@ pub class TcpStream : Read, Write {
         return TcpStream::of(h, a);
     }
 
-    fn of(h: i64, fallback: SocketAddr) -> TcpStream {
+    internal fn of(h: i64, fallback: SocketAddr) -> TcpStream {
         let peer = addr_of(h, true, fallback);
         return TcpStream { io: Buffered::new(h, peer.to_str(), failure: failure), local: addr_of(h, false, fallback), peer };
     }

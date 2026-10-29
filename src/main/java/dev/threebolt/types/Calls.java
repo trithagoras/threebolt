@@ -101,7 +101,11 @@ final class Calls {
             case Exprs.FnTarget f -> {
                 if (c.completer != null) c.completer.call(e, f.candidates());
                 var bound = resolve(f.candidates(), null, e.args(), f.typeArgs(), e.span(), f.name());
-                if (bound != null) c.index.call(p.segments().getLast().name().span(), bound.cand().fn(), env(bound));
+                if (bound != null) {
+                    var name = p.segments().getLast().name().span();
+                    c.index.call(name, bound.cand().fn(), env(bound));
+                    checkMethodAccess(bound.cand().fn(), name);
+                }
                 yield bound == null ? Exprs.error() : build(bound, null, null, e.span());
             }
             case Exprs.TypeTarget t -> {
@@ -393,6 +397,7 @@ final class Calls {
             return Exprs.error();
         }
         var f = chosen.fn();
+        checkMethodAccess(f, span);
         if (!f.isStatic() || chosen.kind() != Ir.CallKind.DIRECT || f.isGetter()) {
             diag.error(Code.WRONG_KIND, span, "only functions can be used as values; wrap methods in a lambda");
             return Exprs.error();
