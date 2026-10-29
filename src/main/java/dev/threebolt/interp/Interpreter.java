@@ -928,10 +928,14 @@ public final class Interpreter implements Callbacks {
     private Cell staticCell(StaticInfo s) {
         var cell = statics.get(s);
         if (cell != null) return cell;
-        try {
-            staticInit.lockInterruptibly();
-        } catch (InterruptedException e) {
-            throw new Abort();
+        while (true) {
+            try {
+                staticInit.lockInterruptibly();
+                break;
+            } catch (InterruptedException e) {
+                // Ending the process, or cancellation (§13.4), which this wait ignores.
+                checkAbort();
+            }
         }
         try {
             cell = statics.get(s);

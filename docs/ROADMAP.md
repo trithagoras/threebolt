@@ -297,8 +297,11 @@ risks in `docs/plans/concurrency.md`. 0.1 still implements the old §13.4 (platf
    as a 1 GiB platform thread), so the launcher and test JVMs pass `-Xss1g`; without it, 1 GiB platform
    threads as before. Conformance `threads/virtual` (deep recursion on a thread, 10,000 threads). Benchmarks
    unchanged.
-2. **Cancellation and scopes** (`std::thread`): flag, propagation, `cancel`, `cancelled`, `check`,
-   `scope`/`Scope`, `CancelledErr`; `join`/`sleep` signatures; `TimedOutErr` to `std::time`.
+2. ~~**Cancellation and scopes**~~ — done: `std::thread` `CancelledErr`, `cancel`, `cancelled`, `check`,
+   `finished`, `join(timeout)`, `scope`/`Scope`; `join`/`sleep` return `| CancelledErr`; `TimedOutErr : Err` in
+   `std::time`. Conformance `threads/cancel`, `scopes`, `scope_ended`, `cancel_errors`. Left for step 4: `std::net`
+   still has its own `TimedOutErr : NetErr` (moving it changes the socket result types), and files are
+   `FileChannel`s, which an interrupt (a `cancel`) closes.
 3. **`std::sync`**: `Semaphore`, `Sender`/`Receiver`, `Channel` (Threebolt-owned, lock + wait queues).
 4. **`std::io`/`std::net` cancellation points**: `CancelledErr` in every result, entry checks, chunked file
    loops, socket interruption; `serve` with `max_connections` and its own scope.

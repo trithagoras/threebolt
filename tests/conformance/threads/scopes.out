@@ -1,0 +1,8 @@
+waited for 4 (+2): total 110
+before cancel: false
+cancel: first false, running true, later true, scope true, owner false
+straggler: cleanup
+straggler: true true
+late scope cancelled: true
+grandchild cancelled: true
+detached cancelled: false

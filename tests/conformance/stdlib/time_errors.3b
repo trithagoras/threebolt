@@ -7,5 +7,5 @@ fn main() {
     let a = t + Duration::ZERO;
     let b = t - t;
     let c = Duration::ZERO * 2;
-    thread::sleep(20);
+    _ = thread::sleep(20);
 }

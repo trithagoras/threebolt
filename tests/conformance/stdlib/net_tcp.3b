@@ -36,7 +36,7 @@ fn main() -> () | Err {
     println(str::from_utf8(client.read_bytes(6)?));
     client.shutdown(Shutdown::Write)?;
     println(client.read_line());
-    println(server.join());
+    println(server.join()?);
     client.close();
     client.close();
     println(client.closed);
@@ -48,7 +48,7 @@ fn main() -> () | Err {
         let mut conn = listener.accept();
         if conn is IoErr { return; }
         defer conn.close();
-        std::thread::sleep(Duration::from_millis(300));
+        _ = std::thread::sleep(Duration::from_millis(300));
         _ = conn.write_line("late");
         _ = conn.read_line();
     });
@@ -59,7 +59,7 @@ fn main() -> () | Err {
     c.set_read_timeout(null)?;
     println(c.read_line());
     c.close();
-    server.join();
+    server.join()?;
 
     // The whole input, until the peer closes.
     let server = Thread::spawn(() => {
@@ -72,7 +72,7 @@ fn main() -> () | Err {
     println(c.read_lines()?);
     println(c.read_line());
     c.close();
-    server.join();
+    server.join()?;
 
     // Nothing listens once the listener is closed.
     listener.close();

@@ -1,0 +1,17 @@
+// §13.4: cancellation points yield `CancelledErr`, which must not be discarded silently (§6.1);
+// a scope's own machinery is not public.
+use std::thread;
+use std::thread::{Scope, Thread};
+use std::time::Duration;
+
+fn main() {
+    let t = Thread::spawn(() => 1);
+    t.join();
+    t.join(Duration::from_secs(1));
+    thread::sleep(Duration::from_millis(1));
+    thread::check();
+    let n: i32 = t.join();
+    let s = Scope::open();
+    s.close();
+    t.finished = true;
+}

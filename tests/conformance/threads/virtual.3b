@@ -7,10 +7,10 @@ fn depth(n: i32) -> i32 {
     return 1 + depth(n - 1);
 }
 
-fn main() {
+fn main() -> () | Err {
     // Deep recursion on `main` and on a spawned thread.
     println(depth(15_000));
-    println(Thread::spawn(() => depth(15_000)).join());
+    println(Thread::spawn(() => depth(15_000)).join()?);
 
     // Ten thousand threads at once.
     let counter = Atomic::new(0);
@@ -18,6 +18,6 @@ fn main() {
     for _ in 0..10_000 {
         workers.push(Thread::spawn(() => { _ = counter.fetch_add(1); }));
     }
-    for w in workers { w.join(); }
+    for w in workers { w.join()?; }
     println(counter.load());
 }

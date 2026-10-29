@@ -3,7 +3,7 @@ use std::time;
 use std::time::{Duration, Instant, Timestamp};
 use std::thread;
 
-fn main() {
+fn main() -> () | Err {
     // Display: the largest unit with a whole part, decimals without trailing zeros.
     let ds = [
         Duration::ZERO, Duration::from_nanos(12), Duration::from_micros(3), Duration::from_nanos(3_250),
@@ -34,8 +34,8 @@ fn main() {
 
     // Instant: monotonic; sleep waits at least the duration.
     let start = Instant::now();
-    thread::sleep(Duration::from_millis(20));
-    thread::sleep(Duration::from_secs(-1));
+    thread::sleep(Duration::from_millis(20))?;
+    thread::sleep(Duration::from_secs(-1))?;
     let later = Instant::now();
     println(later.since(start) >= Duration::from_millis(20));
     println(start.since(later).is_negative());
@@ -51,7 +51,7 @@ fn main() {
 
     // measure returns the result and how long it took.
     let (r, took) = time::measure(() => {
-        thread::sleep(Duration::from_millis(5));
+        _ = thread::sleep(Duration::from_millis(5));
         return 42;
     });
     println(f"{r} {took >= Duration::from_millis(5)}");

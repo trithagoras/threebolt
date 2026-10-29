@@ -112,6 +112,13 @@ pub struct Timestamp : Ord {
     pub fn cmp(self, o: Self) -> Ordering => self.nanos.cmp(o.nanos);
 }
 
+/// What a wait with a timeout yields when the timeout passes: joins and channels (§13.4), and
+/// sockets (`std::net`).
+pub class TimedOutErr : Err {
+    pub fn new() -> Self => {};
+    pub fn message(self) -> str => "timed out";
+}
+
 /// Calls `f` and returns its result with how long it took.
 pub fn measure<R>(f: fn() -> R) -> (R, Duration) {
     let start = Instant::now();
