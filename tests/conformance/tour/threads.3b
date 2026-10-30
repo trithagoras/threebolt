@@ -1,0 +1,32 @@
+use std::io::ClosedErr;
+use std::thread;
+use std::thread::CancelledErr;
+use std::sync::{Channel, Mutex, Sender};
+
+fn produce(out: Sender<i32>, n: i32) -> () | ClosedErr | CancelledErr {
+    for i in 1..=n { out.send(i)?; }
+    out.close();
+}
+
+fn main() -> () | Err {
+    // A detached thread, joined for its result.
+    let t = thread::Thread::spawn(() => 6 * 7);
+    println(t.join()?);
+
+    // Channels connect threads: unbuffered by default, so each send waits for a receive.
+    let ch = Channel<i32>::new();
+    let p = thread::Thread::spawn(() => produce(ch, 3));
+    let mut sum = 0;
+    for x? in ch { sum += x; }
+    p.join()?;                           // unions flatten: one `?` covers the join and the thread
+    println(f"sum {sum}");
+
+    // Scoped threads finish before `scope` returns, so they may use the caller's locals.
+    let counter = Mutex::new(0);
+    thread::scope(s => {
+        for _ in 0..4 {
+            s.spawn(() => counter.lock((mut g) => g.value += 1));
+        }
+    });
+    println(counter.lock(g => g.value));
+}
