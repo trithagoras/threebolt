@@ -47,7 +47,10 @@ import java.util.concurrent.atomic.AtomicLong;
 final class Io {
     // Error codes; keep in step with the `E_*` constants in std/io.3b.
     static final int OTHER = 1, NOT_FOUND = 2, PERMISSION = 3, EXISTS = 4, IS_DIR = 5, NOT_DIR = 6, NOT_EMPTY = 7,
-            BAD_HANDLE = 8, CONN_REFUSED = 9, CONN_RESET = 10, TIMED_OUT = 11, ADDR_IN_USE = 12, UNKNOWN_HOST = 13;
+            BAD_HANDLE = 8, CONN_REFUSED = 9, CONN_RESET = 10, TIMED_OUT = 11, ADDR_IN_USE = 12, UNKNOWN_HOST = 13,
+            CANCELLED = 14;
+    /** How many bytes a file write sends between cancellation checks (§16: long writes check between chunks). */
+    private static final int WRITE_CHUNK = 1 << 16;
     // `sys_open` flags; keep in step with the `O_*` constants in std/io.3b.
     private static final long READ = 1, WRITE = 2, APPEND = 4, CREATE = 8, TRUNCATE = 16, CREATE_NEW = 32;
 
@@ -83,6 +86,10 @@ final class Io {
     Object call(String name, Object[] a) {
         if (name.equals("sys_error")) return Values.Str.of(lastError.get());
         if (name.equals("sys_temp_dir")) return Values.Str.of(System.getProperty("java.io.tmpdir").replaceAll("(?<=.)[/\\\\]+$", ""));
+        // Every call but the standard streams' is a cancellation point (§13.4); `print` and `readln` use those.
+        if (!name.equals("sys_close") && !name.equals("sys_kind") && rt.cancelled() && !standardStream(name, a)) {
+            return new Int(Prim.I64, cancelled());
+        }
         long r = switch (name) {
             case "sys_open" -> open(str(a[0]), num(a[1]));
             case "sys_close" -> close(num(a[0]));
@@ -109,6 +116,28 @@ final class Io {
             default -> throw new IllegalStateException("unknown intrinsic io." + name);
         };
         return new Int(name.equals("sys_kind") ? Prim.I32 : Prim.I64, r);
+    }
+
+    /** A call on handle 0, 1 or 2, which only `File`'s methods treat as a cancellation point. */
+    private static boolean standardStream(String name, Object[] a) {
+        return switch (name) {
+            case "sys_read", "sys_write", "sys_write_str", "sys_flush", "sys_seek" -> num(a[0]) <= 2;
+            default -> false;
+        };
+    }
+
+    private long cancelled() {
+        return fail(CANCELLED, "cancelled");
+    }
+
+    /**
+     * {@code action} on a file: it is not interrupted by cancellation, as an interrupt would close the
+     * channel (a system call in progress finishes, §13.4); on a cancelled thread it does not run.
+     */
+    private long onFile(IoAction action) {
+        long[] r = new long[1];
+        if (!rt.uninterruptibly(() -> r[0] = attempt(null, action))) return cancelled();
+        return r[0];
     }
 
     private static String str(Object v) {
@@ -142,6 +171,8 @@ final class Io {
     }
 
     private long fail(Exception e, String path) {
+        // On a cancelled thread a socket operation fails because the interrupt closed it (§13.4).
+        if (rt.cancelled()) return cancelled();
         String reason = reason(e);
         if (reason == null) reason = e.getClass().getSimpleName();
         return fail(code(e), path == null || reason.contains(path) ? reason : reason + ": " + path);
@@ -233,8 +264,9 @@ final class Io {
         } else {
             var f = handle(h);
             if (f == null) return badHandle();
-            n = attempt(null, () -> switch (f) {
-                case FileHandle file -> Math.max(file.channel.read(ByteBuffer.wrap(bytes)), 0);
+            if (f instanceof FileHandle file) n = onFile(() -> Math.max(file.channel.read(ByteBuffer.wrap(bytes)), 0));
+            else n = attempt(null, () -> switch (f) {
+                case FileHandle file -> throw new IllegalStateException();
                 case TcpHandle tcp -> Math.max(tcp.in.read(bytes), 0);
                 case UdpHandle udp -> receive(udp, bytes, null);
                 case ListenerHandle l -> fail(OTHER, "cannot read a listener");
@@ -264,15 +296,9 @@ final class Io {
         }
         var f = handle(h);
         if (f == null) return badHandle();
+        if (f instanceof FileHandle file) return writeFile(file, bytes);
         return attempt(null, () -> switch (f) {
-            case FileHandle file -> {
-                synchronized (file) {
-                    if (file.append) file.channel.position(file.channel.size());
-                    var buffer = ByteBuffer.wrap(bytes);
-                    while (buffer.hasRemaining()) file.channel.write(buffer);
-                    yield bytes.length;
-                }
-            }
+            case FileHandle file -> throw new IllegalStateException();
             case TcpHandle tcp -> {
                 var buffer = ByteBuffer.wrap(bytes);
                 while (buffer.hasRemaining()) tcp.channel.write(buffer);
@@ -281,6 +307,24 @@ final class Io {
             case UdpHandle udp -> udp.channel.write(ByteBuffer.wrap(bytes));
             case ListenerHandle l -> fail(OTHER, "cannot write a listener");
         });
+    }
+
+    /** Writes {@code bytes} a chunk at a time, stopping between chunks if the thread is cancelled. */
+    private long writeFile(FileHandle file, byte[] bytes) {
+        synchronized (file) {
+            var buffer = ByteBuffer.wrap(bytes);
+            do {
+                long r = onFile(() -> {
+                    if (file.append) file.channel.position(file.channel.size());
+                    var chunk = buffer.slice(buffer.position(), Math.min(WRITE_CHUNK, buffer.remaining()));
+                    while (chunk.hasRemaining()) file.channel.write(chunk);
+                    buffer.position(buffer.position() + chunk.capacity());
+                    return 0;
+                });
+                if (r < 0) return r;
+            } while (buffer.hasRemaining());
+            return bytes.length;
+        }
     }
 
     private long flush(long h) {
@@ -297,7 +341,7 @@ final class Io {
             if (h <= 2) return fail(OTHER, "cannot seek a standard stream");
             return handle(h) == null ? badHandle() : fail(OTHER, "cannot seek a socket");
         }
-        return attempt(null, () -> {
+        return onFile(() -> {
             synchronized (f) {
                 long base = switch (whence) {
                     case 1 -> f.channel.position();
@@ -316,6 +360,7 @@ final class Io {
     /** The `std::net` intrinsics. Addresses cross as text: an IP address, or `ip:port` / `[ip]:port`. */
     Object callNet(String name, Object[] a) {
         if (name.equals("sys_addr")) return Values.Str.of(address(num(a[0]), a[1] == Boolean.TRUE));
+        if (rt.cancelled()) return new Int(Prim.I64, cancelled());
         long r = switch (name) {
             case "sys_tcp_connect" -> attempt(null, () -> {
                 var ch = SocketChannel.open();

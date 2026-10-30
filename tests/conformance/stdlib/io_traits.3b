@@ -1,7 +1,10 @@
 // std::io's Read and Write traits (§16): File through trait references and bounds, and user
-// types implementing them, getting `lines`, `read_lines`, `write_line` and `flush` for free.
+// types implementing them, getting `lines`, `read_lines`, `write_line` and `flush` for free. An
+// implementation may return less than the trait (§4.9): these never time out or get cancelled.
 use std::io;
 use std::io::{File, Read, Write, IoErr, ModeErr};
+use std::thread::CancelledErr;
+use std::time::TimedOutErr;
 
 /// Reads from a string, a line at a time.
 class StrReader : Read {
@@ -32,14 +35,14 @@ class Sink : Write {
     pub fn write_bytes(mut self, bytes: [u8]) -> () | IoErr => self.write(str::from_utf8(bytes));
 }
 
-fn copy_lines(mut from: Read, mut to: Write) -> () | IoErr {
+fn copy_lines(mut from: Read, mut to: Write) -> () | IoErr | TimedOutErr | CancelledErr {
     for line in from.lines() {
         to.write_line(f"> {line?}")?;
     }
     to.flush()?;
 }
 
-fn count_lines<R: Read>(mut r: R) -> usize | IoErr => r.read_lines()?.len;
+fn count_lines<R: Read>(mut r: R) -> usize | IoErr | TimedOutErr | CancelledErr => r.read_lines()?.len;
 
 fn main() -> () | Err {
     let sink = Sink::new();

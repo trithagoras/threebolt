@@ -1,0 +1,83 @@
+// §13.4, §16: socket operations are cancellation points; cancelling a blocked one wakes it and
+// closes the socket. `serve` runs handlers in its own scope: closing the listener stops it
+// gracefully, cancelling its thread stops it at once, and `max_connections` limits the handlers.
+use std::io::{ClosedErr, IoErr};
+use std::net::{TcpListener, TcpStream, TimedOutErr};
+use std::thread;
+use std::thread::{CancelledErr, Thread};
+use std::sync::Atomic;
+use std::time::Duration;
+
+fn upper(mut conn: TcpStream) -> () | IoErr | TimedOutErr | CancelledErr {
+    for line in conn.lines() { conn.write_line(line?.upper())?; }
+}
+
+fn main() -> () | Err {
+    // A blocked accept is woken, and the listener closed.
+    let mut listener = TcpListener::bind("127.0.0.1:0")?;
+    let acceptor = Thread::spawn(() => listener.accept());
+    _ = thread::sleep(Duration::from_millis(50));
+    acceptor.cancel();
+    println(f"accept: {acceptor.join() is CancelledErr}, then {listener.accept() is ClosedErr}");
+
+    // A blocked read is woken, and the stream closed.
+    let mut listener = TcpListener::bind("127.0.0.1:0")?;
+    let addr = listener.local_addr;
+    let mut client = TcpStream::connect(addr)?;
+    let mut conn = listener.accept()?;
+    let reader = Thread::spawn(() => conn.read_line());
+    _ = thread::sleep(Duration::from_millis(50));
+    reader.cancel();
+    println(f"read: {reader.join() is CancelledErr}, then {conn.read_line() is ClosedErr}");
+    client.close();
+    conn.close();
+
+    // serve, gracefully: closing the listener lets the running handlers finish.
+    let finished = Atomic::new(0);
+    let server = Thread::spawn(() => listener.serve((conn) => {
+        _ = upper(conn);
+        _ = finished.fetch_add(1);
+    }));
+    let mut c = TcpStream::connect(addr)?;
+    c.write_line("graceful")?;
+    println(c.read_line()?);
+    listener.close();
+    _ = thread::sleep(Duration::from_millis(50));
+    println(f"still running: {!server.finished}");
+    c.close();                                 // the handler's loop ends; serve returns
+    let served = server.join();
+    println(f"serve: {served is ()}, handlers finished: {finished.load()}");
+
+    // serve, abruptly: cancelling its thread cancels the handlers blocked in their reads.
+    let mut listener = TcpListener::bind("127.0.0.1:0")?;
+    let addr = listener.local_addr;
+    let outcome = Atomic::new(0);
+    let server = Thread::spawn(() => listener.serve((conn) => {
+        if upper(conn) is CancelledErr { _ = outcome.fetch_add(1); }
+    }));
+    let mut c = TcpStream::connect(addr)?;
+    c.write_line("abrupt")?;
+    println(c.read_line()?);
+    server.cancel();
+    println(f"serve: {server.join() is CancelledErr}, handlers cancelled: {outcome.load()}");
+    println(f"client sees the end: {c.read_line()}");
+    c.close();
+
+    // max_connections: a second client waits in the backlog until the first leaves.
+    let mut listener = TcpListener::bind("127.0.0.1:0")?;
+    let addr = listener.local_addr;
+    let server = Thread::spawn(() => listener.serve((conn) => { _ = upper(conn); }, max_connections: 1));
+    let mut first = TcpStream::connect(addr)?;
+    first.write_line("first")?;
+    println(first.read_line()?);
+    let mut second = TcpStream::connect(addr)?;
+    second.write_line("second")?;
+    second.set_read_timeout(Duration::from_millis(100))?;
+    println(f"second waits: {second.read_line() is TimedOutErr}");
+    first.close();
+    second.set_read_timeout(null)?;
+    println(second.read_line()?);
+    second.close();
+    listener.close();
+    server.join()?;
+}

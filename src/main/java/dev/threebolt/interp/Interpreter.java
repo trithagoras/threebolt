@@ -61,6 +61,7 @@ public final class Interpreter implements Callbacks {
     final PrintStream out;
     final PrintStream err;
     private final Natives natives;
+    private final Threads threads;
     private final Ffi ffi = new Ffi(this);
     /** The `Done` sentinel (§16). */
     final Obj done;
@@ -85,7 +86,8 @@ public final class Interpreter implements Callbacks {
         this.stdin = in;
         this.out = out;
         this.err = err;
-        this.natives = new Natives(this, ffi, new Threads(this), new Io(this));
+        this.threads = new Threads(this);
+        this.natives = new Natives(this, ffi, threads, new Io(this));
         this.done = new Obj(ts.done, List.of(), new Object[0]);
     }
 
@@ -278,6 +280,16 @@ public final class Interpreter implements Callbacks {
         checkAbort();
         t.start();
         return t;
+    }
+
+    @Override
+    public boolean cancelled() {
+        return threads.currentCancelled();
+    }
+
+    @Override
+    public boolean uninterruptibly(Runnable op) {
+        return threads.uninterruptibly(op);
     }
 
     /** The stack the evaluator needs: it recurses deeply. */

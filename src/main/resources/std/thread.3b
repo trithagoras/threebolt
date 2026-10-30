@@ -7,9 +7,8 @@
 use std::time::{Duration, TimedOutErr};
 
 /// What a cancellation point yields on a cancelled thread.
-pub class CancelledErr : Err {
-    pub fn new() -> Self => {};
-    pub fn message(self) -> str => "cancelled";
+pub class CancelledErr : MsgErr {
+    pub fn new() -> Self => { ..MsgErr::new("cancelled") };
 }
 
 // What `Thread::wait` reports.

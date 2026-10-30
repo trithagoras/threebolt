@@ -1,0 +1,64 @@
+// §13.4, §16: file operations are cancellation points; the console functions are not; a
+// cancelled thread's file stays open and usable by others (an operation in progress finishes).
+use std::io;
+use std::thread;
+use std::thread::{CancelledErr, Thread};
+use std::sync::Atomic;
+
+fn wait_for(flag: Atomic<bool>) {
+    while !flag.load() {}
+}
+
+fn main() -> () | Err {
+    let dir = io::temp_dir() + "/threebolt-conformance-io-cancel";
+    io::create_dirs(dir)?;
+    let p = f"{dir}/f.txt";
+    io::write_text(p, "one\ntwo\n")?;
+
+    // On a cancelled thread every file operation yields CancelledErr on entry, even opening, and
+    // without touching the file; printing still works, and close is not a cancellation point.
+    let mut f = io::open(p, "a+")?;
+    let go = Atomic::new(false);
+    let t = Thread::spawn(() => {
+        wait_for(go);
+        println(f"open {io::open(p) is CancelledErr}, read_text {io::read_text(p) is CancelledErr}");
+        println(f"read_line {f.read_line() is CancelledErr}, write {f.write("x") is CancelledErr}");
+        println(f"exists {io::exists(p)}, size {io::file_size(p) is CancelledErr}, list {io::list_dir(dir) is CancelledErr}");
+        println(f"stdout {io::stdout().write("") is CancelledErr}, flush {io::stdout().flush() is CancelledErr}");
+        print("print still works\n");
+        return f.closed;
+    });
+    t.cancel();
+    go.store(true);
+    println(f"closed by the thread: {t.join()?}");
+    f.write("three\n")?;                       // the main thread's file still works
+    f.close();
+    println(io::read_lines(p)?);
+
+    // A writer cancelled in the middle stops between chunks; the file is not closed under it.
+    let mut out = io::open(p, "w")?;
+    let big = "x".repeat(100_000);
+    let started = Atomic::new(false);
+    let writer = Thread::spawn(() => {
+        started.store(true);
+        loop { out.write(big)?; }
+    });
+    wait_for(started);
+    writer.cancel();
+    println(f"writer: {writer.join() is CancelledErr}, file open: {!out.closed}");
+    out.write("\nend\n")?;
+    out.close();
+    println(io::read_lines(p)?.last);
+
+    // Whole-file helpers check too.
+    let reader = Thread::spawn(() => {
+        while !thread::cancelled() {}
+        return (io::lines(p) is CancelledErr, io::read_bytes(p) is CancelledErr, io::copy(p, p + ".2") is CancelledErr);
+    });
+    reader.cancel();
+    let (lines, bytes, copied) = reader.join()?;
+    println(f"helpers: {lines} {bytes} {copied}");
+
+    io::remove(p)?;
+    io::remove(dir)?;
+}

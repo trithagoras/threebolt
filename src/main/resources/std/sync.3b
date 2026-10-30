@@ -60,8 +60,8 @@ pub class Semaphore {
     }
 
     /// Takes a permit, waiting while none is free; false if the thread is cancelled first or meanwhile.
-    fn acquire(self) -> bool;
-    fn release(self);
+    internal fn acquire(self) -> bool;
+    internal fn release(self);
 }
 
 /// The sending side of a channel. Only senders close.

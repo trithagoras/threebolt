@@ -1,6 +1,6 @@
 net_tcp_errors.3b:6:32: error[E0200]: expected 'SocketAddr | str', found 'i32'
-net_tcp_errors.3b:8:16: error[E0214]: cannot call 'read_line' on a value of union type 'TcpStream | IoErr': no union-safe trait that every member implements has it (§3.4); narrow it first (§9)
+net_tcp_errors.3b:8:16: error[E0214]: cannot call 'read_line' on a value of union type 'TcpStream | IoErr | CancelledErr': no union-safe trait that every member implements has it (§3.4); narrow it first (§9)
 net_tcp_errors.3b:10:24: error[E0200]: expected 'Duration | null', found 'i32'
-net_tcp_errors.3b:11:5: error[E0211]: this value of type '() | IoErr' may be an error; handle it, propagate it with `?`, or discard it with `_ = ...;`
+net_tcp_errors.3b:11:5: error[E0211]: this value of type '() | IoErr | TimedOutErr | CancelledErr' may be an error; handle it, propagate it with `?`, or discard it with `_ = ...;`
 net_tcp_errors.3b:12:13: error[E0203]: 'connect' takes 1 positional argument, found 2 (optional parameters are named-only)
 net_tcp_errors.3b:13:5: error[E0302]: cannot assign to this expression

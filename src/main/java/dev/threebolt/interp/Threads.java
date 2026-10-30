@@ -44,6 +44,8 @@ final class Threads {
         /** Set by the thread itself when it starts (null until then; cancelling it needs no wake-up). */
         volatile Thread thread;
         volatile boolean cancelled;
+        /** In a region that cancelling must not interrupt ({@link #uninterruptibly}). */
+        volatile boolean shielded;
         volatile Object result;
         final CountDownLatch done = new CountDownLatch(1);
         /** The scope that owns it; null for a detached thread (and `main`). */
@@ -183,6 +185,29 @@ final class Threads {
         return current.get().cancelled;
     }
 
+    /** Cancels the current thread when run, from any thread, as `Thread::cancel` does (for tests). */
+    Runnable cancellerOfCurrent() {
+        var me = current.get();
+        return () -> {
+            synchronized (tree) {
+                cancel(me);
+            }
+        };
+    }
+
+    /** {@link Callbacks#uninterruptibly}. */
+    boolean uninterruptibly(Runnable op) {
+        var me = current.get();
+        me.shielded = true;
+        try {
+            if (me.cancelled) return false;
+            op.run();
+            return true;
+        } finally {
+            me.shielded = false;
+        }
+    }
+
     /** Takes a permit, waiting while none is free; false if the current thread is cancelled first or meanwhile. */
     private boolean acquire(java.util.concurrent.Semaphore sem) {
         var me = current.get();
@@ -226,8 +251,10 @@ final class Threads {
     private void cancel(Strand s) {
         if (s.cancelled) return;
         s.cancelled = true;
+        // The flag is set before `shielded` is read, and the thread sets `shielded` before reading the
+        // flag, so a thread entering a shielded region either sees the flag or is never interrupted.
         var t = s.thread;
-        if (t != null) t.interrupt();
+        if (t != null && !s.shielded) t.interrupt();
         for (var scope : s.owned) cancel(scope);
     }
 

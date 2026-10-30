@@ -114,9 +114,8 @@ pub struct Timestamp : Ord {
 
 /// What a wait with a timeout yields when the timeout passes: joins and channels (§13.4), and
 /// sockets (`std::net`).
-pub class TimedOutErr : Err {
-    pub fn new() -> Self => {};
-    pub fn message(self) -> str => "timed out";
+pub class TimedOutErr : MsgErr {
+    pub fn new() -> Self => { ..MsgErr::new("timed out") };
 }
 
 /// Calls `f` and returns its result with how long it took.

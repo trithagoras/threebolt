@@ -305,8 +305,12 @@ risks in `docs/plans/concurrency.md`. 0.1 still implements the old §13.4 (platf
 3. ~~**`std::sync`**~~ — done: `Semaphore`, `Sender`/`Receiver`, `Channel` over `interp/Channels.java` (per-channel
    lock, buffer and wait queues; a wait on several cases is won by one compare-and-set, ready for `select`).
    Conformance `threads/channels`, `channel_errors`; unit `ChannelsTest`.
-4. **`std::io`/`std::net` cancellation points**: `CancelledErr` in every result, entry checks, chunked file
-   loops, socket interruption; `serve` with `max_connections` and its own scope.
+4. ~~**`std::io`/`std::net` cancellation points**~~ — done: `| CancelledErr` in every result; `TimedOutErr` moved to
+   `std::time` (re-exported by `std::net`). **Decided 2026-10-30:** `Read`/`Write` results include `TimedOutErr`, and
+   trait implementations may return less (§4.9, including `Iterator<A>` for `Iterator<B>`), so `File`'s members leave
+   it out; `CancelledErr`/`TimedOutErr` are `MsgErr`s (printable). Files are shielded from cancellation's interrupt
+   (`Callbacks.uninterruptibly`); `serve` has `max_connections` and its own scope. Conformance `stdlib/io_cancel`,
+   `net_cancel`, `dispatch/covariant_*`; unit `ThreadsTest`.
 5. **`for p? in e`**: grammar, AST, checker, interpreter, LSP, TextMate grammar (VS Code bump).
 6. **`select`**: contextual keyword in the grammar, case forms in the checker, runtime intrinsic.
    Then switch the spec's §7.14 snippet fence from `rust` to `rs` so `ParserAcceptanceTest` covers it,

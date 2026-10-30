@@ -64,6 +64,15 @@ interface Callbacks {
     /** Starts a Threebolt thread running {@code body}; a panic in it ends the process. */
     Thread startThread(Runnable body);
 
+    /** Whether the current Threebolt thread is cancelled (§13.4). */
+    boolean cancelled();
+
+    /**
+     * Runs {@code op} so that cancelling the current thread meanwhile does not interrupt it (a file's
+     * system call in progress finishes, §13.4); false, without running it, if the thread is cancelled.
+     */
+    boolean uninterruptibly(Runnable op);
+
     /** Reports a panic that cannot unwind (a C upcall) and ends the process. */
     void panicked(Panic p);
 
