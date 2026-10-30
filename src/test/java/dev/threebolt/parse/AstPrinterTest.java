@@ -69,6 +69,13 @@ class AstPrinterTest {
     }
 
     @Test
+    void forWithPropagation() {
+        assertEquals("for line? in f.lines() {}\n", stmts("for line? in f.lines() {}"));
+        assertEquals("for mut x? in xs {}\n", stmts("for mut x ? in xs {}"));
+        assertEquals("for (k, v)? in m {}\n", stmts("for (k, v)? in m {}"));
+    }
+
+    @Test
     void statementsStartingWithBraceOrMatch() {
         assertEquals("({ x: 1 }.go());\n", stmts("({ x: 1 }).go();"));
         assertEquals("({ x: 1 }.y) = 2;\n", stmts("({ x: 1 }).y = 2;"));

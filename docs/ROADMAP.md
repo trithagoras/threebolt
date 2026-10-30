@@ -311,7 +311,9 @@ risks in `docs/plans/concurrency.md`. 0.1 still implements the old §13.4 (platf
    it out; `CancelledErr`/`TimedOutErr` are `MsgErr`s (printable). Files are shielded from cancellation's interrupt
    (`Callbacks.uninterruptibly`); `serve` has `max_connections` and its own scope. Conformance `stdlib/io_cancel`,
    `net_cancel`, `dispatch/covariant_*`; unit `ThreadsTest`.
-5. **`for p? in e`**: grammar, AST, checker, interpreter, LSP, TextMate grammar (VS Code bump).
+5. ~~**`for p? in e`**~~ — done: grammar (`FOR pattern QUESTION? IN`), `Stmt.For.propagate`, lowered by the checker to
+   `for tmp in e { let p = tmp?; body }` (so the interpreter is unchanged); the §6.4 example is back. Conformance
+   `unions/for_propagate`, `for_propagate_errors`. The TextMate grammar needed nothing.
 6. **`select`**: contextual keyword in the grammar, case forms in the checker, runtime intrinsic.
    Then switch the spec's §7.14 snippet fence from `rust` to `rs` so `ParserAcceptanceTest` covers it,
    and put the `for line? in` example back in §6.4's loop block.

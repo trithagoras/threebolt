@@ -269,7 +269,7 @@ public final class AstBuilder {
             case WhileStmtContext c -> new Stmt.While(binder(c.LET(), c.MUT(), c.IDENTIFIER()),
                     expr(c.noStructExpr().expr()), block(c.block()), span);
             case LoopStmtContext c -> new Stmt.Loop(block(c.block()), span);
-            case ForStmtContext c -> new Stmt.For(pattern(c.pattern()), expr(c.noStructExpr().expr()), block(c.block()), span);
+            case ForStmtContext c -> new Stmt.For(pattern(c.pattern()), c.QUESTION() != null, expr(c.noStructExpr().expr()), block(c.block()), span);
             case MatchStmtContext c -> new Stmt.ExprStmt(match(c.matchExpr()), span);
             case BreakStmtContext c -> new Stmt.Break(span);
             case ContinueStmtContext c -> new Stmt.Continue(span);

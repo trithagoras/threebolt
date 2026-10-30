@@ -1,0 +1,65 @@
+// §6.4 `for p? in e`: `?` applies to each element (§7.10). It suits iterators that yield an
+// error once and end, like `lines()` and channels.
+use std::io;
+use std::io::IoErr;
+use std::thread::CancelledErr;
+use std::sync::Channel;
+
+class BadItem : MsgErr {
+    pub fn new(n: i32) -> Self => { ..MsgErr::new(f"bad item {n}") };
+}
+
+fn items(bad: i32) -> [i32 | BadItem] {
+    let mut out: [i32 | BadItem] = [];
+    for n in 1..=4 { out.push(BadItem::new(n) if n == bad else n); }
+    return out;
+}
+
+fn sum(bad: i32) -> i32 | BadItem {
+    let mut total = 0;
+    for x? in items(bad) { total += x; }       // x: i32
+    return total;
+}
+
+/// Patterns work as in `for`: tuples and `mut`. Without errors, `?` propagates null.
+fn pairs(xs: [(str, i32) | null]) -> str | null {
+    let mut out = "";
+    for (name, mut n)? in xs {
+        n *= 10;
+        out = out + f"{name}={n} ";
+    }
+    return out;
+}
+
+/// The loop ends early on the first error, which the function returns.
+fn count_lines(path: str) -> i32 | IoErr | CancelledErr {
+    let mut n = 0;
+    for _? in io::lines(path)? { n += 1; }
+    return n;
+}
+
+fn drain(ch: Channel<str>) -> str | CancelledErr {
+    let mut all = "";
+    for s? in ch { all = all + s; }            // ends once the channel is closed and drained
+    return all;
+}
+
+fn main() -> () | Err {
+    println(sum(0)?);
+    let e = sum(3);
+    if e is BadItem { println(e.message()); }
+    println(pairs([("a", 1), ("b", 2)]) ?? "none");
+    println(pairs([("a", 1), null, ("c", 3)]) ?? "none");
+
+    let p = io::temp_dir() + "/threebolt-conformance-for-propagate.txt";
+    io::write_text(p, "x\ny\nz\n")?;
+    println(count_lines(p)?);
+    io::remove(p)?;
+    println(count_lines(p) is IoErr);
+
+    let ch = Channel<str>::new(3);
+    ch.send("a")?;
+    ch.send("b")?;
+    ch.close();
+    println(drain(ch)?);
+}

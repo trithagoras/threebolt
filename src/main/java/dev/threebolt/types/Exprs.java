@@ -757,7 +757,11 @@ final class Exprs {
     // ---- `?` (§7.10) ----
 
     private Typed propagate(Expr.Propagate p) {
-        var t = expr(p.operand(), null);
+        return propagate(expr(p.operand(), null), p.span());
+    }
+
+    /** {@code t?} at {@code span}: also each element of `for p? in e` (§6.4). */
+    Typed propagate(Typed t, Span span) {
         if (t.type() == Type.ERROR) return t;
         var fail = new ArrayList<Type>();
         var rest = new ArrayList<Type>();
@@ -769,24 +773,24 @@ final class Exprs {
             else rest.add(m);
         }
         if (fail.isEmpty()) {
-            diag.error(Code.BAD_PROPAGATION, p.span(), "`?` needs a value that may be null or an error, found '" + t.type() + "'");
+            diag.error(Code.BAD_PROPAGATION, span, "`?` needs a value that may be null or an error, found '" + t.type() + "'");
             return t;
         }
         var ctx = c.ctx;
-        if (ctx.inDefer) diag.error(Code.BAD_DEFER, p.span(), "`?` cannot propagate out of a deferred block");
+        if (ctx.inDefer) diag.error(Code.BAD_DEFER, span, "`?` cannot propagate out of a deferred block");
         if (ctx.returnType == null) {
             ctx.inferredReturns.addAll(fail);
         } else if (ctx.fn == null && ctx.depth == 0) {
-            diag.error(Code.BAD_PROPAGATION, p.span(), "`?` is only valid inside a function");
+            diag.error(Code.BAD_PROPAGATION, span, "`?` is only valid inside a function");
         } else {
             for (Type f : fail) {
                 if (!ts.assignable(f, ctx.returnType)) {
-                    diag.error(Code.BAD_PROPAGATION, p.span(), "`?` would return '" + f + "', which is not assignable to the return type '"
+                    diag.error(Code.BAD_PROPAGATION, span, "`?` would return '" + f + "', which is not assignable to the return type '"
                             + ctx.returnType + "'");
                 }
             }
         }
-        return new Typed(new Ir.Propagate(t.ir(), fail, p.span()), TypeSystem.union(rest));
+        return new Typed(new Ir.Propagate(t.ir(), fail, span), TypeSystem.union(rest));
     }
 
     private boolean isError(Type m) {

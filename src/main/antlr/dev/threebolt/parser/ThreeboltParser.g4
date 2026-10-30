@@ -236,7 +236,7 @@ stmt
     | ifStmt                                                             # ifStmtAlt
     | WHILE (LET MUT? IDENTIFIER ASSIGN)? noStructExpr block             # whileStmt
     | LOOP block                                                         # loopStmt
-    | FOR pattern IN noStructExpr block                                  # forStmt
+    | FOR pattern QUESTION? IN noStructExpr block                        # forStmt
     | matchExpr SEMI?                                                    # matchStmt
     | BREAK SEMI                                                         # breakStmt
     | CONTINUE SEMI                                                      # continueStmt

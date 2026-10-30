@@ -395,7 +395,7 @@ public final class AstPrinter {
             case Stmt.For f -> {
                 out.append("for ");
                 pattern(f.pattern());
-                out.append(" in ");
+                out.append(f.propagate() ? "? in " : " in ");
                 head(f.iterable());
                 out.append(' ');
                 block(f.body());

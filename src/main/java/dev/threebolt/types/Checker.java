@@ -577,8 +577,22 @@ public final class Checker {
         var outer = ctx.scope;
         ctx.scope = new Scope(outer);
         var saved = ctx.narrowed;
-        var pat = patterns.irrefutable(f.pattern(), iteration.element());
-        var body = loopBody(f.body());
+        Ir.Block body;
+        Ir.Pat pat;
+        if (f.propagate()) {
+            // `for p? in e { body }` is `for tmp in e { let p = tmp?; body }` (§6.4).
+            var tmp = new Local("for?", false, iteration.element(), f.pattern().span());
+            var element = exprs.propagate(new Typed(new Ir.Read(new Ir.LocalPlace(tmp)), iteration.element()), f.pattern().span());
+            var bind = new Ir.Let(patterns.irrefutable(f.pattern(), element.type()), element.ir());
+            var stmts = new ArrayList<Ir.Stmt>();
+            stmts.add(bind);
+            stmts.addAll(loopBody(f.body()).stmts());
+            pat = new Ir.PBind(tmp, null, false);
+            body = new Ir.Block(stmts);
+        } else {
+            pat = patterns.irrefutable(f.pattern(), iteration.element());
+            body = loopBody(f.body());
+        }
         ctx.scope = outer;
         ctx.narrowed = saved;
         ctx.reachable = true;

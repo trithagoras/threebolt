@@ -385,6 +385,7 @@ for x in iterable { ... }
 for mut x in iterable { ... }
 for (k, v) in map { ... }
 for i in 0..n { ... }
+for line? in f.lines() { ... }
 ```
 - `for p in e`: `e` must implement `Iterable<T>` (calls `e.iter()`) or `Iterator<T>`; loops until `next()` returns `Done`. `p` is an irrefutable pattern.
 - `for p? in e { body }` (`for line? in f.lines() { ... }`) ≡ `for tmp in e { let p = tmp?; body }`: `?` applies to each element as in §7.10 (the element type's `Err` members, or else `null`, return from the enclosing function), and `p` must be irrefutable for what remains. Also `for mut p? in e`. It suits the std iterators that yield an error once and end (`lines()`, `incoming()`, channels). An element type with nothing for `?` to propagate ⇒ error (§7.10).
