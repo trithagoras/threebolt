@@ -4,8 +4,8 @@ use std::json::{Json, FromJson};
 struct Point { let x: f64; }
 
 struct Bad : FromJson {
-    // The signature must match the trait's exactly.
-    pub fn from_json(j: Json) -> Self => Bad {};
+    // The parameters must match the trait's exactly (the result may be narrower, §4.9).
+    pub fn from_json(j: str) -> Self => Bad {};
 }
 
 fn main() -> () | Err {

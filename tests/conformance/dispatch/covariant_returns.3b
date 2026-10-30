@@ -1,0 +1,42 @@
+// §4.9: an implementation may return less than its trait: fewer union members, or a subclass.
+// Through the trait, the result has the trait's type.
+trait Source {
+    fn next(mut self) -> i32 | str | null;
+    fn pet(self) -> Animal | null;
+}
+
+class Animal {
+    pub fn new() -> Self => {};
+    pub virtual fn name(self) -> str => "animal";
+}
+
+class Dog : Animal {
+    pub fn new() -> Self => { ..Animal::new() };
+    pub override fn name(self) -> str => "dog";
+}
+
+/// Never runs out and never yields text.
+class Counter : Source {
+    let n: i32 = 0;
+    pub fn new() -> Self => {};
+    pub fn next(mut self) -> i32 {
+        self.n += 1;
+        return self.n;
+    }
+    pub fn pet(self) -> Dog => Dog::new();
+}
+
+fn describe(mut s: Source) -> str {
+    let v = s.next();
+    let p = s.pet();
+    if p is Animal { return f"{v ?? "nothing"} {p.name()}"; }
+    return f"{v ?? "nothing"} no pet";
+}
+
+fn main() {
+    let mut c = Counter::new();
+    let n: i32 = c.next();                   // no `null` or `str` to handle
+    println(n + c.next());
+    println(c.pet().name());
+    println(describe(c));
+}

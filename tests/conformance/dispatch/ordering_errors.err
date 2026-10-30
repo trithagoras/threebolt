@@ -1,4 +1,4 @@
 ordering_errors.3b:4:13: error[E0207]: cannot compare '"less" | "equal" | "greater"' and '0' with '<': `Ord` is required
 ordering_errors.3b:5:13: error[E0207]: cannot compare '"less" | "equal" | "greater"' with '"lesser"'
 ordering_errors.3b:6:19: error[E0213]: match is not exhaustive: `"equal"` is not covered; add an arm or `_ =>`
-ordering_errors.3b:15:12: error[E0403]: 'cmp' does not match the signature required by trait 'Ord'
+ordering_errors.3b:15:12: error[E0403]: 'cmp' does not match the signature required by trait 'Ord': it returns 'i32', which is not '"less" | "equal" | "greater"' or a narrower union of its members
