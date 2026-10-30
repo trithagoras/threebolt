@@ -269,7 +269,7 @@ public final class AstBuilder {
             case WhileStmtContext c -> new Stmt.While(binder(c.LET(), c.MUT(), c.IDENTIFIER()),
                     expr(c.noStructExpr().expr()), block(c.block()), span);
             case LoopStmtContext c -> new Stmt.Loop(block(c.block()), span);
-            case ForStmtContext c -> new Stmt.For(pattern(c.pattern()), expr(c.noStructExpr().expr()), block(c.block()), span);
+            case ForStmtContext c -> new Stmt.For(pattern(c.pattern()), c.QUESTION() != null, expr(c.noStructExpr().expr()), block(c.block()), span);
             case MatchStmtContext c -> new Stmt.ExprStmt(match(c.matchExpr()), span);
             case BreakStmtContext c -> new Stmt.Break(span);
             case ContinueStmtContext c -> new Stmt.Continue(span);
@@ -339,7 +339,7 @@ public final class AstBuilder {
     private Expr lambda(LambdaContext ctx) {
         var p = ctx.lambdaParams();
         List<Expr.LambdaParam> params = p.LPAREN() == null
-                ? List.of(new Expr.LambdaParam(new Pattern.Binding(p.MUT() != null, name(p.IDENTIFIER()), null, span(p)),
+                ? List.of(new Expr.LambdaParam(new Pattern.Binding(p.MUT() != null, name(p.IDENTIFIER()), null, false, span(p)),
                         null, span(p)))
                 : map(p.lambdaParam(), lp -> new Expr.LambdaParam(patternAtom(lp.patternAtom()),
                         lp.type() == null ? null : type(lp.type()), span(lp)));
@@ -367,13 +367,17 @@ public final class AstBuilder {
     private Expr comparison(ComparisonExprContext ctx) {
         var left = range(ctx.rangeExpr(0));
         if (ctx.IS() != null) {
-            return switch (ctx.isTarget()) {
+            Expr test = switch (ctx.isTarget()) {
                 case PatternIsTargetContext c -> new Expr.IsPattern(left, patternAtom(c.patternAtom()), span(ctx));
                 case TypeIsTargetContext c -> new Expr.Is(left, type(c.type()), span(ctx));
                 default -> throw unexpected(ctx.isTarget());
             };
+            return negatedIf(ctx.notKw() != null, test, ctx);
         }
-        if (ctx.IN() != null) return new Expr.Binary(Expr.BinaryOp.IN, left, range(ctx.rangeExpr(1)), span(ctx));
+        if (ctx.IN() != null) {
+            var test = new Expr.Binary(Expr.BinaryOp.IN, left, range(ctx.rangeExpr(1)), span(ctx));
+            return negatedIf(ctx.notKw() != null, test, ctx);
+        }
         if (ctx.compareOp() == null) return left;
         var op = ctx.compareOp();
         var binOp = switch (op.getStart().getType()) {
@@ -385,6 +389,11 @@ public final class AstBuilder {
             default -> throw unexpected(op);
         };
         return new Expr.Binary(binOp, left, range(ctx.rangeExpr(1)), span(ctx));
+    }
+
+    /** `x is not p` and `x not in c` are `!(x is p)` and `!(x in c)` (§7.3). */
+    private Expr negatedIf(boolean negated, Expr test, ComparisonExprContext ctx) {
+        return negated ? new Expr.Unary(Expr.UnaryOp.NOT, test, span(ctx)) : test;
     }
 
     private Expr range(RangeExprContext ctx) {
@@ -498,6 +507,7 @@ public final class AstBuilder {
             case ParenExprContext c -> expr(c.nested().expr());
             case TupleExprContext c -> new Expr.Tuple(map(c.nested(), n -> expr(n.expr())), span);
             case MatchExprAltContext c -> match(c.matchExpr());
+            case SelectExprContext c -> select(c.selectBody(), span);
             case TypeofExprContext c -> new Expr.Typeof(type(c.type()), span);
             case NameofExprContext c -> new Expr.Nameof(type(c.type()), span);
             default -> throw unexpected(ctx);
@@ -560,6 +570,18 @@ public final class AstBuilder {
         return new Expr.Match(expr(ctx.noStructExpr().expr()), arms, span(ctx));
     }
 
+    private Expr.Select select(SelectBodyContext ctx, Span span) {
+        var arms = map(ctx.selectArm(), a -> {
+            Body body = a.block() != null ? block(a.block()) : assignOrExpr(a.assignOrExpr());
+            return switch (a.selectCase()) {
+                case SelectLetContext c -> new Expr.SelectArm(pattern(c.pattern()), coalesce(c.coalesceExpr()), body, span(a));
+                case SelectOpContext c -> new Expr.SelectArm(null, coalesce(c.coalesceExpr()), body, span(a));
+                default -> new Expr.SelectArm(null, null, body, span(a));
+            };
+        });
+        return new Expr.Select(arms, span);
+    }
+
     private Expr fstring(FstringContext ctx) {
         boolean triple = ctx.FSTRING_START().getText().startsWith("f\"\"\"");
         var parts = new ArrayList<Expr.FStringPart>();
@@ -596,9 +618,22 @@ public final class AstBuilder {
         var span = span(ctx);
         return switch (ctx) {
             case WildcardPatternContext c -> new Pattern.Wildcard(span);
+            case NotPatternContext c -> new Pattern.Not(pattern(c.pattern()), span);
             case BindingPatternContext c -> new Pattern.Binding(c.MUT() != null, name(c.IDENTIFIER()),
-                    c.type() == null ? null : type(c.type()), span);
-            case IsPatternContext c -> new Pattern.Is(type(c.type()), span);
+                    c.type() == null ? null : type(c.type()), c.notKw() != null, span);
+            case IsPatternContext c -> c.notKw() == null
+                    ? new Pattern.Is(type(c.type()), span)
+                    : new Pattern.Not(new Pattern.Is(type(c.type()), span), span);
+            case RelationalPatternContext c -> {
+                var op = c.patternRelOp();
+                var binOp = switch (op.getStart().getType()) {
+                    case LT -> Expr.BinaryOp.LT;
+                    case LE -> Expr.BinaryOp.LE;
+                    case GT -> op.ASSIGN() != null ? Expr.BinaryOp.GE : Expr.BinaryOp.GT;
+                    default -> throw unexpected(op);
+                };
+                yield new Pattern.Relational(binOp, signedLiteral(c.literalPattern(), c.literalPattern().MINUS()), span);
+            }
             case LiteralOrRangePatternContext c -> {
                 var low = signedLiteral(c.literalPattern(0), c.literalPattern(0).MINUS());
                 if (c.literalPattern().size() == 1) yield new Pattern.Literal(low, span);
@@ -616,7 +651,7 @@ public final class AstBuilder {
                     var field = name(f.IDENTIFIER());
                     var p = f.pattern() != null
                             ? pattern(f.pattern())
-                            : new Pattern.Binding(f.MUT() != null, field, null, span(f));
+                            : new Pattern.Binding(f.MUT() != null, field, null, false, span(f));
                     return new Pattern.FieldPattern(field, p, span(f));
                 });
                 yield new Pattern.Struct(path(c.path()), fields, c.DOTDOT() != null, span);

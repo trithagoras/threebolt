@@ -69,6 +69,41 @@ class AstPrinterTest {
     }
 
     @Test
+    void forWithPropagation() {
+        assertEquals("for line? in f.lines() {}\n", stmts("for line? in f.lines() {}"));
+        assertEquals("for mut x? in xs {}\n", stmts("for mut x ? in xs {}"));
+        assertEquals("for (k, v)? in m {}\n", stmts("for (k, v)? in m {}"));
+    }
+
+    @Test
+    void negatedTests() {
+        assertEquals("x is not CancelledErr", expr("x is not CancelledErr"));
+        assertEquals("x is not CancelledErr", expr("!(x is CancelledErr)"));
+        assertEquals("xs is not [_, ..]", expr("xs is not [_, ..]"));
+        assertEquals("k not in m", expr("!(k in m)"));
+        assertEquals("(k not in m) == b", expr("(k not in m) == b"));
+        assertEquals("!(k not in m)", expr("!(k not in m)"));
+        assertEquals("a && x is not T", expr("a && x is not T"));
+        assertEquals("if (p is not P { x: 0 }) {}\n", stmts("if (p is not P { x: 0 }) {}"));
+        // Elsewhere `not` is an ordinary name.
+        assertEquals("not(x) && not in xs", expr("not(x) && not in xs"));
+    }
+
+    @Test
+    void negatedAndRelationalPatterns() {
+        assertEquals("xs is [not 0, ..]", expr("xs is [not 0, ..]"));
+        assertEquals("p is (not null, _)", expr("p is (not null, _)"));
+        assertEquals("c is not ('a'..='z' | '_')", expr("c is not ('a'..='z' | '_')"));
+        assertEquals("x is (not 1 | 2)", expr("x is (not 1 | 2)"));
+        assertEquals("x is ((not 1) | 2)", expr("x is ((not 1) | 2)"));
+        assertEquals("n is > 10", expr("n is > 10"));
+        assertEquals("n is not <= -1", expr("n is not <= -1"));
+        assertEquals("match v {\n    is not Err => 1,\n    e is not Err => 2,\n    >= 0.5 => 3,\n    < \"m\" => 4,\n    not => 5,\n}",
+                expr("match v { is not Err => 1, e is not Err => 2, >= 0.5 => 3, < \"m\" => 4, not => 5 }"));
+        assertEquals("match v {\n    (is not A) | B => 1,\n}", expr("match v { (is not A) | B => 1 }"));
+    }
+
+    @Test
     void statementsStartingWithBraceOrMatch() {
         assertEquals("({ x: 1 }.go());\n", stmts("({ x: 1 }).go();"));
         assertEquals("({ x: 1 }.y) = 2;\n", stmts("({ x: 1 }).y = 2;"));

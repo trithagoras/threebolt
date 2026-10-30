@@ -3,7 +3,7 @@ ping from a: true
 0123
 0
 pong
-true true
+true false
 true true
 true
 [10.0.0.7]

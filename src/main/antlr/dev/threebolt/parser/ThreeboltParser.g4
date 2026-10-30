@@ -4,6 +4,10 @@
 //  - `>` is always one GT token. `>=`, `>>` and `>>=` are adjacent GTs/ASSIGN, checked by
 //    `adjacent()`, so type-argument lists never need `>>` splitting.
 //  - `get` is an IDENTIFIER; `getKw` recognises it before `fn` in member declarations only.
+//  - `select` is an IDENTIFIER too; `atSelect` recognises it before `{` where an initializer
+//    could start (so not in an `if`/`while`/`for`/`match` head, §7.14).
+//  - `not` is an IDENTIFIER too; `notKw` recognises it directly after `is` and directly before
+//    `in` (§7.3), and `atNotPattern` before another pattern (§11).
 //
 // Two pieces of parser state steer prediction through semantic predicates:
 //  - `typeArgsAhead()` (§7.5): in expressions, `<` after a name starts type arguments iff they
@@ -36,13 +40,13 @@ options { tokenVocab = ThreeboltLexer; }
     }
 
     /**
-     * §17.18: whether a pattern rather than a type follows `is`: `[`, `(`, a path followed by `{`
+     * §17.18: whether a pattern rather than a type follows `is`: `[`, `(`, `<`, `<=`, `>`, a path followed by `{`
      * (only where initializers are allowed, §6.3), or an optionally negated literal followed by
      * `..`/`..=`.
      */
     protected boolean isPatternAhead() {
         int t = _input.LA(1);
-        if (t == LBRACKET || t == LPAREN) return true;
+        if (t == LBRACKET || t == LPAREN || t == LT || t == LE || t == GT) return true;
         int i = 1;
         if (t == MINUS) t = _input.LA(++i);
         if (t == INT_LITERAL || t == FLOAT_LITERAL || t == STRING_LITERAL || t == TRIPLE_STRING_LITERAL
@@ -53,6 +57,26 @@ options { tokenVocab = ThreeboltLexer; }
         if (t != IDENTIFIER || i != 1 || !structOk()) return false;
         while (_input.LA(i + 1) == COLON_COLON && _input.LA(i + 2) == IDENTIFIER) i += 2;
         return _input.LA(i + 1) == LBRACE;
+    }
+
+    /** `select` directly before `{`, where an initializer could also start (§7.14). */
+    protected boolean atSelect() {
+        return _input.LT(1).getText().equals("select") && _input.LA(2) == LBRACE && structOk();
+    }
+
+    /** `not` directly after `is` (always the keyword there), or directly before `in` (§7.3). */
+    protected boolean atNot() {
+        return _input.LT(1).getText().equals("not") && (_input.LA(-1) == IS || _input.LA(2) == IN);
+    }
+
+    /** `not` before a token that starts a pattern (§11): `not 0`, `not [..]`, `not is T`. */
+    protected boolean atNotPattern() {
+        if (!_input.LT(1).getText().equals("not")) return false;
+        return switch (_input.LA(2)) {
+            case UNDERSCORE, IDENTIFIER, IS, MUT, MINUS, LPAREN, LBRACKET, LT, LE, GT, INT_LITERAL, FLOAT_LITERAL,
+                    STRING_LITERAL, TRIPLE_STRING_LITERAL, CHAR_LITERAL, TRUE, FALSE, NULL -> true;
+            default -> false;
+        };
     }
 
     /** `get` directly before `fn` (§4.8). */
@@ -236,7 +260,7 @@ stmt
     | ifStmt                                                             # ifStmtAlt
     | WHILE (LET MUT? IDENTIFIER ASSIGN)? noStructExpr block             # whileStmt
     | LOOP block                                                         # loopStmt
-    | FOR pattern IN noStructExpr block                                  # forStmt
+    | FOR pattern QUESTION? IN noStructExpr block                        # forStmt
     | matchExpr SEMI?                                                    # matchStmt
     | BREAK SEMI                                                         # breakStmt
     | CONTINUE SEMI                                                      # continueStmt
@@ -299,12 +323,15 @@ andExpr : andExpr AND_AND comparisonExpr | comparisonExpr ;
 // not separate alternatives: choosing between alternatives that share the `rangeExpr` prefix
 // would happen before `typeArgsAhead()` can be evaluated and resolve `f(a < b, c > (d))` as
 // comparisons.
-comparisonExpr : rangeExpr (compareOp rangeExpr | IS isTarget | IN rangeExpr)? ;
+comparisonExpr : rangeExpr (compareOp rangeExpr | IS notKw? isTarget | notKw? IN rangeExpr)? ;
+
+// `x is not T`, `x not in c` (§7.3).
+notKw : {atNot()}? IDENTIFIER ;
 
 // §7.3, §17.18: after `is`, a pattern or a type, chosen by `isPatternAhead()`.
 isTarget
     : {isPatternAhead()}? patternAtom                  # patternIsTarget
-    | type                                             # typeIsTarget
+    | {!atNot()}? type                                 # typeIsTarget
     ;
 
 compareOp
@@ -370,6 +397,7 @@ primary
     | fstring                                               # fstringExpr
     | SELF                                                  # selfExpr
     | SUPER                                                 # superExpr
+    | {atSelect()}? IDENTIFIER selectBody                   # selectExpr
     | {structOk()}? path initializer                        # namedInitExpr
     | {structOk()}? initializer                             # targetInitExpr
     | collectionLiteral                                     # collectionExpr
@@ -448,6 +476,27 @@ matchArm
       )
     ;
 
+// select { let p = ch.recv() => ..., after(d) => ..., _ => ... } (§7.14). Arms are like match arms;
+// a case stops below the conditional level, as a guard does, so its `=>` is not a lambda's.
+selectBody
+    @init { pushStruct(true); }
+    : LBRACE selectArm* RBRACE
+    ;
+    finally { popStruct(); }
+
+selectArm
+    : selectCase FAT_ARROW
+      ( block COMMA?
+      | {_input.LA(1) != LBRACE}? assignOrExpr (COMMA | {_input.LA(1) == RBRACE}?)
+      )
+    ;
+
+selectCase
+    : LET pattern ASSIGN coalesceExpr   # selectLet
+    | UNDERSCORE                        # selectDefault
+    | coalesceExpr                      # selectOp
+    ;
+
 fstring
     @init { pushStruct(true); }
     : FSTRING_START fstringPart* FSTRING_END
@@ -480,8 +529,10 @@ pattern : patternAtom (PIPE patternAtom)* ;
 
 patternAtom
     : UNDERSCORE                                                     # wildcardPattern
-    | MUT? IDENTIFIER (IS type)?                                     # bindingPattern
-    | IS type                                                        # isPattern
+    | {atNotPattern()}? IDENTIFIER pattern                            # notPattern
+    | MUT? IDENTIFIER (IS notKw? type)?                              # bindingPattern
+    | IS notKw? type                                                 # isPattern
+    | patternRelOp literalPattern                                    # relationalPattern
     | literalPattern ((DOTDOT | DOTDOT_EQ) literalPattern)?          # literalOrRangePattern
     | LPAREN RPAREN                                                  # unitPattern
     | LPAREN pattern RPAREN                                          # groupPattern
@@ -492,6 +543,8 @@ patternAtom
     ;
 
 listPatternElem : DOTDOT IDENTIFIER? | pattern ;
+
+patternRelOp : LT | LE | GT {adjacent()}?<fail={"'>=' must not contain spaces"}> ASSIGN | GT ;
 
 fieldPattern : MUT? IDENTIFIER | IDENTIFIER COLON pattern ;
 

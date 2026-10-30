@@ -1,0 +1,66 @@
+// §13.4 cancellation: cooperative, sticky, fails fast at cancellation points; defers run.
+use std::thread;
+use std::thread::{CancelledErr, Thread};
+use std::sync::{Atomic, Mutex};
+use std::time::{Duration, TimedOutErr};
+
+/// Spins until `flag` is set (no cancellation point involved).
+fn wait_for(flag: Atomic<bool>) {
+    while !flag.load() {}
+}
+
+fn main() -> () | Err {
+    // A sleeping thread is woken; its `?` unwinds through the defer.
+    let sleeper = Thread::spawn(() => {
+        defer println("sleeper: cleanup");
+        thread::sleep(Duration::from_secs(60))?;
+        println("unreachable");
+    });
+    sleeper.cancel();
+    println(f"sleeper: {sleeper.join() is CancelledErr}");
+    println(f"sleeper finished: {sleeper.finished}");
+    sleeper.cancel();                                   // again, on a finished thread: nothing
+
+    // Sticky and fails fast: once cancelled, every cancellation point yields CancelledErr on
+    // entry, even a zero sleep or a join of a finished thread; `check` and `cancelled` report it.
+    let done = Thread::spawn(() => 7);
+    _ = done.join()?;
+    let ready = Atomic::new(false);
+    let go = Atomic::new(false);
+    let poller = Thread::spawn(() => {
+        println(f"poller: before {thread::cancelled()} {thread::check() is CancelledErr}");
+        ready.store(true);
+        wait_for(go);
+        println(f"poller: after {thread::cancelled()} {thread::check() is CancelledErr}");
+        println(f"poller: sleep(0) {thread::sleep(Duration::ZERO) is CancelledErr}");
+        println(f"poller: join {done.join() is CancelledErr}");
+        println(f"poller: join(timeout) {done.join(Duration::from_secs(1)) is CancelledErr}");
+        // Mutex::lock is not a cancellation point.
+        let m = Mutex::new(1);
+        println(f"poller: lock {m.lock(g => g.value)}");
+        return 1;
+    });
+    wait_for(ready);
+    poller.cancel();
+    go.store(true);
+    println(f"poller: {poller.join()?}");               // it ignored the error and returned 1
+
+    // join with a timeout: a running thread times out; a zero timeout checks once.
+    let slow = Thread::spawn(() => thread::sleep(Duration::from_secs(60)));
+    println(f"slow: {slow.join(Duration::from_millis(10)) is TimedOutErr}");
+    println(f"slow: {slow.join(Duration::ZERO) is TimedOutErr} {slow.finished}");
+    slow.cancel();
+    println(f"slow: {slow.join(Duration::from_secs(60)) is CancelledErr}");
+    println(f"done: {done.join(Duration::ZERO)?} {done.join(Duration::from_secs(-1))?}");
+
+    // A detached thread spawned by a cancelled thread is not cancelled.
+    let release = Atomic::new(false);
+    let parent = Thread::spawn(() => {
+        wait_for(release);
+        return Thread::spawn(() => thread::cancelled());
+    });
+    parent.cancel();
+    release.store(true);
+    let orphan = parent.join()?;
+    println(f"orphan cancelled: {orphan.join()?}");
+}

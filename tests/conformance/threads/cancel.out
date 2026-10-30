@@ -1,0 +1,15 @@
+sleeper: cleanup
+sleeper: true
+sleeper finished: true
+poller: before false false
+poller: after true true
+poller: sleep(0) true
+poller: join true
+poller: join(timeout) true
+poller: lock 1
+poller: 1
+slow: true
+slow: true false
+slow: true
+done: 7 7
+orphan cancelled: false

@@ -395,7 +395,7 @@ public final class AstPrinter {
             case Stmt.For f -> {
                 out.append("for ");
                 pattern(f.pattern());
-                out.append(" in ");
+                out.append(f.propagate() ? "? in " : " in ");
                 head(f.iterable());
                 out.append(' ');
                 block(f.body());
@@ -513,6 +513,38 @@ public final class AstPrinter {
 
     // ---- Expressions ----
 
+    /** The test in `!(x is p)` or `!(x in c)`, which print as `x is not p` and `x not in c` (§7.3). */
+    private static Expr negatedTest(Expr.Unary u) {
+        if (u.op() != Expr.UnaryOp.NOT) return null;
+        return switch (u.operand()) {
+            case Expr.Is i -> i;
+            case Expr.IsPattern i -> i;
+            case Expr.Binary b when b.op() == Expr.BinaryOp.IN -> b;
+            default -> null;
+        };
+    }
+
+    private void negated(Expr test, boolean typeFollows) {
+        switch (test) {
+            case Expr.Is i -> {
+                expr(i.operand(), RANGE, false);
+                out.append(" is not ");
+                type(i.type());
+            }
+            case Expr.IsPattern i -> {
+                expr(i.operand(), RANGE, false);
+                out.append(" is not ");
+                isPattern(i.pattern());
+            }
+            case Expr.Binary b -> {
+                expr(b.left(), RANGE, false);
+                out.append(" not in ");
+                expr(b.right(), RANGE, typeFollows);
+            }
+            default -> throw new IllegalArgumentException(test.toString());
+        }
+    }
+
     private static int precedence(Expr e) {
         return switch (e) {
             case Expr.Lambda l -> LAMBDA;
@@ -522,7 +554,7 @@ public final class AstPrinter {
             case Expr.Is i -> COMPARISON;
             case Expr.IsPattern i -> COMPARISON;
             case Expr.Cast c -> CAST;
-            case Expr.Unary u -> PREFIX;
+            case Expr.Unary u -> negatedTest(u) != null ? COMPARISON : PREFIX;
             case Expr.Member m -> POSTFIX;
             case Expr.Call c -> POSTFIX;
             case Expr.Index i -> POSTFIX;
@@ -539,7 +571,8 @@ public final class AstPrinter {
     private void expr(Expr e, int min, boolean typeFollows) {
         boolean parens = precedence(e) < min
                 || (inHead && e instanceof Expr.Init)
-                || (inHead && e instanceof Expr.IsPattern ip && ip.pattern() instanceof Pattern.Struct)
+                || (inHead && (e instanceof Expr.Unary u && negatedTest(u) != null ? negatedTest(u) : e)
+                        instanceof Expr.IsPattern ip && ip.pattern() instanceof Pattern.Struct)
                 || (inList && e instanceof Expr.Binary b && b.op() == Expr.BinaryOp.LT)
                 || (typeFollows && e instanceof Expr.Cast);
         if (!parens) {
@@ -601,6 +634,7 @@ public final class AstPrinter {
                 expr(p.operand(), POSTFIX, false);
                 out.append('?');
             }
+            case Expr.Unary u when negatedTest(u) != null -> negated(negatedTest(u), typeFollows);
             case Expr.Unary u -> {
                 out.append(u.op().symbol());
                 expr(u.operand(), PREFIX, typeFollows);
@@ -634,6 +668,7 @@ public final class AstPrinter {
                 expr(u.operand(), 0, typeFollows);
             }
             case Expr.Match m -> match(m);
+            case Expr.Select s -> select(s);
             case Expr.Init i -> init(i);
             case Expr.ListLit l -> {
                 out.append('[');
@@ -765,6 +800,35 @@ public final class AstPrinter {
                 out.append(" if ");
                 expr(arm.guard(), COALESCE, false);
             }
+            out.append(" => ");
+            if (arm.body() instanceof Stmt.Block b) block(b);
+            else notBrace(arm.body(), true);
+        }
+        indent--;
+        newline();
+        out.append('}');
+        inList = list;
+        inHead = head;
+    }
+
+    private void select(Expr.Select s) {
+        if (s.arms().isEmpty()) {
+            out.append("select {}");
+            return;
+        }
+        out.append("select {");
+        boolean list = inList, head = inHead;
+        inList = inHead = false;
+        indent++;
+        for (var arm : s.arms()) {
+            newline();
+            if (arm.pattern() != null) {
+                out.append("let ");
+                pattern(arm.pattern());
+                out.append(" = ");
+            }
+            if (arm.op() != null) expr(arm.op(), COALESCE, false);
+            else out.append('_');
             out.append(" => ");
             if (arm.body() instanceof Stmt.Block b) block(b);
             else notBrace(arm.body(), true);
@@ -945,7 +1009,7 @@ public final class AstPrinter {
      */
     private void isPattern(Pattern p) {
         boolean direct = p instanceof Pattern.ListPattern || p instanceof Pattern.Tuple || p instanceof Pattern.Unit
-                || p instanceof Pattern.Struct || p instanceof Pattern.Range;
+                || p instanceof Pattern.Struct || p instanceof Pattern.Range || p instanceof Pattern.Relational;
         if (!direct) out.append('(');
         pattern(p);
         if (!direct) out.append(')');
@@ -958,9 +1022,21 @@ public final class AstPrinter {
                 if (b.isMutable()) out.append("mut ");
                 out.append(b.name().text());
                 if (b.isType() != null) {
-                    out.append(" is ");
+                    out.append(b.isNot() ? " is not " : " is ");
                     type(b.isType());
                 }
+            }
+            case Pattern.Not n when n.pattern() instanceof Pattern.Is i -> {
+                out.append("is not ");
+                type(i.type());
+            }
+            case Pattern.Not n -> {
+                out.append("not ");
+                pattern(n.pattern());
+            }
+            case Pattern.Relational r -> {
+                out.append(r.op().symbol()).append(' ');
+                literal(r.value());
             }
             case Pattern.Is i -> {
                 out.append("is ");
@@ -985,9 +1061,11 @@ public final class AstPrinter {
                     if (i > 0) out.append(" | ");
                     var a = alternatives.get(i);
                     // `x is A | y` would read `A | y` as a union type.
+                    // `not p | q` would negate `q` too.
                     boolean parens = a instanceof Pattern.Or
                             || (i + 1 < alternatives.size()
-                                && (a instanceof Pattern.Is || (a instanceof Pattern.Binding b && b.isType() != null)));
+                                && (a instanceof Pattern.Is || a instanceof Pattern.Not
+                                    || (a instanceof Pattern.Binding b && b.isType() != null)));
                     if (parens) out.append('(');
                     pattern(a);
                     if (parens) out.append(')');

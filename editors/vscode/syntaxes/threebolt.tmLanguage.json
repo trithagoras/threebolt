@@ -202,12 +202,25 @@
           "match": "\\b(?:break|continue|defer|else|for|if|in|loop|match|return|while)\\b"
         },
         {
+          "comment": "`select` is contextual (§1): a keyword only before `{`.",
+          "name": "keyword.control.threebolt",
+          "match": "\\bselect(?=\\s*\\{)"
+        },
+        {
           "comment": "Not keyword.operator: many themes colour that like `+`, so `as`/`is` would look like plain text.",
           "match": "\\b(?:(as\\?)|(as)\\b|(is)\\b)",
           "captures": {
             "1": { "name": "keyword.control.as.threebolt" },
             "2": { "name": "keyword.control.as.threebolt" },
             "3": { "name": "keyword.control.is.threebolt" }
+          }
+        },
+        {
+          "comment": "`not` is contextual (§7.3, §11): a keyword in `is not`, `not in`, and before a pattern.",
+          "match": "(?<=\\bis\\s)\\s*(not)\\b|\\b(not)(?=\\s+(?:in\\b|is\\b|null\\b|[-_\\[(<>'\"0-9]))",
+          "captures": {
+            "1": { "name": "keyword.control.is.threebolt" },
+            "2": { "name": "keyword.control.threebolt" }
           }
         },
         {

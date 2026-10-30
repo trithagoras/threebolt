@@ -1,0 +1,33 @@
+// pow.3b — a toy proof of work: find a nonce whose hash with the challenge is a multiple of
+// DIFFICULTY. CPU-bound, so it shows cancellation by polling rather than by a blocking call.
+
+use std::io::IoErr;
+use std::sync::Channel;
+use std::thread;
+use std::thread::CancelledErr;
+
+const DIFFICULTY: u64 = 5_000;
+
+pub fn valid(challenge: str, nonce: str) -> bool => f"{challenge}:{nonce}".hash() % DIFFICULTY == 0;
+
+/// Searches on `workers` threads, each trying every `workers`-th nonce. The first find wins; the
+/// deferred `s.cancel()` stops the others, which notice on their next `thread::cancelled()`.
+pub fn solve(challenge: str, workers: i64 = 4) -> str | IoErr | CancelledErr {
+    let found = Channel<str>::new(workers as usize);
+    return thread::scope((s) => {
+        defer s.cancel();
+        for w in 0..workers {
+            s.spawn(() => {
+                let mut n = w;
+                while !thread::cancelled() {
+                    if valid(challenge, n.to_str()) {
+                        found.try_send(n.to_str());
+                        return;
+                    }
+                    n += workers;
+                }
+            });
+        }
+        return found.recv();       // if *we* are cancelled while waiting: CancelledErr (and so are they)
+    });
+}

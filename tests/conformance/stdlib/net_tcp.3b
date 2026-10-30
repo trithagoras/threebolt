@@ -2,10 +2,10 @@
 // traits over a socket, shutdown, read timeouts, a refused connection and `serve`.
 use std::io::{Read, Write, IoErr, ClosedErr};
 use std::net::{TcpListener, TcpStream, SocketAddr, Ipv4Addr, Shutdown, TimedOutErr, ConnectionRefusedErr, NetErr};
-use std::thread::Thread;
+use std::thread::{CancelledErr, Thread};
 use std::time::Duration;
 
-fn shout(mut r: Read, mut w: Write) -> () | IoErr {
+fn shout(mut r: Read, mut w: Write) -> () | IoErr | TimedOutErr | CancelledErr {
     for line in r.lines() { w.write_line(line?.upper())?; }
 }
 
@@ -16,7 +16,7 @@ fn main() -> () | Err {
     println(f"{addr.ip} {addr.port > 0}");
     let server = Thread::spawn(() => {
         let mut conn = listener.accept();
-        if conn is IoErr { return f"accept: {conn}"; }
+        if conn is not TcpStream { return f"accept: {conn}"; }
         defer conn.close();
         let peer_ok = conn.peer_addr.ip == Ipv4Addr::LOCALHOST && conn.local_addr == addr;
         let r = shout(conn, conn);
@@ -36,7 +36,7 @@ fn main() -> () | Err {
     println(str::from_utf8(client.read_bytes(6)?));
     client.shutdown(Shutdown::Write)?;
     println(client.read_line());
-    println(server.join());
+    println(server.join()?);
     client.close();
     client.close();
     println(client.closed);
@@ -46,9 +46,9 @@ fn main() -> () | Err {
     // `connect` with text looks the host up; a read timeout leaves the stream usable.
     let server = Thread::spawn(() => {
         let mut conn = listener.accept();
-        if conn is IoErr { return; }
+        if conn is not TcpStream { return; }
         defer conn.close();
-        std::thread::sleep(Duration::from_millis(300));
+        _ = std::thread::sleep(Duration::from_millis(300));
         _ = conn.write_line("late");
         _ = conn.read_line();
     });
@@ -59,12 +59,12 @@ fn main() -> () | Err {
     c.set_read_timeout(null)?;
     println(c.read_line());
     c.close();
-    server.join();
+    server.join()?;
 
     // The whole input, until the peer closes.
     let server = Thread::spawn(() => {
         let mut conn = listener.accept();
-        if conn is IoErr { return; }
+        if conn is not TcpStream { return; }
         _ = conn.write("a\nb\nc");
         conn.close();
     });
@@ -72,7 +72,7 @@ fn main() -> () | Err {
     println(c.read_lines()?);
     println(c.read_line());
     c.close();
-    server.join();
+    server.join()?;
 
     // Nothing listens once the listener is closed.
     listener.close();

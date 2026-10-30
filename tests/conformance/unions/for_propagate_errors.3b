@@ -1,0 +1,23 @@
+// §6.4 `for p? in e`: the element type must have something for `?` to propagate, it must fit
+// the function's return type, and `p` must be irrefutable for what remains.
+class E : MsgErr {
+    pub fn new() -> Self => { ..MsgErr::new("e") };
+}
+
+fn plain() -> i32 | E {
+    for x? in [1, 2, 3] { _ = x; }
+    return 0;
+}
+
+fn wrong_return() -> i32 {
+    let xs: [i32 | E] = [1];
+    for x? in xs { _ = x; }
+    return 0;
+}
+
+fn refutable() -> () | E {
+    let xs: [(i32, i32) | E] = [(1, 2)];
+    for (1, y)? in xs { _ = y; }
+}
+
+fn main() {}

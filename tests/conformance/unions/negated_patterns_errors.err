@@ -1,0 +1,5 @@
+negated_patterns_errors.3b:5:19: error[E0226]: 'h' cannot be bound under `not`, which matches only when the pattern after it does not (§11)
+negated_patterns_errors.3b:6:9: error[E0224]: this pattern does not match every 'i32'; `let`, `for` and lambda parameters need irrefutable patterns
+negated_patterns_errors.3b:8:22: error[E0226]: relational patterns match numbers, chars or strings, not 'bool'
+negated_patterns_errors.3b:9:21: error[E0226]: a '"a"' pattern cannot match 'i32'
+negated_patterns_errors.3b:10:15: error[E0213]: match is not exhaustive: a value of type 'i32' is not covered; add an arm or `_ =>`

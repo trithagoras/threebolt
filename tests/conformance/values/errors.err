@@ -1,12 +1,14 @@
 errors.3b:8:9: error[E0300]: cannot assign through `self` in a method declared `self`; declare it `mut self`
-errors.3b:22:13: error[E0217]: missing field 'x' in initializer of 'P'
-errors.3b:23:23: error[E0218]: 'P' has no field 'z'
-errors.3b:25:5: error[E0301]: 'bump' takes `mut self`, but cannot assign to immutable binding 'r'; declare it `let mut`
-errors.3b:26:5: error[E0300]: cannot assign to immutable binding 'r'; declare it `let mut`
-errors.3b:28:11: error[E0109]: field 'secret' is private in 'C'
-errors.3b:29:7: error[E0109]: method 'hidden' is private in 'C'
-errors.3b:30:13: error[E0219]: an initializer for class 'C' may only appear in its own body; call a constructor function such as `C::new`
-errors.3b:31:5: error[E0302]: cannot assign to this expression
-errors.3b:33:11: error[E0202]: tuple '(i32, i32)' has no element 5
-errors.3b:34:13: error[E0220]: cannot infer the element type of `[]`; annotate the type
-errors.3b:35:13: error[E0220]: cannot infer the types of `[:]`; annotate the type
+errors.3b:23:13: error[E0217]: missing field 'x' in initializer of 'P'
+errors.3b:24:23: error[E0218]: 'P' has no field 'z'
+errors.3b:26:5: error[E0301]: 'bump' takes `mut self`, but cannot assign to immutable binding 'r'; declare it `let mut`
+errors.3b:27:5: error[E0300]: cannot assign to immutable binding 'r'; declare it `let mut`
+errors.3b:29:11: error[E0109]: field 'secret' is private in 'C'
+errors.3b:30:7: error[E0109]: method 'hidden' is private in 'C'
+errors.3b:31:12: error[E0109]: method 'make' is private in 'C'
+errors.3b:32:14: error[E0109]: method 'make' is private in 'C'
+errors.3b:33:13: error[E0219]: an initializer for class 'C' may only appear in its own body; call a constructor function such as `C::new`
+errors.3b:34:5: error[E0302]: cannot assign to this expression
+errors.3b:36:11: error[E0202]: tuple '(i32, i32)' has no element 5
+errors.3b:37:13: error[E0220]: cannot infer the element type of `[]`; annotate the type
+errors.3b:38:13: error[E0220]: cannot infer the types of `[:]`; annotate the type

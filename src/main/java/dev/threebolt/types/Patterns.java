@@ -65,7 +65,12 @@ final class Patterns {
                     if (type != Type.ERROR && t != Type.ERROR && !c.exprs.castPossible(type, t)) {
                         diag.error(Code.IMPOSSIBLE_CAST, b.span(), "a value of type '" + type + "' is never a '" + t + "'");
                     }
-                    bound = c.exprs.narrowIs(type, t);
+                    if (b.isNot()) {
+                        bound = remainder(sub, type);
+                        sub = new Ir.PNot(sub);
+                    } else {
+                        bound = c.exprs.narrowIs(type, t);
+                    }
                     unbox = TypeSystem.isStruct(bound);
                 }
                 yield new Ir.PBind(bind(b.name().text(), b.isMutable(), TypeSystem.widenInferred(bound), b.span(), bindings, reuse, typeNameHint),
@@ -77,6 +82,24 @@ final class Patterns {
                     diag.error(Code.IMPOSSIBLE_CAST, is.span(), "a value of type '" + type + "' is never a '" + t + "'");
                 }
                 yield new Ir.PIs(t);
+            }
+            case Pattern.Not n -> {
+                var inner = new LinkedHashMap<String, Local>();
+                var pat = pattern(n.pattern(), type, inner, null);
+                for (var name : inner.keySet()) {
+                    diag.error(Code.BAD_PATTERN, n.pattern().span(), "'" + name + "' cannot be bound under `not`, "
+                            + "which matches only when the pattern after it does not (§11)");
+                }
+                yield new Ir.PNot(pat);
+            }
+            case Pattern.Relational r -> {
+                var value = literal(r.value(), type, r.value().span());
+                boolean ordered = value instanceof Values.Int || value instanceof Values.Flt
+                        || value instanceof Values.Char || value instanceof Values.Str;
+                if (type != Type.ERROR && !ordered) {
+                    diag.error(Code.BAD_PATTERN, r.span(), "relational patterns match numbers, chars or strings, not '" + type + "'");
+                }
+                yield new Ir.PRel(r.op(), value);
             }
             case Pattern.Literal l -> new Ir.PLit(literal(l.value(), type, l.span()));
             case Pattern.Range r -> {
@@ -181,14 +204,26 @@ final class Patterns {
         return switch (pat) {
             case Ir.PWild w -> true;
             case Ir.PBind b -> b.sub() == null || mayMatch(b.sub(), m);
-            case Ir.PIs is -> c.exprs.castPossible(m, is.type());
+            case Ir.PIs is -> mayBe(m, is.type());
             case Ir.PLit l -> l.value() == null ? m == Type.NULL : m != Type.NULL;
             case Ir.PRange r -> e instanceof Prim || e instanceof Type.Lit;
+            case Ir.PRel r -> e instanceof Prim || e instanceof Type.Lit;
+            case Ir.PNot n -> !coversAtom(n.pattern(), m);
             case Ir.PTuple t -> e instanceof Type.Tuple tu && tu.elements().size() == t.elements().size();
             case Ir.PList l -> e instanceof Type.Array || (e instanceof Type.Nominal n && n.decl() == ts.list);
             case Ir.PStruct st -> e instanceof Type.Nominal;
             case Ir.POr o -> o.alternatives().stream().anyMatch(a -> mayMatch(a, m));
         };
+    }
+
+    /**
+     * Whether a value of member type {@code m} may be a {@code t}. Only a class, trait or type
+     * parameter can hold a subtype implementing more than {@code m} declares.
+     */
+    private boolean mayBe(Type m, Type t) {
+        var e = TypeSystem.expand(m);
+        boolean open = e instanceof Type.Param || TypeSystem.isTraitRef(e) || (e instanceof Type.Nominal n && n.decl().isClass());
+        return open ? c.exprs.castPossible(m, t) : ts.assignable(m, t);
     }
 
     @SuppressWarnings("unchecked")
@@ -420,9 +455,12 @@ final class Patterns {
         return switch (pat) {
             case Ir.PIs is -> c.exprs.narrowIs(remaining, is.type());
             case Ir.PBind b when b.sub() instanceof Ir.PIs is -> c.exprs.narrowIs(remaining, is.type());
+            case Ir.PBind b when b.sub() instanceof Ir.PNot n -> remainder(n.pattern(), remaining);
             case Ir.PBind b -> remaining;
             case Ir.PWild w -> remaining;
             case Ir.PLit l when l.value() == null -> Type.NULL;
+            case Ir.PNot n -> remainder(n.pattern(), remaining);
+            case Ir.PRel r -> possible(r, remaining);
             default -> null;
         };
     }
@@ -519,6 +557,22 @@ final class Patterns {
                     && l.head().stream().allMatch(p -> covers(p, a.element()))
                     && l.tail().stream().allMatch(p -> covers(p, a.element()));
             case Ir.PRange r -> false;
+            case Ir.PRel r -> false;
+            case Ir.PNot n -> neverMatches(n.pattern(), atom, member);
+        };
+    }
+
+    /** Whether {@code pat} matches no value of the atom: what makes `not pat` cover it. Conservative. */
+    private boolean neverMatches(Ir.Pat pat, Object atom, Type member) {
+        if (!mayMatch(pat, member)) return true;
+        boolean single = atom instanceof Boolean || atom instanceof Values.EnumVal || atom instanceof Type.Lit
+                || atom == Type.NULL || atom == Type.UNIT;
+        return switch (pat) {
+            case Ir.PLit l -> single && !coversValue(l, atom, member);
+            case Ir.POr o -> o.alternatives().stream().allMatch(a -> neverMatches(a, atom, member));
+            case Ir.PNot n -> coversValue(n.pattern(), atom, member);
+            case Ir.PBind b -> b.sub() != null && neverMatches(b.sub(), atom, member);
+            default -> false;
         };
     }
 
@@ -557,7 +611,8 @@ final class Patterns {
             var lp = listOf(p);
             if (lp == null) {
                 if (p instanceof Ir.PWild || (p instanceof Ir.PBind b && (b.sub() == null || coversValue(b.sub(), m, m)))
-                        || (p instanceof Ir.PIs is && ts.assignable(m, is.type()))) return null;
+                        || (p instanceof Ir.PIs is && ts.assignable(m, is.type()))
+                        || (p instanceof Ir.PNot && coversValue(p, new ListAtom(), m))) return null;
                 continue;
             }
             boolean irrefutable = lp.head().stream().allMatch(x -> covers(x, element))

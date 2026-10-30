@@ -1,0 +1,13 @@
+select_errors.3b:11:42: error[E0234]: the `_` arm must be the last
+select_errors.3b:11:50: error[E0234]: a select has at most one `_` arm
+select_errors.3b:12:18: error[E0234]: the `_` arm must be the last
+select_errors.3b:13:9: error[E0234]: a select needs a case besides `_`
+select_errors.3b:14:26: error[E0234]: a select case is `let p = ch.recv()`, `let p = ch.send(v)`, `let p = t.join()`, `after(d)` or `_`
+select_errors.3b:15:26: error[E0234]: `recv` in a select needs a `std::sync::Receiver`, not 'i32'
+select_errors.3b:16:26: error[E0234]: `recv` in a select needs a `std::sync::Receiver`, not 'Thread<i32>'
+select_errors.3b:17:26: error[E0234]: `join` in a select needs a `std::thread::Thread`, not 'Channel<i32>'
+select_errors.3b:18:34: error[E0200]: expected 'i32', found 'str'
+select_errors.3b:19:18: error[E0234]: a select case is `let p = ch.recv()`, `let p = ch.send(v)`, `let p = t.join()`, `after(d)` or `_`
+select_errors.3b:20:24: error[E0200]: expected 'Duration', found 'i32'
+select_errors.3b:21:22: error[E0226]: a 2-tuple pattern cannot match 'i32 | ClosedErr'
+select_errors.3b:22:5: error[E0211]: this value of type '() | CancelledErr' may be an error; handle it, propagate it with `?`, or discard it with `_ = ...;`

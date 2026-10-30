@@ -7,8 +7,8 @@ fn work(n: i32) -> i32 {
     return n;
 }
 
-fn main() {
+fn main() -> () | Err {
     let t = Thread::spawn(() => work(3));
-    println(t.join());
+    println(t.join()?);
     println("unreachable");
 }

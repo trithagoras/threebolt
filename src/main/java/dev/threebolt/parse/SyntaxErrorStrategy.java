@@ -25,6 +25,13 @@ final class SyntaxErrorStrategy extends DefaultErrorStrategy {
     @Override
     protected void reportNoViableAlternative(Parser recognizer, NoViableAltException e) {
         Token t = e.getOffendingToken();
+        var in = recognizer.getInputStream();
+        if (t.getText().equals("not") && t.getTokenIndex() > 0 && in.get(t.getTokenIndex() - 1).getType() == IS) {
+            // After `is`, `not` is always the keyword (§7.3), so what follows it is what's wrong.
+            Token next = in.get(t.getTokenIndex() + 1);
+            report(recognizer, next, "expected a type or pattern after 'is not', found " + describe(next));
+            return;
+        }
         String message = "unexpected " + describe(t);
         if (startsInitializer(recognizer, t)) {
             message += " (an initializer in an if/while/for/match head must be parenthesized)";

@@ -1,0 +1,11 @@
+accept: true, then true
+read: true, then true
+GRACEFUL
+still running: true
+serve: true, handlers finished: 1
+ABRUPT
+serve: true, handlers cancelled: 1
+client sees the end: null
+FIRST
+second waits: true
+SECOND

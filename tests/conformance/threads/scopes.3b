@@ -1,0 +1,81 @@
+// §13.4 scopes: they wait for their threads, cancel only when asked, and cancellation propagates
+// down the scopes a cancelled thread owns.
+use std::thread;
+use std::thread::{CancelledErr, Thread};
+use std::sync::{Atomic, Mutex};
+use std::time::Duration;
+
+fn wait_for(flag: Atomic<bool>) {
+    while !flag.load() {}
+}
+
+fn main() -> () | Err {
+    // The scope waits for every thread, including one spawned into it while it waits, and
+    // returns the body's result. Threads may use the owner's locals.
+    let total = Mutex::new(0);
+    let n = thread::scope((s) => {
+        for i in 1..=4 {
+            s.spawn(() => {
+                _ = thread::sleep(Duration::from_millis(10 * i as i64));
+                total.lock((mut g) => g.value += i);
+            });
+        }
+        s.spawn(() => {
+            _ = thread::sleep(Duration::from_millis(50));
+            s.spawn(() => {
+                _ = thread::sleep(Duration::from_millis(20));
+                total.lock((mut g) => g.value += 100);
+            });
+        });
+        return 4;
+    });
+    println(f"waited for {n} (+2): total {total.lock(g => g.value)}");
+
+    // Leaving does not cancel; `s.cancel()` does, and later threads start cancelled. The owner is not.
+    let (first, b, c, scope_cancelled, owner_cancelled) = thread::scope((s) => {
+        let a = s.spawn(() => thread::cancelled());
+        let first = a.join()?;
+        let b = s.spawn(() => thread::sleep(Duration::from_secs(60)));
+        println(f"before cancel: {s.cancelled}");
+        s.cancel();
+        let c = s.spawn(() => thread::cancelled());
+        return (first, b.join() is CancelledErr, c.join()?, s.cancelled, thread::cancelled());
+    })?;
+    println(f"cancel: first {first}, running {b}, later {c}, scope {scope_cancelled}, owner {owner_cancelled}");
+
+    // `defer s.cancel();`: stragglers are cancelled when the body leaves, and the scope waits for them.
+    let straggler = thread::scope((s) => {
+        defer s.cancel();
+        return s.spawn(() => {
+            defer println("straggler: cleanup");
+            thread::sleep(Duration::from_secs(60))?;
+            return 1;
+        });
+    });
+    println(f"straggler: {straggler.finished} {straggler.join() is CancelledErr}");
+
+    // Cancelling a thread cancels the scopes it owns, at any depth; a scope opened by a cancelled
+    // thread starts cancelled. Detached threads are not affected. (The cancelled worker's own
+    // `join` fails fast, so the grandchild reports through an Atomic.)
+    let ready = Atomic::new(false);
+    let grandchild_cancelled = Atomic::new(false);
+    let detached: Mutex<Thread<bool> | null> = Mutex<Thread<bool> | null>::new(null);
+    let worker = Thread::spawn(() => thread::scope((outer) => {
+        outer.spawn(() => thread::scope((inner) => {
+            inner.spawn(() => {
+                ready.store(true);
+                grandchild_cancelled.store(thread::sleep(Duration::from_secs(60)) is CancelledErr);
+            });
+        }));
+        wait_for(ready);
+        while !thread::cancelled() {}
+        detached.lock((mut g) => g.value = Thread::spawn(() => thread::cancelled()));
+        return thread::scope((late) => late.cancelled);
+    }));
+    wait_for(ready);
+    worker.cancel();
+    println(f"late scope cancelled: {worker.join()?}");
+    println(f"grandchild cancelled: {grandchild_cancelled.load()}");
+    let d = detached.lock(g => g.value);
+    if d is Thread<bool> { println(f"detached cancelled: {d.join()?}"); }
+}

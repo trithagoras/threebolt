@@ -10,7 +10,10 @@ implementation), and strike it here.
 1. Runtime boundary: move std into Threebolt over a small, documented intrinsic layer; backend prerequisites.
 2. Projects and packages: manifest, workspaces, path dependencies, multiple executables, `internal`, `pub use`.
 3. Standard library expansion, one module per session: `time` → `env`/`process` → `net`.
-4. JVM bytecode backend, when benchmarks show a need or the language has settled.
+4. Concurrency (spec'd 2026-10-30, §6 below): virtual threads, scopes, cancellation, channels, `select`.
+   Moved ahead of the backend 2026-10-30: nearly all of it is front end and Threebolt std, shared by both
+   backends, and its breaking signature changes should land before a second backend exists.
+5. JVM bytecode backend, when benchmarks show a need or the language has settled.
 
 The small open decisions (§5) are deferred, except 5.2, which is decided and lands in task 1.
 
@@ -249,7 +252,7 @@ GC for free, FFM interop unchanged, and Java intrinsics callable directly. Rejec
 (an interpreter loop on the JVM is slower than generated classes) and native code via LLVM/C (needs its own
 GC and runtime; far beyond 1.0).
 
-**Timing: after 1–3**, when the task-1 benchmarks show performance hurting or the language has settled.
+**Timing: after 1–3 and concurrency (§6)**, when the task-1 benchmarks show performance hurting or the language has settled.
 Building it earlier means implementing every language change twice (interpreter and codegen) unless the
 interpreter is retired. Known hard parts: struct value semantics (no value types on the JVM: explicit copies),
 generics under erasure, unions boxed as `Object`, closures, panics, and intrinsics that call back into
@@ -283,3 +286,40 @@ reported unused**.
 - **Recommendation:** add one informative sentence to spec §1 (identifiers) so it is not a hidden rule;
   keep the warning list itself in `PLAN.md`.
 - Also: should `///` that documents nothing (inside a body, before a statement) warn? Cheap to add.
+
+## 6. Concurrency — **spec'd and implemented 2026-10-30**
+
+Spec §1 (contextual `select`), §6.4 (`for p? in`), §7.14 (`select`), §13.4, §16; rationale, JVM mapping and
+risks in `docs/plans/concurrency.md`. Steps, each with conformance cases and an errors case:
+1. ~~**Virtual threads**~~ — done: `Interpreter.threads` builds every Threebolt thread, `main` included, as a
+   virtual thread. Their stacks are capped by `-Xss` (measured: ~38K Java frames by default, ~44M with `-Xss1g`,
+   as a 1 GiB platform thread), so the launcher and test JVMs pass `-Xss1g`; without it, 1 GiB platform
+   threads as before. Conformance `threads/virtual` (deep recursion on a thread, 10,000 threads). Benchmarks
+   unchanged.
+2. ~~**Cancellation and scopes**~~ — done: `std::thread` `CancelledErr`, `cancel`, `cancelled`, `check`,
+   `finished`, `join(timeout)`, `scope`/`Scope`; `join`/`sleep` return `| CancelledErr`; `TimedOutErr : Err` in
+   `std::time`. Conformance `threads/cancel`, `scopes`, `scope_ended`, `cancel_errors`. Left for step 4: `std::net`
+   still has its own `TimedOutErr : NetErr` (moving it changes the socket result types), and files are
+   `FileChannel`s, which an interrupt (a `cancel`) closes.
+3. ~~**`std::sync`**~~ — done: `Semaphore`, `Sender`/`Receiver`, `Channel` over `interp/Channels.java` (per-channel
+   lock, buffer and wait queues; a wait on several cases is won by one compare-and-set, ready for `select`).
+   Conformance `threads/channels`, `channel_errors`; unit `ChannelsTest`.
+4. ~~**`std::io`/`std::net` cancellation points**~~ — done: `| CancelledErr` in every result; `TimedOutErr` moved to
+   `std::time` (re-exported by `std::net`). **Decided 2026-10-30:** `Read`/`Write` results include `TimedOutErr`, and
+   trait implementations may return less (§4.9, including `Iterator<A>` for `Iterator<B>`), so `File`'s members leave
+   it out; `CancelledErr`/`TimedOutErr` are `MsgErr`s (printable). Files are shielded from cancellation's interrupt
+   (`Callbacks.uninterruptibly`); `serve` has `max_connections` and its own scope. Conformance `stdlib/io_cancel`,
+   `net_cancel`, `dispatch/covariant_*`; unit `ThreadsTest`.
+5. ~~**`for p? in e`**~~ — done: grammar (`FOR pattern QUESTION? IN`), `Stmt.For.propagate`, lowered by the checker to
+   `for tmp in e { let p = tmp?; body }` (so the interpreter is unchanged); the §6.4 example is back. Conformance
+   `unions/for_propagate`, `for_propagate_errors`. The TextMate grammar needed nothing.
+6. ~~**`select`**~~ — done: `atSelect` (contextual: `select` before `{` where an initializer may start), `Expr.Select`,
+   `types/Selects` (case forms, E0234), `Ir.Select`, and the `Channels` engine generalised to sources: channels and
+   thread completions, with a uniform shuffle of ready cases and an always-ready slot for an `after` whose time
+   came. Spec §7.14: its snippet is now a parsed `rs` fence; a non-diverging block arm yields `()`; a `recv`/`send`
+   operand that is not a `std::sync::Channel` panics. TextMate: `select` before `{`. Conformance `threads/select`,
+   `select_errors`, `select_receiver`; completion in a case head.
+7. ~~Make `examples/chatroom/` type-check and run, using `for x? in`~~ — done. `TcpStream` got narrow `write_line`/`flush`
+   (writes never time out), and `TcpListener::bind` asks for a 4096 backlog (Java's default is 50; the system caps it:
+   128 on macOS). With 300 bots against 100 slots plus that backlog, macOS resets the connections beyond them; the
+   report counts those as failed.

@@ -1,0 +1,9 @@
+// §13.4: spawning into a scope whose `scope` call has returned panics.
+//! exit: 101
+use std::thread;
+
+fn main() {
+    let leaked = thread::scope((s) => s);
+    println("leaked a scope");
+    leaked.spawn(() => 1);
+}

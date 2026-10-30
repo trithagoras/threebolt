@@ -2,11 +2,11 @@
 //! exit: 3
 use std::thread::Thread;
 
-fn main() {
+fn main() -> () | Err {
     let t = Thread::spawn(() => {
         println("leaving");
         std::process::exit(3);
     });
-    t.join();
+    t.join()?;
     println("unreachable");
 }

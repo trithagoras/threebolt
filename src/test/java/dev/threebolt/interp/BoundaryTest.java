@@ -11,7 +11,7 @@ import org.junit.jupiter.api.Test;
 
 /** The intrinsics reach the evaluator only through {@link Callbacks}: no field, parameter or result mentions it, the IR or frames. */
 class BoundaryTest {
-    private static final List<Class<?>> INTRINSICS = List.of(Natives.class, Threads.class, Ffi.class, Io.class);
+    private static final List<Class<?>> INTRINSICS = List.of(Natives.class, Threads.class, Channels.class, Ffi.class, Io.class);
 
     private static boolean forbidden(Class<?> c) {
         return c == Interpreter.class || c == Interpreter.Frame.class || c == Values.Env.class

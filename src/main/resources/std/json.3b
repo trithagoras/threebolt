@@ -366,7 +366,7 @@ pub fn array(j: Json) -> [Json] | JsonDecodeErr {
 /// Member `key` of `o` as a `T`: `json::field<str>(o, "name")?`. A missing member is a
 /// `JsonDecodeErr`, and so is one that `T::from_json` rejects (with `key` added to its path).
 pub fn field<T: FromJson>(o: Map<str, Json>, key: str) -> T | JsonErr {
-    if !(key in o) { return JsonDecodeErr::new(f"missing field \"{key}\""); }
+    if key not in o { return JsonDecodeErr::new(f"missing field \"{key}\""); }
     return within(T::from_json(o[key]), key);
 }
 
@@ -385,7 +385,7 @@ fn within<T>(r: T | JsonErr, key: str) -> T | JsonErr {
 
 /// `j` as an integer type `T`, if it is a whole number in `T`'s range.
 fn integer<T: Integer>(j: Json, name: str) -> T | JsonErr {
-    if !(j is f64) { return mismatch(name, j); }
+    if j is not f64 { return mismatch(name, j); }
     // `max + 1` is exact for the narrower types and rounds to `max` for 64 bits, whose
     // maximum is not an f64: either way, below it is in range.
     if j.trunc() != j || j < T::min_value() as f64 || j >= T::max_value() as f64 + 1.0 {

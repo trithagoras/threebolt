@@ -1,17 +1,93 @@
-// std::thread (spec §13.4): Threebolt threads are OS threads. A panic on any thread ends the
-// process; when `main` returns, threads still running are stopped.
+// std::thread (spec §13.4): lightweight threads, scopes and cooperative cancellation.
+//
+// A cancelled thread notices at its next cancellation point (every std operation that waits),
+// which yields `CancelledErr` on entry; `?` carries it out through the thread's frames, running
+// defers. Cancelling a thread cancels the threads in every scope it owns, transitively.
 
-use std::time::Duration;
+use std::time::{Duration, TimedOutErr};
+
+/// What a cancellation point yields on a cancelled thread.
+pub class CancelledErr : MsgErr {
+    pub fn new() -> Self => { ..MsgErr::new("cancelled") };
+}
+
+// What `Thread::wait` reports.
+const WAIT_DONE: i32 = 0;
+const WAIT_TIMED_OUT: i32 = 1;
+const WAIT_CANCELLED: i32 = 2;
 
 /// A running thread whose function returns `R`.
 pub class Thread<R> {
-    /// Starts a thread running `f`.
+    /// Starts a detached thread running `f`: no scope owns it, and cancelling its creator does
+    /// not cancel it.
     pub fn spawn(f: fn() -> R) -> Self;
-    /// Waits for the thread to finish and returns its result (a copy for value types).
-    pub fn join(self) -> R;
+
+    /// Waits for the thread to finish and returns its result (a copy for value types; joining
+    /// again returns it again).
+    pub fn join(self) -> R | CancelledErr {
+        if self.wait(i64::MAX) == WAIT_CANCELLED { return CancelledErr::new(); }
+        return self.result();
+    }
+
+    /// As `join()`, giving up after `timeout` (a zero or negative `timeout` checks once).
+    pub fn join(self, timeout: Duration) -> R | TimedOutErr | CancelledErr {
+        let w = self.wait(timeout.nanos);
+        if w == WAIT_CANCELLED { return CancelledErr::new(); }
+        if w == WAIT_TIMED_OUT { return TimedOutErr::new(); }
+        return self.result();
+    }
+
+    /// Cancels the thread (doing nothing if it is cancelled or finished already).
+    pub fn cancel(self);
+
+    /// Whether the thread has finished.
+    pub get fn finished(self) -> bool;
+
+    /// Waits up to `nanos` (`i64::MAX`: forever) for the thread to finish; a `WAIT_*` constant.
+    fn wait(self, nanos: i64) -> i32;
+    /// The finished thread's result.
+    fn result(self) -> R;
+}
+
+/// Threads whose lifetime is bounded by a `scope` call.
+pub class Scope {
+    /// Starts a thread owned by the scope; it starts cancelled if the scope is. Panics if the
+    /// scope's `scope` call has returned.
+    pub fn spawn<T>(self, f: fn() -> T) -> Thread<T>;
+
+    /// Cancels every thread in the scope, now and spawned later. The owner is not cancelled.
+    pub fn cancel(self);
+
+    /// Whether the scope is cancelled.
+    pub get fn cancelled(self) -> bool;
+
+    /// A scope owned by the current thread, cancelled already if the thread is.
+    internal fn open() -> Self;
+    /// Waits for every thread in the scope (not a cancellation point), then ends it.
+    internal fn close(self);
+}
+
+/// Calls `f` with a new scope, and when it returns by any path, waits for every thread spawned
+/// into the scope before returning `f`'s result. Leaving does not cancel them: write
+/// `defer s.cancel();` in `f` for that.
+pub fn scope<R>(f: fn(Scope) -> R) -> R {
+    let s = Scope::open();
+    defer s.close();
+    return f(s);
 }
 
 /// Blocks the current thread for at least `d` (not at all if `d` is zero or negative).
-pub fn sleep(d: Duration) => sleep_nanos(d.nanos);
+pub fn sleep(d: Duration) -> () | CancelledErr {
+    if !sleep_nanos(d.nanos) { return CancelledErr::new(); }
+}
 
-fn sleep_nanos(ns: i64);
+/// Whether the current thread is cancelled.
+pub fn cancelled() -> bool;
+
+/// `CancelledErr` if the current thread is cancelled: `thread::check()?;` in a long computation.
+pub fn check() -> () | CancelledErr {
+    if cancelled() { return CancelledErr::new(); }
+}
+
+/// Sleeps for `ns` nanoseconds; false if the thread is cancelled first or meanwhile.
+fn sleep_nanos(ns: i64) -> bool;

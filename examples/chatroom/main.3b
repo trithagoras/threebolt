@@ -1,0 +1,43 @@
+// chatroom — a loopback chat server under a swarm of bots, to show Threebolt's concurrency model.
+//   bolt run main.3b
+//
+// Written against the concurrency model of spec §13.4 (threads, scopes, cancellation, channels).
+// Every thread is a cheap virtual thread, so blocking is fine and `join` is "await"; there is no
+// async/await. Scopes wait for their threads; cancelling is explicit (`defer s.cancel();`) and
+// cooperative: every wait (I/O, channels, `join`, `sleep`) yields `CancelledErr` on a cancelled thread,
+// and `?` carries it out, running defers.
+
+use std::net::TcpListener;
+use std::thread::{CancelledErr, Thread};
+use std::time::{Duration, Instant, TimedOutErr};
+use hub::Hub;
+use bots;
+
+const MAX_CONNECTIONS: usize = 100;
+const BOTS: i32 = 300;
+
+fn main() -> () | Err {
+    let listener = TcpListener::bind("127.0.0.1:0")?;
+    let addr = listener.local_addr;
+    let hub = Hub::new();
+
+    // The server gets a thread of its own; cancelling that thread is how we shut it down.
+    let server = Thread::spawn(() => hub.run(listener, MAX_CONNECTIONS));
+    println(f"listening on {addr}, at most {MAX_CONNECTIONS} guests at a time");
+
+    let started = Instant::now();
+    let report = bots::swarm(addr, BOTS, Duration::from_secs(20));
+    println(f"{BOTS} bots in {started.elapsed()}: {report}");
+    println(f"the room relayed {hub.messages.load()} messages");
+
+    // Cancel the server: its blocked `accept` yields CancelledErr, which cancels every scope underneath
+    // it (the broadcaster, open sessions and their writers); `serve` waits for them, then returns
+    // CancelledErr, which becomes the server thread's result.
+    server.cancel();
+    match server.join(Duration::from_secs(2)) {
+        is TimedOutErr => println("server ignored the shutdown; leaving it behind"),
+        is CancelledErr => println("server stopped"),
+        e is Err => println(f"server failed: {e}"),
+        _ => println("server stopped"),
+    }
+}

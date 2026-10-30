@@ -61,6 +61,7 @@ public final class Interpreter implements Callbacks {
     final PrintStream out;
     final PrintStream err;
     private final Natives natives;
+    private final Threads threads;
     private final Ffi ffi = new Ffi(this);
     /** The `Done` sentinel (§16). */
     final Obj done;
@@ -85,7 +86,8 @@ public final class Interpreter implements Callbacks {
         this.stdin = in;
         this.out = out;
         this.err = err;
-        this.natives = new Natives(this, ffi, new Threads(this), new Io(this));
+        this.threads = new Threads(this);
+        this.natives = new Natives(this, ffi, threads, new Io(this));
         this.done = new Obj(ts.done, List.of(), new Object[0]);
     }
 
@@ -259,7 +261,7 @@ public final class Interpreter implements Callbacks {
     /** Starts a Threebolt thread (§13.4) running {@code body}; a panic in it ends the process. */
     @Override
     public Thread startThread(Runnable body) {
-        var t = new Thread(null, () -> {
+        var t = threads("threebolt-thread").unstarted(() -> {
             try {
                 body.run();
             } catch (Panic p) {
@@ -273,16 +275,45 @@ public final class Interpreter implements Callbacks {
             } finally {
                 running.remove(Thread.currentThread());
             }
-        }, "threebolt-thread", STACK_SIZE);
-        t.setDaemon(true);
+        });
         running.add(t);
         checkAbort();
         t.start();
         return t;
     }
 
-    /** The evaluator recurses deeply; threads get a large stack. */
-    public static final long STACK_SIZE = 1L << 30;
+    @Override
+    public boolean cancelled() {
+        return threads.currentCancelled();
+    }
+
+    @Override
+    public boolean uninterruptibly(Runnable op) {
+        return threads.uninterruptibly(op);
+    }
+
+    /** The stack the evaluator needs: it recurses deeply. */
+    private static final long STACK_SIZE = 1L << 30;
+
+    /**
+     * Builds Threebolt threads: virtual threads (§13.4: lightweight), whose stacks the JVM's {@code -Xss}
+     * caps, so the launcher passes {@code -Xss1g}. Without it (a plain {@code java -jar}), platform threads
+     * with a large stack instead.
+     */
+    public static Thread.Builder threads(String name) {
+        return VIRTUAL ? Thread.ofVirtual().name(name) : Thread.ofPlatform().name(name).daemon().stackSize(STACK_SIZE);
+    }
+
+    private static final boolean VIRTUAL = maxStackKiB() >= STACK_SIZE >> 10;
+
+    private static long maxStackKiB() {
+        try {
+            var vm = java.lang.management.ManagementFactory.getPlatformMXBean(com.sun.management.HotSpotDiagnosticMXBean.class);
+            return Long.parseLong(vm.getVMOption("ThreadStackSize").getValue());
+        } catch (RuntimeException e) {
+            return 0;
+        }
+    }
 
     // ---- Calls ----
 
@@ -909,10 +940,14 @@ public final class Interpreter implements Callbacks {
     private Cell staticCell(StaticInfo s) {
         var cell = statics.get(s);
         if (cell != null) return cell;
-        try {
-            staticInit.lockInterruptibly();
-        } catch (InterruptedException e) {
-            throw new Abort();
+        while (true) {
+            try {
+                staticInit.lockInterruptibly();
+                break;
+            } catch (InterruptedException e) {
+                // Ending the process, or cancellation (§13.4), which this wait ignores.
+                checkAbort();
+            }
         }
         try {
             cell = statics.get(s);
@@ -1163,6 +1198,22 @@ public final class Interpreter implements Callbacks {
                 int hi = Ops.comparePrim(v, r.high());
                 yield lo >= 0 && (r.isInclusive() ? hi <= 0 : hi < 0);
             }
+            case Ir.PNot n -> !match(n.pattern(), v, f);
+            case Ir.PRel r -> {
+                if (v == null || v.getClass() != r.value().getClass()) yield false;
+                if (v instanceof Int i && ((Int) r.value()).kind() != i.kind()) yield false;
+                if (v instanceof Flt x && ((Flt) r.value()).kind() != x.kind()) yield false;
+                // IEEE comparisons for floats, as the operators: NaN matches none.
+                int cmp = v instanceof Flt x ? (x.v() < ((Flt) r.value()).v() ? -1 : x.v() > ((Flt) r.value()).v() ? 1
+                        : x.v() == ((Flt) r.value()).v() ? 0 : 2) : Integer.signum(Ops.comparePrim(v, r.value()));
+                yield switch (r.op()) {
+                    case LT -> cmp == -1;
+                    case LE -> cmp == -1 || cmp == 0;
+                    case GT -> cmp == 1;
+                    case GE -> cmp == 1 || cmp == 0;
+                    default -> throw new IllegalStateException(r.op().toString());
+                };
+            }
             case Ir.PTuple t -> {
                 if (!(v instanceof TupleVal tv) || tv.items.length != t.elements().size()) yield false;
                 for (int i = 0; i < tv.items.length; i++) if (!match(t.elements().get(i), tv.items[i], f)) yield false;
@@ -1375,7 +1426,65 @@ public final class Interpreter implements Callbacks {
             case Ir.NameOf n -> Str.of(TypeSystem.name(subst(n.type(), f)));
             case Ir.TypeOfValue t -> new TypeVal(typeOf(unbox(eval(t.operand(), f))));
             case Ir.Match m -> match(m, f);
+            case Ir.Select sel -> select(sel, f);
         };
+    }
+
+    /**
+     * {@code select} (§7.14): evaluates every case's operands in order, waits until one case can
+     * happen, performs only that one, binds its outcome and runs its arm.
+     */
+    private Object select(Ir.Select s, Frame f) {
+        var arms = s.cases();
+        var cases = new ArrayList<Channels.Case>();
+        var armOf = new ArrayList<Integer>();
+        long after = Long.MAX_VALUE;
+        int afterArm = -1, defaultArm = -1;
+        for (int i = 0; i < arms.size(); i++) {
+            var arm = arms.get(i);
+            switch (arm.kind()) {
+                case RECV, SEND, JOIN -> {
+                    var target = eval(arm.target(), f);
+                    f.at = s.span();
+                    cases.add(switch (arm.kind()) {
+                        case RECV -> threads.selectRecv(target);
+                        case SEND -> threads.selectSend(target, Values.copy(eval(arm.value(), f)));
+                        default -> threads.selectJoin(target);
+                    });
+                    armOf.add(i);
+                }
+                case AFTER -> {
+                    long nanos = ((Int) ((Obj) unbox(eval(arm.target(), f))).fields[0]).v();
+                    if (afterArm < 0 || nanos < after) {
+                        after = nanos;
+                        afterArm = i;
+                    }
+                }
+                case DEFAULT -> defaultArm = i;
+            }
+        }
+        boolean expired = afterArm >= 0 && after <= 0;
+        long wait = defaultArm >= 0 || expired ? 0 : after;
+        var out = threads.select(cases.toArray(new Channels.Case[0]), wait, expired);
+        checkAbort();
+        int chosen;
+        Object outcome = Unit.UNIT;
+        if (out.code() == Channels.OP_CANCELLED) {
+            return eval(s.cancelled(), f);
+        } else if (out.index() >= 0) {
+            chosen = armOf.get(out.index());
+            var kind = arms.get(chosen).kind();
+            if (out.code() == Channels.OP_CLOSED) outcome = eval(s.closed(), f);
+            else if (kind == Ir.SelectKind.RECV || kind == Ir.SelectKind.JOIN) outcome = Values.copy(out.value());
+        } else {
+            // `after`'s time came (OP_AFTER, or waiting for it timed out), or nothing was ready for `_`.
+            chosen = out.code() == Channels.OP_AFTER || defaultArm < 0 ? afterArm : defaultArm;
+        }
+        var arm = arms.get(chosen);
+        if (arm.pattern() != null) match(arm.pattern(), outcome, f);
+        if (arm.result() != null) return eval(arm.result(), f);
+        exec(arm.body(), f);
+        return Unit.UNIT;
     }
 
     private Object match(Ir.Match m, Frame f) {

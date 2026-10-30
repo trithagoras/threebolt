@@ -1,0 +1,15 @@
+// §13.1: a panicked thread never counts as finished: its joiner stops with the process rather
+// than returning, even while the (here, long) panic report is still being written.
+//! exit: 101
+use std::thread::Thread;
+
+fn dive(n: i32) {
+    if n == 0 { panic("failed"); }
+    dive(n - 1);
+}
+
+fn main() -> () | Err {
+    let t = Thread::spawn(() => dive(40));
+    t.join()?;
+    println("unreachable");
+}

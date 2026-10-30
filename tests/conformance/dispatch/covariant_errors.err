@@ -1,0 +1,4 @@
+covariant_errors.3b:16:12: error[E0403]: 'area' does not match the signature required by trait 'Shape': it returns 'i32', which is not 'i64' or a narrower union of its members
+covariant_errors.3b:17:12: error[E0403]: 'label' does not match the signature required by trait 'Shape': it returns 'Name', which is not 'Display' or a narrower union of its members
+covariant_errors.3b:18:12: error[E0403]: 'parts' does not match the signature required by trait 'Shape': it returns 'i32 | str', which is not 'i32 | null' or a narrower union of its members
+covariant_errors.3b:25:12: error[E0403]: 'all' does not match the signature required by trait 'Words': it returns 'Iterator<str | null>', which is not 'Iterator<str>' or a narrower union of its members

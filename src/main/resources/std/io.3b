@@ -4,6 +4,15 @@
 // This is Threebolt over a few `sys_*` intrinsics shaped like POSIX calls: a file is a numbered
 // handle (0, 1 and 2 are stdin, stdout and stderr), and a call returns a non-negative result or a
 // negated error code (`E_*`), with a description from `sys_error()`.
+//
+// Every operation that can fail with `IoErr` (but `close`) is a cancellation point (§13.4) and can
+// also yield `CancelledErr`: the `sys_*` calls report it for files and sockets, and `File` checks
+// on entry for the standard streams. The `Read` and `Write` traits also allow `TimedOutErr`, for
+// sockets; `File`'s own members cannot time out and leave it out (§4.9).
+
+use std::thread;
+use std::thread::CancelledErr;
+use std::time::TimedOutErr;
 
 // ---- Printing ----
 
@@ -21,8 +30,8 @@ pub fn eprintln<T: Display>(x: T) { sys_write_str(2, x.to_str() + "\n"); }
 pub fn readln(prompt: str) -> str | null {
     print(prompt);
     sys_flush(1);
-    let line = File::stdin().read_line();
-    if line is IoErr { panic(f"readln: {line.message()}"); }
+    let line = File::stdin().console_line();
+    if line is Err { panic(f"readln: {line.message()}"); }
     return line;
 }
 pub fn readln() -> str | null => readln("");
@@ -95,10 +104,12 @@ const E_IS_DIR: i64 = 5;
 const E_NOT_DIR: i64 = 6;
 const E_NOT_EMPTY: i64 = 7;
 const E_BAD_HANDLE: i64 = 8;
+const E_CANCELLED: i64 = 14;         // after std::net's
 
 /// The error for `r`, the negative result of a `sys_*` call on `path`.
-internal fn failure(r: i64, path: str | null) -> IoErr {
+internal fn failure(r: i64, path: str | null) -> IoErr | CancelledErr {
     let code = -r;
+    if code == E_CANCELLED { return CancelledErr::new(); }
     if code == E_NOT_FOUND { return NotFoundErr::new(path); }
     if code == E_PERMISSION { return PermissionErr::new(path); }
     if code == E_EXISTS { return ExistsErr::new(path); }
@@ -110,7 +121,7 @@ internal fn failure(r: i64, path: str | null) -> IoErr {
 }
 
 /// `()`, or the error if `r` is a `sys_*` failure.
-fn check(r: i64, path: str | null) -> () | IoErr {
+fn check(r: i64, path: str | null) -> () | IoErr | CancelledErr {
     if r < 0 { return failure(r, path); }
 }
 
@@ -146,41 +157,57 @@ const CHUNK: usize = 65536;
 /// reading as U+FFFD.
 pub trait Read {
     /// The rest of the input.
-    fn read(mut self) -> str | IoErr;
+    fn read(mut self) -> str | IoErr | TimedOutErr | CancelledErr;
     /// The next line without its `\n` or `\r\n`, or null at the end. A last line without a line
     /// ending still counts.
-    fn read_line(mut self) -> str | null | IoErr;
+    fn read_line(mut self) -> str | null | IoErr | TimedOutErr | CancelledErr;
     /// The rest of the input.
-    fn read_bytes(mut self) -> [u8] | IoErr;
+    fn read_bytes(mut self) -> [u8] | IoErr | TimedOutErr | CancelledErr;
     /// Up to `n` bytes; fewer only at the end.
-    fn read_bytes(mut self, n: usize) -> [u8] | IoErr;
+    fn read_bytes(mut self, n: usize) -> [u8] | IoErr | TimedOutErr | CancelledErr;
 
     /// The rest of the lines, as `read_line` reads them. An error ends the iteration, after
-    /// being returned as an element: `for line in f.lines() { let line = line?; ... }`.
-    fn lines(mut self) -> Iterator<str | IoErr> => LinesIter::new(self);
+    /// being returned as an element: `for line? in f.lines() { ... }`.
+    fn lines(mut self) -> Iterator<str | IoErr | TimedOutErr | CancelledErr> => LinesIter::new(self);
 
     /// The rest of the lines, as `read_line` reads them.
-    fn read_lines(mut self) -> [str] | IoErr {
+    fn read_lines(mut self) -> [str] | IoErr | TimedOutErr | CancelledErr {
         let mut lines: [str] = [];
         loop {
             let line = self.read_line();
-            if line is IoErr { return line; }
-            if line == null { return lines; }
-            lines.push(line);
+            if line is str {
+                lines.push(line);
+            } else {
+                if line == null { return lines; }
+                return line;
+            }
         }
     }
 }
 
 /// A sink of bytes and text: `File`, `std::net::TcpStream`. Text is written as UTF-8.
 pub trait Write {
-    fn write(mut self, s: str) -> () | IoErr;
-    fn write_bytes(mut self, bytes: [u8]) -> () | IoErr;
+    fn write(mut self, s: str) -> () | IoErr | TimedOutErr | CancelledErr;
+    fn write_bytes(mut self, bytes: [u8]) -> () | IoErr | TimedOutErr | CancelledErr;
 
     /// Writes `s` and a `\n`.
-    fn write_line(mut self, s: str) -> () | IoErr => self.write(s + "\n");
+    fn write_line(mut self, s: str) -> () | IoErr | TimedOutErr | CancelledErr => self.write(s + "\n");
     /// Sends on anything buffered; by default there is nothing to send.
-    fn flush(mut self) -> () | IoErr => ();
+    fn flush(mut self) -> () | IoErr | TimedOutErr | CancelledErr => ();
 }
+
+/// How a read through a `Buffered` can fail: sockets can also time out.
+internal type ReadErr = IoErr | TimedOutErr | CancelledErr;
+
+/// `r` without `TimedOutErr`, for code that cannot time out (files, and socket calls other than
+/// reads and connecting).
+internal fn no_timeout<T>(r: T | TimedOutErr) -> T {
+    if r is TimedOutErr { panic("std::io: unexpected timeout"); }
+    return r;
+}
+
+/// `failure` for a `Buffered`, which also serves sockets.
+fn read_failure(r: i64, path: str | null) -> ReadErr => failure(r, path);
 
 /// A handle's read-ahead: the bytes read past the reader's position, `buf[pos..]`. The readers in
 /// std hold one, check their own state and delegate to it.
@@ -188,11 +215,11 @@ internal class Buffered {
     internal let handle: i64;     // -1 once closed
     let path: str | null;        // for errors
     /// The error for a failed `sys_read` (std::net has its own codes).
-    let failure: fn(i64, str | null) -> IoErr;
+    let failure: fn(i64, str | null) -> ReadErr;
     let buf: [u8] = [];
     let pos: usize = 0;
 
-    internal fn new(handle: i64, path: str | null, failure: fn(i64, str | null) -> IoErr = failure) -> Self
+    internal fn new(handle: i64, path: str | null, failure: fn(i64, str | null) -> ReadErr = read_failure) -> Self
         => { handle, path, failure };
 
     /// How many bytes were read ahead.
@@ -204,14 +231,14 @@ internal class Buffered {
         self.pos = 0;
     }
 
-    internal fn read_all(mut self) -> [u8] | IoErr {
+    internal fn read_all(mut self) -> [u8] | ReadErr {
         while self.fill()? {}
         let bytes = self.buf[self.pos..];
         self.clear();
         return bytes;
     }
 
-    internal fn read_line(mut self) -> str | null | IoErr {
+    internal fn read_line(mut self) -> str | null | ReadErr {
         let mut i = self.pos;
         loop {
             let buf = self.buf;
@@ -235,7 +262,7 @@ internal class Buffered {
         }
     }
 
-    internal fn read_bytes(mut self, n: usize) -> [u8] | IoErr {
+    internal fn read_bytes(mut self, n: usize) -> [u8] | ReadErr {
         while self.ahead < n && self.fill()? {}
         let end = self.buf.len.min(self.pos + n);
         let bytes = self.buf[self.pos..end];
@@ -244,7 +271,7 @@ internal class Buffered {
     }
 
     /// Reads more into `buf`; false at the end.
-    fn fill(mut self) -> bool | IoErr {
+    fn fill(mut self) -> bool | ReadErr {
         if self.pos > 0 {
             self.buf = self.buf[self.pos..];
             self.pos = 0;
@@ -284,9 +311,9 @@ pub class File : Read, Write {
     pub fn stderr() -> File => File::STDERR;
 
     /// Opens `path` for reading text.
-    pub fn open(path: str) -> File | IoErr => File::open(path, "r");
+    pub fn open(path: str) -> File | IoErr | CancelledErr => File::open(path, "r");
 
-    pub fn open(path: str, mode: Mode) -> File | IoErr {
+    pub fn open(path: str, mode: Mode) -> File | IoErr | CancelledErr {
         let base = mode[0];
         let mut flags = O_READ;
         if base == 'w' { flags = O_WRITE | O_CREATE | O_TRUNCATE; }
@@ -322,46 +349,70 @@ pub class File : Read, Write {
     // ---- Reading ----
 
     /// The rest of the file.
-    pub fn read(mut self) -> str | IoErr {
+    pub fn read(mut self) -> str | IoErr | CancelledErr {
         self.demand(reading: true, text: true)?;
-        return str::from_utf8(self.io.read_all()?);
+        return str::from_utf8(no_timeout(self.io.read_all())?);
     }
 
     /// The next line without its `\n` or `\r\n`, or null at the end of the file. A last line
     /// without a line ending still counts.
-    pub fn read_line(mut self) -> str | null | IoErr {
+    pub fn read_line(mut self) -> str | null | IoErr | CancelledErr {
         self.demand(reading: true, text: true)?;
-        return self.io.read_line();
+        return no_timeout(self.io.read_line());
+    }
+
+    /// `read_line` for `readln`, which is not a cancellation point.
+    internal fn console_line(mut self) -> str | null | IoErr | CancelledErr {
+        self.allows(reading: true, text: true)?;
+        return no_timeout(self.io.read_line());
     }
 
     /// The rest of the file.
-    pub fn read_bytes(mut self) -> [u8] | IoErr {
+    pub fn read_bytes(mut self) -> [u8] | IoErr | CancelledErr {
         self.demand(reading: true, text: false)?;
-        return self.io.read_all();
+        return no_timeout(self.io.read_all());
     }
 
     /// Up to `n` bytes; fewer only at the end of the file.
-    pub fn read_bytes(mut self, n: usize) -> [u8] | IoErr {
+    pub fn read_bytes(mut self, n: usize) -> [u8] | IoErr | CancelledErr {
         self.demand(reading: true, text: false)?;
-        return self.io.read_bytes(n);
+        return no_timeout(self.io.read_bytes(n));
+    }
+
+    /// The rest of the lines, as `read_line` reads them; an error ends them after being returned
+    /// as an element.
+    pub fn lines(mut self) -> Iterator<str | IoErr | CancelledErr> => FileLines::new(self);
+
+    /// The rest of the lines, as `read_line` reads them.
+    pub fn read_lines(mut self) -> [str] | IoErr | CancelledErr {
+        let mut lines: [str] = [];
+        loop {
+            let line = self.read_line()?;
+            if line == null { return lines; }
+            lines.push(line);
+        }
     }
 
     // ---- Writing ----
 
-    pub fn write(mut self, s: str) -> () | IoErr {
+    pub fn write(mut self, s: str) -> () | IoErr | CancelledErr {
         self.demand(reading: false, text: true)?;
         self.unread()?;
         check(sys_write_str(self.handle, s), self._path)?;
     }
 
-    pub fn write_bytes(mut self, bytes: [u8]) -> () | IoErr {
+    pub fn write_bytes(mut self, bytes: [u8]) -> () | IoErr | CancelledErr {
         self.demand(reading: false, text: false)?;
         self.unread()?;
         check(sys_write(self.handle, bytes), self._path)?;
     }
 
+    /// Writes `s` and a `\n`.
+    pub fn write_line(mut self, s: str) -> () | IoErr | CancelledErr => self.write(s + "\n");
+
     /// Writes are not buffered, so this only matters for stdout, which `print` buffers.
-    pub fn flush(mut self) -> () | IoErr {
+    pub fn flush(mut self) -> () | IoErr | CancelledErr {
+        thread::check()?;
         if self.handle < 0 { return ClosedErr::new(self._path); }
         check(sys_flush(self.handle), self._path)?;
     }
@@ -370,7 +421,8 @@ pub class File : Read, Write {
 
     /// Moves to `offset` bytes from the start, the current position or the end; returns the new
     /// position. Not for the standard streams.
-    pub fn seek(mut self, offset: i64, from: SeekFrom = SeekFrom::Start) -> u64 | IoErr {
+    pub fn seek(mut self, offset: i64, from: SeekFrom = SeekFrom::Start) -> u64 | IoErr | CancelledErr {
+        thread::check()?;
         if self.handle < 0 { return ClosedErr::new(self._path); }
         let mut by = offset;
         if from == SeekFrom::Current { by -= self.io.ahead as i64; }
@@ -381,7 +433,8 @@ pub class File : Read, Write {
     }
 
     /// The position in bytes from the start.
-    pub fn tell(self) -> u64 | IoErr {
+    pub fn tell(self) -> u64 | IoErr | CancelledErr {
+        thread::check()?;
         if self.handle < 0 { return ClosedErr::new(self._path); }
         let r = sys_seek(self.handle, 0, SeekFrom::Current as i32);
         check(r, self._path)?;
@@ -392,8 +445,14 @@ pub class File : Read, Write {
 
     get fn handle(self) -> i64 => self.io.handle;
 
+    /// `()` if the thread is not cancelled, the file is open and its mode allows the operation.
+    fn demand(self, reading: bool = false, text: bool = false) -> () | IoErr | CancelledErr {
+        thread::check()?;
+        self.allows(reading: reading, text: text)?;
+    }
+
     /// `()` if the file is open and its mode allows the operation.
-    fn demand(self, reading: bool = false, text: bool = false) -> () | IoErr {
+    fn allows(self, reading: bool = false, text: bool = false) -> () | IoErr {
         if self.handle < 0 { return ClosedErr::new(self._path); }
         if reading && !self.readable { return ModeErr::new("not open for reading", self._path); }
         if !reading && !self.writable { return ModeErr::new("not open for writing", self._path); }
@@ -403,48 +462,65 @@ pub class File : Read, Write {
 
     /// Drops what was read ahead, moving the system's position back to the file's own, so that
     /// a write lands there.
-    fn unread(mut self) -> () | IoErr {
+    fn unread(mut self) -> () | IoErr | CancelledErr {
         let ahead = self.io.ahead;
         if ahead > 0 { check(sys_seek(self.handle, -(ahead as i64), SeekFrom::Current as i32), self._path)?; }
         self.io.clear();
     }
 }
 
-/// The lines of a reader; `owner`, if any, is closed when they end.
-class LinesIter : Iterator<str | IoErr> {
+/// The lines of a reader.
+class LinesIter : Iterator<str | IoErr | TimedOutErr | CancelledErr> {
     let src: Read;
-    let owner: File | null;
     let done: bool = false;
 
-    pub fn new(src: Read, owner: File | null = null) -> Self => { src, owner };
+    pub fn new(src: Read) -> Self => { src };
 
-    pub fn next(mut self) -> str | IoErr | Done {
+    pub fn next(mut self) -> str | IoErr | TimedOutErr | CancelledErr | Done {
         if self.done { return Done; }
         let line = self.src.read_line();
         if line is str { return line; }
         self.done = true;
-        if let mut f = self.owner { f.close(); }
-        if line is IoErr { return line; }
-        return Done;
+        if line == null { return Done; }
+        return line;
+    }
+}
+
+/// The lines of a file, which is closed when they end if `owned`.
+class FileLines : Iterator<str | IoErr | CancelledErr> {
+    let f: File;
+    let owned: bool;
+    let done: bool = false;
+
+    pub fn new(f: File, owned: bool = false) -> Self => { f, owned };
+
+    pub fn next(mut self) -> str | IoErr | CancelledErr | Done {
+        if self.done { return Done; }
+        let line = self.f.read_line();
+        if line is str { return line; }
+        self.done = true;
+        if self.owned { self.f.close(); }
+        if line == null { return Done; }
+        return line;
     }
 }
 
 /// `File::open(path)`.
-pub fn open(path: str) -> File | IoErr => File::open(path);
+pub fn open(path: str) -> File | IoErr | CancelledErr => File::open(path);
 /// `File::open(path, mode)`.
-pub fn open(path: str, mode: Mode) -> File | IoErr => File::open(path, mode);
+pub fn open(path: str, mode: Mode) -> File | IoErr | CancelledErr => File::open(path, mode);
 
 // ---- Whole files ----
 
 /// The text of the file at `path`.
-pub fn read_text(path: str) -> str | IoErr {
+pub fn read_text(path: str) -> str | IoErr | CancelledErr {
     let mut f = open(path)?;
     defer f.close();
     return f.read();
 }
 
 /// The lines of the file at `path`, without their `\n` or `\r\n`.
-pub fn read_lines(path: str) -> [str] | IoErr {
+pub fn read_lines(path: str) -> [str] | IoErr | CancelledErr {
     let mut f = open(path)?;
     defer f.close();
     return f.read_lines();
@@ -452,41 +528,41 @@ pub fn read_lines(path: str) -> [str] | IoErr {
 
 /// The lines of the file at `path`, read as the loop goes; the file closes at the end or on an
 /// error (but stays open until the program ends if the loop stops early). See `File::lines`.
-pub fn lines(path: str) -> Iterator<str | IoErr> | IoErr {
+pub fn lines(path: str) -> Iterator<str | IoErr | CancelledErr> | IoErr | CancelledErr {
     let f = open(path)?;
-    return LinesIter::new(f, owner: f);
+    return FileLines::new(f, owned: true);
 }
 
 /// The bytes of the file at `path`.
-pub fn read_bytes(path: str) -> [u8] | IoErr {
+pub fn read_bytes(path: str) -> [u8] | IoErr | CancelledErr {
     let mut f = open(path, "rb")?;
     defer f.close();
     return f.read_bytes();
 }
 
 /// Writes `s` to the file at `path`, replacing its contents or creating it.
-pub fn write_text(path: str, s: str) -> () | IoErr {
+pub fn write_text(path: str, s: str) -> () | IoErr | CancelledErr {
     let mut f = open(path, "w")?;
     defer f.close();
     return f.write(s);
 }
 
 /// Writes `s` at the end of the file at `path`, creating it if need be.
-pub fn append_text(path: str, s: str) -> () | IoErr {
+pub fn append_text(path: str, s: str) -> () | IoErr | CancelledErr {
     let mut f = open(path, "a")?;
     defer f.close();
     return f.write(s);
 }
 
 /// Writes `bytes` to the file at `path`, replacing its contents or creating it.
-pub fn write_bytes(path: str, bytes: [u8]) -> () | IoErr {
+pub fn write_bytes(path: str, bytes: [u8]) -> () | IoErr | CancelledErr {
     let mut f = open(path, "wb")?;
     defer f.close();
     return f.write_bytes(bytes);
 }
 
 /// Copies the file at `from` to `to`, replacing `to` if it exists.
-pub fn copy(from: str, to: str) -> () | IoErr => write_bytes(to, read_bytes(from)?);
+pub fn copy(from: str, to: str) -> () | IoErr | CancelledErr => write_bytes(to, read_bytes(from)?);
 
 // ---- Paths ----
 
@@ -498,23 +574,23 @@ pub fn is_file(path: str) -> bool => sys_kind(path) == 1;
 pub fn is_dir(path: str) -> bool => sys_kind(path) == 2;
 
 /// The size in bytes of the file at `path`.
-pub fn file_size(path: str) -> u64 | IoErr {
+pub fn file_size(path: str) -> u64 | IoErr | CancelledErr {
     let r = sys_size(path);
     check(r, path)?;
     return r as u64;
 }
 
 /// Removes the file or empty directory at `path`.
-pub fn remove(path: str) -> () | IoErr => check(sys_remove(path), path);
+pub fn remove(path: str) -> () | IoErr | CancelledErr => check(sys_remove(path), path);
 
 /// Moves `from` to `to`, replacing a file at `to`.
-pub fn rename(from: str, to: str) -> () | IoErr => check(sys_rename(from, to), from);
+pub fn rename(from: str, to: str) -> () | IoErr | CancelledErr => check(sys_rename(from, to), from);
 
 /// Creates the directory `path`; its parent must exist.
-pub fn create_dir(path: str) -> () | IoErr => check(sys_mkdir(path), path);
+pub fn create_dir(path: str) -> () | IoErr | CancelledErr => check(sys_mkdir(path), path);
 
 /// Creates the directory `path` and any missing parents; fine if it already exists.
-pub fn create_dirs(path: str) -> () | IoErr {
+pub fn create_dirs(path: str) -> () | IoErr | CancelledErr {
     let mut dir = "/" if path.starts_with("/") else "";
     for part in path.split("/") {
         if part == "" { continue; }
@@ -527,7 +603,7 @@ pub fn create_dirs(path: str) -> () | IoErr {
 }
 
 /// The names in the directory `path` (not `.` or `..`), sorted.
-pub fn list_dir(path: str) -> [str] | IoErr {
+pub fn list_dir(path: str) -> [str] | IoErr | CancelledErr {
     let mut names: [str] = [];
     check(sys_list_dir(path, names), path)?;
     return names;

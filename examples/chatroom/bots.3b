@@ -1,0 +1,88 @@
+// bots.3b — a swarm of chatty clients, with a deadline for the ones that never finish.
+
+use std::io::IoErr;
+use std::net::{SocketAddr, TcpStream};
+use std::random;
+use std::sync::{Channel, Semaphore};
+use std::thread;
+use std::thread::CancelledErr;
+use std::time::{Duration, Instant, TimedOutErr};
+use pow;
+
+const LINES: i32 = 5;
+
+/// How one bot got on.
+struct Chatted {
+    let sent: i32;
+    let heard: i32;
+}
+
+/// A bot's result, wrapped so that its errors (a connect timeout is a `TimedOutErr` too) can't be
+/// mistaken for the swarm's own `recv` timing out.
+struct Outcome {
+    let result: Chatted | Err;
+}
+
+pub struct Report : Display {
+    pub let chatted: i32 = 0;
+    pub let failed: i32 = 0;
+    pub let abandoned: i32 = 0;
+    pub let heard: i64 = 0;
+
+    pub fn to_str(self) -> str =>
+        f"{self.chatted} chatted, {self.failed} failed, {self.abandoned} abandoned, {self.heard} lines heard";
+}
+
+/// Runs `n` bots against `addr`, at most 32 of them connecting at once. Bots still going at
+/// `deadline` are abandoned: the deferred `s.cancel()` cancels them, they stop at their next wait,
+/// and the scope waits for them to unwind.
+pub fn swarm(addr: SocketAddr, n: i32, deadline: Duration) -> Report {
+    let dialling = Semaphore::new(32);
+    let outcomes = Channel<Outcome>::new(n as usize);
+    let until = Instant::now().add(deadline);
+
+    return thread::scope((s) => {
+        defer s.cancel();                    // whoever is still going when we leave is abandoned
+        for i in 0..n {
+            // An abandoned bot's send fails fast (it is cancelled), so its outcome is never counted.
+            s.spawn(() => { _ = outcomes.send(Outcome { result: bot(i, addr, dialling) }); });
+        }
+        let mut report = Report {};
+        for _ in 0..n {
+            let o = outcomes.recv(until.since(Instant::now()));   // past the deadline: checks once
+            if o is not Outcome { break; }                        // TimedOutErr: the deadline passed
+            match o.result {
+                c is Chatted => {
+                    report.chatted += 1;
+                    report.heard += c.heard as i64;
+                }
+                _ => report.failed += 1,
+            }
+        }
+        report.abandoned = n - report.chatted - report.failed;
+        return report;
+    });
+}
+
+fn bot(id: i32, addr: SocketAddr, dialling: Semaphore) -> Chatted | IoErr | TimedOutErr | CancelledErr {
+    // The semaphore only gates connecting, so the listener's backlog isn't stampeded.
+    let mut conn = dialling.with(() => TcpStream::connect(addr, timeout: Duration::from_secs(2)))?;
+    defer conn.close();
+
+    let challenge = conn.read_line()? ?? "";
+    conn.write_line(pow::solve(challenge.slice(6, challenge.len))?)?;    // "prove <challenge>"
+    conn.read_line()?;                                                    // "welcome, …"
+
+    let mut sent = 0;
+    for k in 1..=LINES {
+        conn.write_line(f"hello #{k} from bot {id}")?;
+        thread::sleep(Duration::from_millis(random::randint(5, 50)))?;  // abandoned? CancelledErr
+        sent += 1;
+    }
+    conn.write_line("/quit")?;
+
+    // Count what the room said to us until the server hangs up.
+    let mut heard = 0;
+    for _? in conn.lines() { heard += 1; }
+    return Chatted { sent, heard };
+}

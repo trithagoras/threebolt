@@ -1,0 +1,10 @@
+open true, read_text true
+read_line true, write true
+exists true, size true, list true
+stdout true, flush true
+print still works
+closed by the thread: false
+["one", "two", "three"]
+writer: true, file open: true
+end
+helpers: true true true

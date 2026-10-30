@@ -1,4 +1,4 @@
 panic: std::net: timeout must be positive, got 0ns
-    at millis (std/net.3b:331:23)
-    at TcpStream::set_read_timeout (std/net.3b:473:47)
+    at millis (std/net.3b:338:23)
+    at TcpStream::set_read_timeout (std/net.3b:503:47)
     at main (net_timeout.3b:10:5)

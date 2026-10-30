@@ -149,6 +149,18 @@ class CompletionTest {
     }
 
     @Test
+    void membersInASelectCase() throws Exception {
+        var names = names(complete("""
+                use std::sync::Channel;
+                fn main() -> () | Err {
+                    let ch = Channel<i32>::new(1);
+                    select { let x = ch.re‸ => x, }?;
+                }
+                """));
+        assertTrue(names.contains("recv"), names.toString());
+    }
+
+    @Test
     void operatorMethodsSortLast() throws Exception {
         var items = complete("""
                 fn main() {
@@ -212,6 +224,26 @@ class CompletionTest {
                 fn main() {}
                 """));
         assertTrue(names.containsAll(List.of("x", "dist")), names.toString());
+    }
+
+    @Test
+    void unionNarrowedByIsNot() throws Exception {
+        var names = names(complete("""
+                use shapes::Point;
+                fn pick(v: Point | str) {
+                    if v is not str {
+                        v.‸
+                    }
+                }
+                fn main() {}
+                """));
+        assertTrue(names.containsAll(List.of("x", "dist")), names.toString());
+        var types = names(complete("""
+                use shapes::Point;
+                fn pick(v: Point | str) -> bool => v is not Poi‸;
+                fn main() {}
+                """));
+        assertTrue(types.contains("Point"), types.toString());
     }
 
     @Test

@@ -105,6 +105,15 @@ public sealed interface Expr extends Body {
     /** {@code guard} is null without {@code if}. */
     record MatchArm(Pattern pattern, Expr guard, Body body, Span span) implements Node {}
 
+    /** {@code select { ... }} (§7.14). */
+    record Select(List<SelectArm> arms, Span span) implements Expr {}
+
+    /**
+     * A select arm: {@code let pattern = op}, a bare {@code op} ({@code after(d)}), or {@code _} when
+     * both are null. The checker decides which case form {@code op} is.
+     */
+    record SelectArm(Pattern pattern, Expr op, Body body, Span span) implements Node {}
+
     /** {@code Type { ... }}, or the target-typed {@code { ... }} when {@code type} is null (§4.7). */
     record Init(Path type, List<InitField> fields, Span span) implements Expr {}
 

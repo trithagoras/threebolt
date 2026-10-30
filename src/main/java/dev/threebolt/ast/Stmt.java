@@ -23,7 +23,8 @@ public sealed interface Stmt extends Node {
 
     record Loop(Block body, Span span) implements Stmt {}
 
-    record For(Pattern pattern, Expr iterable, Block body, Span span) implements Stmt {}
+    /** {@code for p in e}; with {@code propagate}, {@code for p? in e} (§6.4). */
+    record For(Pattern pattern, boolean propagate, Expr iterable, Block body, Span span) implements Stmt {}
 
     /** An expression statement; a {@code match} statement is one of these. */
     record ExprStmt(Expr expr, Span span) implements Stmt {}

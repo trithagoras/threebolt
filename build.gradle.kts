@@ -46,18 +46,20 @@ tasks.generateGrammarSource {
 application {
     mainClass = "dev.threebolt.Main"
     applicationName = "bolt"
-    // FFM (C interop) needs native access.
-    applicationDefaultJvmArgs = listOf("--enable-native-access=ALL-UNNAMED")
+    // FFM (C interop) needs native access. Threebolt threads are virtual threads, whose stacks
+    // `-Xss` caps, and the evaluator recurses deeply.
+    applicationDefaultJvmArgs = listOf("--enable-native-access=ALL-UNNAMED", "-Xss1g")
 }
 
 // Programs read stdin (`readln`); Gradle doesn't forward it by default.
 tasks.named<JavaExec>("run") {
     standardInput = System.`in`
+    jvmArgs("-Xss1g")
 }
 
 tasks.test {
     useJUnitPlatform()
-    jvmArgs("--enable-native-access=ALL-UNNAMED")
+    jvmArgs("--enable-native-access=ALL-UNNAMED", "-Xss1g")
     inputs.dir("tests/conformance")
     // `./gradlew test -PupdateGolden` rewrites golden files instead of comparing against them.
     systemProperty("threebolt.updateGolden", providers.gradleProperty("updateGolden").isPresent)

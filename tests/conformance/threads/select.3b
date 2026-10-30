@@ -1,0 +1,115 @@
+// §7.14 select: exactly one ready case happens; recv, send, join, after(d) and `_`; arms act on
+// the enclosing loop and function; on a cancelled thread it yields CancelledErr.
+use std::io::ClosedErr;
+use std::sync::{Atomic, Channel, Receiver};
+use std::thread;
+use std::thread::{CancelledErr, Thread};
+use std::time::Duration;
+
+fn trace(s: str, v: i32) -> i32 {
+    print(f"{s} ");
+    return v;
+}
+
+/// Sums a channel until it is closed: `break` and `?` in arms act on this loop and function.
+fn total(input: Receiver<i32>) -> i32 | CancelledErr {
+    let mut n = 0;
+    loop {
+        select {
+            let x = input.recv() => {
+                if x is ClosedErr { break; }
+                n += x;
+            },
+        }?;
+    }
+    return n;
+}
+
+fn main() -> () | Err {
+    // Only the ready case happens; the value of the select is the arm's.
+    let a = Channel<i32>::new(1);
+    let b = Channel<str>::new(1);
+    a.send(1)?;
+    let got = select {
+        let x = a.recv() => f"a {x}",
+        let y = b.recv() => f"b {y}",
+    }?;
+    println(got);
+
+    // Sends: a full channel is not ready; a closed one is, and binds ClosedErr.
+    b.send("full")?;
+    select {
+        let r = b.send("more") => println(f"sent {r is ()}"),
+        _ => println("b is full"),
+    }?;
+    b.close();
+    select { let r = b.send("x") => println(f"closed send: {r is ClosedErr}"), }?;
+    select { let s = b.recv() => println(f"drained: {s}"), }?;
+    select { let s = b.recv() => println(f"then: {s is ClosedErr}"), }?;
+
+    // after(d) when nothing comes; after(0) and `_` when nothing is ready.
+    let quiet = Channel<i32>::new();
+    select {
+        let _ = quiet.recv() => println("unreachable"),
+        after(Duration::from_millis(20)) => println("after 20ms"),
+    }?;
+    select { let _ = quiet.recv() => println("unreachable"), after(Duration::ZERO) => println("after 0"), }?;
+    select { let _ = quiet.recv() => println("unreachable"), _ => println("default"), }?;
+
+    // join: ready once the thread has finished.
+    let worker = Thread::spawn(() => {
+        _ = thread::sleep(Duration::from_millis(20));
+        return 42;
+    });
+    select { let v = worker.join() => println(f"joined {v}"), after(Duration::from_secs(5)) => println("slow"), }?;
+
+    // A sender waiting in a select is matched by a receiver, and only that case happens.
+    let pipe = Channel<i32>::new();
+    let other = Channel<i32>::new();
+    let receiver = Thread::spawn(() => pipe.recv());
+    select { let r = pipe.send(7) => println(f"rendezvous {r is ()}"), let _ = other.send(8) => println("wrong"), }?;
+    println(f"received {receiver.join()?}; other has {other.len}");
+
+    // Operands are evaluated once, in source order, before waiting.
+    let ready = Channel<i32>::new(1);
+    ready.send(0)?;
+    select {
+        let _ = ready.recv() => println("ready"),
+        let _ = quiet.send(trace("v", 1)) => println("unreachable"),
+        after(Duration::from_millis(trace("d", 5) as i64)) => println("unreachable"),
+    }?;
+
+    // Several ready cases: each is chosen sometimes.
+    let x = Channel<i32>::new(1000);
+    let y = Channel<i32>::new(1000);
+    let mut xs = 0;
+    let mut ys = 0;
+    for _ in 0..200 {
+        x.send(0)?;
+        y.send(0)?;
+        select { let _ = x.recv() => xs += 1, let _ = y.recv() => ys += 1, }?;
+    }
+    println(f"both chosen: {xs > 20 && ys > 20}");
+
+    let nums = Channel<i32>::new(10);
+    for i in 1..=4 { nums.send(i)?; }
+    nums.close();
+    println(f"total {total(nums)?}");
+
+    // Cancellation: on entry, and while waiting.
+    let started = Atomic::new(false);
+    let waiter = Thread::spawn(() => {
+        started.store(true);
+        return select { let _ = quiet.recv() => "received", };
+    });
+    while !started.load() {}
+    _ = thread::sleep(Duration::from_millis(20));
+    waiter.cancel();
+    println(f"cancelled while waiting: {waiter.join() is CancelledErr}");
+    let spinner = Thread::spawn(() => {
+        while !thread::cancelled() {}
+        return select { let _ = quiet.recv() => "received", _ => "default", } is CancelledErr;
+    });
+    spinner.cancel();
+    println(f"cancelled on entry: {spinner.join()?}");
+}

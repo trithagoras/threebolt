@@ -1,0 +1,29 @@
+// §4.9: an implementation's return type may be narrower than its trait's, but never needs a
+// conversion: no numeric widening, no struct for a trait type, no member the trait lacks.
+trait Shape {
+    fn area(self) -> i64;
+    fn label(self) -> Display;
+    fn parts(self) -> i32 | null;
+}
+
+struct Name : Display {
+    let s: str;
+    pub fn to_str(self) -> str => self.s;
+}
+
+struct Square : Shape {
+    let side: i32;
+    pub fn area(self) -> i32 => self.side * self.side;
+    pub fn label(self) -> Name => Name { s: "square" };
+    pub fn parts(self) -> i32 | str => 4;
+}
+
+fn main() {}
+
+trait Words { fn all(self) -> Iterator<str>; }
+struct Bad : Words {
+    pub fn all(self) -> Iterator<str | null> {
+        let xs: [str | null] = ["a", null];
+        return xs.iter();
+    }
+}

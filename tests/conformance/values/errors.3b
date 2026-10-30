@@ -15,6 +15,7 @@ class C {
     pub let open: i32 = 0;
     pub fn new() -> Self => {};
     fn hidden(self) {}
+    fn make() -> Self => {};
     pub get fn twice(self) -> i32 => self.open * 2;
 }
 
@@ -27,6 +28,8 @@ fn main() {
     let c = C::new();
     _ = c.secret;
     c.hidden();
+    _ = C::make();
+    let mk = C::make;
     let d = C { };
     c.twice = 3;
     let t = (1, 2);

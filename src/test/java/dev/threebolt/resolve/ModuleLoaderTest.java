@@ -47,7 +47,7 @@ class ModuleLoaderTest {
         write("unrelated.3b", "this does not even parse");
         var program = load();
         assertEquals(List.of(), errors());
-        assertEquals(java.util.Set.of("main", "game::entity", "std::prelude", "std::collections", "std::c", "std::io"),
+        assertEquals(java.util.Set.of("main", "game::entity", "std::prelude", "std::collections", "std::c", "std::io", "std::thread", "std::time"),
                 program.all().stream().map(m -> m.path().toString()).collect(java.util.stream.Collectors.toSet()));
         var scope = program.entry().scope();
         assertInstanceOf(Symbol.ModuleRef.class, scope.lookup("entity").getFirst());

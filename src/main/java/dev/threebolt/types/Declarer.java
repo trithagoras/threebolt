@@ -704,7 +704,7 @@ public final class Declarer {
         return name + "(" + String.join(", ", params) + ")";
     }
 
-    /** An impl provides each required member of its trait with the exact signature (§4.9). */
+    /** An impl provides each required member of its trait with its signature (§4.9). */
     private void checkImpl(ImplInfo impl) {
         var trait = impl.trait.decl();
         var env = TypeSystem.bind(trait.typeParams, impl.trait.args());
@@ -721,8 +721,11 @@ public final class Declarer {
                     provided.computeIfAbsent(name, k -> new ArrayList<>()).add(match);
                 } else if (!impl.methods.getOrDefault(name, List.of()).isEmpty() && e.getValue().size() == 1) {
                     var c = impl.methods.get(name).getFirst();
+                    var e2 = sameParams(required, env, c);
+                    String why = e2 == null ? "" : ": it returns '" + c.ret + "', which is not '" + TypeSystem.subst(required.ret, e2)
+                            + "' or a narrower union of its members";
                     diagnostics.error(Code.MISSING_TRAIT_MEMBER, c.ast.name().span(),
-                            "'" + name + "' does not match the signature required by trait '" + trait.name() + "'");
+                            "'" + name + "' does not match the signature required by trait '" + trait.name() + "'" + why);
                 } else if (!required.hasBody()) {
                     diagnostics.error(Code.MISSING_TRAIT_MEMBER, implSpan(impl),
                             "'" + impl.targetDecl.name() + "' is missing '" + overloadName(name, required, e.getValue().size())
@@ -757,11 +760,17 @@ public final class Declarer {
         return impl.span;
     }
 
-    /** Exact signature equality after substituting the trait's parameters and Self (§4.9). */
+    /** Signature equality after substituting the trait's parameters and Self, but for a narrower return (§4.9). */
     private boolean sameSignature(FnInfo required, Map<TypeParamInfo, Type> env, FnInfo candidate) {
-        if (required.receiver != candidate.receiver || required.isGetter() != candidate.isGetter()) return false;
-        if (required.params.size() != candidate.params.size()) return false;
-        if (required.typeParams.size() != candidate.typeParams.size()) return false;
+        var e = sameParams(required, env, candidate);
+        return e != null && returnsLess(TypeSystem.subst(required.ret, e), candidate.ret);
+    }
+
+    /** The trait's bindings extended with the candidate's type parameters if everything but the return matches; else null. */
+    private static Map<TypeParamInfo, Type> sameParams(FnInfo required, Map<TypeParamInfo, Type> env, FnInfo candidate) {
+        if (required.receiver != candidate.receiver || required.isGetter() != candidate.isGetter()) return null;
+        if (required.params.size() != candidate.params.size()) return null;
+        if (required.typeParams.size() != candidate.typeParams.size()) return null;
         var e = new HashMap<>(env);
         for (int i = 0; i < required.typeParams.size(); i++) {
             e.put(required.typeParams.get(i), candidate.typeParams.get(i).type());
@@ -769,11 +778,30 @@ public final class Declarer {
         for (int i = 0; i < required.params.size(); i++) {
             var rp = required.params.get(i);
             var cp = candidate.params.get(i);
-            if (!TypeSystem.subst(rp.type(), e).equals(cp.type())) return false;
-            if (rp.isOptional() != cp.isOptional()) return false;
-            if (rp.isOptional() && !rp.name().equals(cp.name())) return false;
+            if (!TypeSystem.subst(rp.type(), e).equals(cp.type())) return null;
+            if (rp.isOptional() != cp.isOptional()) return null;
+            if (rp.isOptional() && !rp.name().equals(cp.name())) return null;
         }
-        return TypeSystem.subst(required.ret, e).equals(candidate.ret);
+        return e;
+    }
+
+    /**
+     * An implementation may return less than its trait (§4.9): each member of {@code impl} is a member of
+     * {@code trait}, a subclass of a class member, or an iterator of less, so the result needs no conversion.
+     */
+    private boolean returnsLess(Type trait, Type impl) {
+        if (trait.equals(impl)) return true;
+        var allowed = TypeSystem.members(trait);
+        for (Type m : TypeSystem.members(impl)) {
+            if (m == Type.NEVER || allowed.contains(m)) continue;
+            boolean upcast = m instanceof Type.Nominal n && n.decl().isClass() && allowed.stream()
+                    .anyMatch(a -> a instanceof Type.Nominal c && c.decl().isClass() && ts.assignable(m, a));
+            // An iterator only produces values, so it may produce less.
+            boolean fewer = m instanceof Type.Nominal n && n.decl() == ts.iterator && allowed.stream()
+                    .anyMatch(a -> a instanceof Type.Nominal c && c.decl() == ts.iterator && returnsLess(c.args().getFirst(), n.args().getFirst()));
+            if (!upcast && !fewer) return false;
+        }
+        return true;
     }
 
     private void checkType(TypeInfo t) {

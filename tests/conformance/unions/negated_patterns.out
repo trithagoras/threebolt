@@ -1,0 +1,18 @@
+line hi blank eof
+run 7 closed cancelled
+3 -1
+true false false
+[2]
+["a"]
+true false
+semicolon second
+not small
+not one, or two
+negative zero positive
+A B invalid C C
+differ same
+big 13
+first half
+lower or later
+[3, 8]
+2

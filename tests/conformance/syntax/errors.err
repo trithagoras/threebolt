@@ -1,2 +1,4 @@
 errors.3b:3:9: error[E0001]: unexpected '='
 errors.3b:3:12: error[E0001]: expected ':' or '=', found ';'
+errors.3b:7:21: error[E0001]: expected a type or pattern after 'is not', found ';'
+errors.3b:10:45: error[E0001]: '>=' must not contain spaces

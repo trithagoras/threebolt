@@ -1,0 +1,2 @@
+panic: scope has ended
+    at main (scope_ended.3b:8:5)

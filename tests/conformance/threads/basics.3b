@@ -10,7 +10,7 @@ static let mut HITS: i32 = 0;
 
 fn slow_init() -> i32 {
     println("initializing SLOW");
-    thread::sleep(Duration::from_millis(20));
+    _ = thread::sleep(Duration::from_millis(20));
     return 42;
 }
 
@@ -25,13 +25,13 @@ struct Point {
     let y: i32;
 }
 
-fn main() {
+fn main() -> () | Err {
     // Results come back through join, in spawn order.
     let mut sums: [Thread<i64>] = [];
     for i in 0..4 {
         sums.push(Thread::spawn(() => sum_to(i * 1000)));
     }
-    for t in sums { println(t.join()); }
+    for t in sums { println(t.join()?); }
 
     // Many threads racing on one Atomic.
     let counter = Atomic::new(0);
@@ -41,7 +41,7 @@ fn main() {
             for _ in 0..1000 { counter.fetch_add(1); }
         }));
     }
-    for w in workers { w.join(); }
+    for w in workers { w.join()?; }
     println(counter.load());
 
     // A Mutex over a list (a reference) and over a struct (a value: stored back after the lock).
@@ -57,7 +57,7 @@ fn main() {
             });
         }));
     }
-    for a in adders { a.join(); }
+    for a in adders { a.join()?; }
     let total = log.lock(g => g.value.iter().fold(0, (acc, v) => acc + v));
     let p = corner.lock(g => g.value);
     println(f"{total} {log.lock(g => g.value.len)} ({p.x}, {p.y})");
@@ -66,7 +66,7 @@ fn main() {
     let mut readers: [Thread<i32>] = [];
     for _ in 0..4 { readers.push(Thread::spawn(() => SLOW)); }
     let mut sum = 0;
-    for r in readers { sum += r.join(); }
+    for r in readers { sum += r.join()?; }
     println(sum);
 
     // Atomic operations return the previous value.
@@ -82,6 +82,6 @@ fn main() {
 
     // A thread's result is its function's value; `()` threads still join.
     let quiet = Thread::spawn(() => { HITS += 1; });
-    quiet.join();
+    quiet.join()?;
     println(HITS);
 }

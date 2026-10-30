@@ -1,0 +1,8 @@
+cancel_errors.3b:9:5: error[E0211]: this value of type 'i32 | CancelledErr' may be an error; handle it, propagate it with `?`, or discard it with `_ = ...;`
+cancel_errors.3b:10:5: error[E0211]: this value of type 'i32 | TimedOutErr | CancelledErr' may be an error; handle it, propagate it with `?`, or discard it with `_ = ...;`
+cancel_errors.3b:11:5: error[E0211]: this value of type '() | CancelledErr' may be an error; handle it, propagate it with `?`, or discard it with `_ = ...;`
+cancel_errors.3b:12:5: error[E0211]: this value of type '() | CancelledErr' may be an error; handle it, propagate it with `?`, or discard it with `_ = ...;`
+cancel_errors.3b:13:18: error[E0200]: expected 'i32', found 'i32 | CancelledErr'
+cancel_errors.3b:14:20: error[E0109]: method 'open' is internal to the standard library
+cancel_errors.3b:15:7: error[E0109]: method 'close' is internal to the standard library
+cancel_errors.3b:16:5: error[E0302]: cannot assign to this expression

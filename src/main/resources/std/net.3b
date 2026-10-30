@@ -4,9 +4,13 @@
 // handle table beside files, so reading, writing and closing go through the same `sys_*` calls,
 // and a `TcpStream` reads through the same buffer as a `File`.
 
-use std::io::{IoErr, ClosedErr, Read, Write, Buffered, sys_close, sys_write, sys_write_str, sys_error};
-use std::thread::Thread;
+use std::io::{IoErr, ClosedErr, Read, Write, Buffered, ReadErr, no_timeout, sys_close, sys_write, sys_write_str, sys_error};
+use std::sync::Semaphore;
+use std::thread;
+use std::thread::CancelledErr;
 use std::time::Duration;
+/// A read timeout or connect timeout passing (§16); not a `NetErr`.
+pub use std::time::TimedOutErr;
 
 // ---- Errors ----
 
@@ -27,11 +31,6 @@ pub class ConnectionResetErr : NetErr {
     pub fn new(path: str | null) -> Self => { ..NetErr::new("connection reset", path: path) };
 }
 
-/// A read timeout or connect timeout passed.
-pub class TimedOutErr : NetErr {
-    pub fn new(path: str | null) -> Self => { ..NetErr::new("timed out", path: path) };
-}
-
 /// The address to bind is taken.
 pub class AddrInUseErr : NetErr {
     pub fn new(path: str | null) -> Self => { ..NetErr::new("address in use", path: path) };
@@ -50,25 +49,31 @@ const E_ADDR_IN_USE: i64 = 12;
 const E_UNKNOWN_HOST: i64 = 13;
 
 /// The error for `r`, the negative result of a `sys_*` call on `path`.
-fn failure(r: i64, path: str | null) -> IoErr {
+fn failure(r: i64, path: str | null) -> ReadErr {
     let code = -r;
     if code == E_CONN_REFUSED { return ConnectionRefusedErr::new(path); }
     if code == E_CONN_RESET { return ConnectionResetErr::new(path); }
-    if code == E_TIMED_OUT { return TimedOutErr::new(path); }
+    if code == E_TIMED_OUT { return TimedOutErr::new(); }
     if code == E_ADDR_IN_USE { return AddrInUseErr::new(path); }
     if code == E_UNKNOWN_HOST { return NetErr::new("unknown host", path: path); }
     return std::io::failure(r, path);
 }
 
-/// `()`, or the error if `r` is a `sys_*` failure.
-fn check(r: i64, path: str | null) -> () | IoErr {
+/// `()`, or the error if `r` is a `sys_*` failure of a call that cannot time out.
+fn check(r: i64, path: str | null) -> () | IoErr | CancelledErr {
+    if r < 0 { return no_timeout(failure(r, path)); }
+}
+
+/// `()`, or the error if `r` is a `sys_*` failure of a read, which can time out.
+fn check_read(r: i64, path: str | null) -> () | ReadErr {
     if r < 0 { return failure(r, path); }
 }
 
-/// The error for `r` from a call that makes a socket: any failure is a `NetErr`.
-fn net_failure(r: i64, path: str) -> NetErr {
+/// The error for `r` from a call that makes a socket: any failure but a timeout or
+/// cancellation is a `NetErr`.
+fn net_failure(r: i64, path: str) -> NetErr | TimedOutErr | CancelledErr {
     let e = failure(r, path);
-    if e is NetErr { return e; }
+    if e is NetErr || e is TimedOutErr || e is CancelledErr { return e; }
     return NetErr::new(sys_error(), path: path);
 }
 
@@ -281,12 +286,12 @@ fn hex_groups(g: [u16; 8], from: usize, to: usize) -> str {
 // ---- Names ----
 
 /// The addresses of `host`, from the system's resolver; an address's text is itself.
-pub fn lookup(host: str) -> [IpAddr] | NetErr {
+pub fn lookup(host: str) -> [IpAddr] | NetErr | CancelledErr {
     let ip = parse_ip(host);
-    if !(ip is AddrParseErr) { return [ip]; }
+    if ip is not AddrParseErr { return [ip]; }
     let mut found: [str] = [];
     let r = sys_lookup(host, found);
-    if r < 0 { return net_failure(r, host); }
+    if r < 0 { return no_timeout(net_failure(r, host)); }
     let mut out: [IpAddr] = [];
     for text in found {
         let a = parse_ip(text);
@@ -297,7 +302,7 @@ pub fn lookup(host: str) -> [IpAddr] | NetErr {
 }
 
 /// The addresses a target stands for: itself, or `host:port`'s host looked up.
-fn targets(addr: SocketAddr | str) -> [SocketAddr] | NetErr {
+fn targets(addr: SocketAddr | str) -> [SocketAddr] | NetErr | CancelledErr {
     if addr is SocketAddr { return [addr]; }
     let hp = host_port(addr)?;
     if hp.2 { return [SocketAddr { ip: Ipv6Addr::parse(hp.0)?, port: hp.1 }]; }
@@ -307,14 +312,16 @@ fn targets(addr: SocketAddr | str) -> [SocketAddr] | NetErr {
 }
 
 /// Calls `open` at each of `addr`'s addresses until one succeeds: its handle and address, or the
-/// last failure.
-fn first_of(addr: SocketAddr | str, open: fn(SocketAddr) -> i64) -> (i64, SocketAddr) | NetErr {
+/// last failure (cancellation stops at once).
+fn first_of(addr: SocketAddr | str, open: fn(SocketAddr) -> i64) -> (i64, SocketAddr) | NetErr | TimedOutErr | CancelledErr {
     let all = targets(addr)?;
-    let mut last = NetErr::new("no addresses", path: addr.to_str());
+    let mut last: NetErr | TimedOutErr = NetErr::new("no addresses", path: addr.to_str());
     for a in all {
         let h = open(a);
         if h >= 0 { return (h, a); }
-        last = net_failure(h, a.to_str());
+        let e = net_failure(h, a.to_str());
+        if e is CancelledErr { return e; }
+        last = e;
     }
     return last;
 }
@@ -343,8 +350,8 @@ pub class TcpListener {
     let local: SocketAddr;
 
     /// Listens at `addr`, a `SocketAddr` or `"host:port"` text; port 0 picks a free port.
-    pub fn bind(addr: SocketAddr | str) -> TcpListener | NetErr {
-        let (h, a) = first_of(addr, a => sys_tcp_listen(a.ip.to_str(), a.port))?;
+    pub fn bind(addr: SocketAddr | str) -> TcpListener | NetErr | CancelledErr {
+        let (h, a) = no_timeout(first_of(addr, a => sys_tcp_listen(a.ip.to_str(), a.port)))?;
         return TcpListener { handle: h, local: addr_of(h, false, a) };
     }
 
@@ -353,31 +360,43 @@ pub class TcpListener {
     pub get fn closed(self) -> bool => self.handle < 0;
 
     /// Waits for the next connection.
-    pub fn accept(mut self) -> TcpStream | IoErr {
+    pub fn accept(mut self) -> TcpStream | IoErr | CancelledErr {
+        thread::check()?;
         if self.handle < 0 { return ClosedErr::new(self.local.to_str(), what: "socket"); }
         let h = sys_accept(self.handle);
-        if h < 0 { return failure(h, self.local.to_str()); }
+        if h < 0 { return no_timeout(failure(h, self.local.to_str())); }
         return TcpStream::of(h, self.local);
     }
 
     /// The connections as they arrive. An error ends the iteration, after being returned as an
     /// element.
-    pub fn incoming(mut self) -> Iterator<TcpStream | IoErr> => Incoming::new(self);
+    pub fn incoming(mut self) -> Iterator<TcpStream | IoErr | CancelledErr> => Incoming::new(self);
 
-    /// Accepts connections until the listener is closed (from another thread, say), running
-    /// `handler` on a new thread for each and closing the stream when it returns. `()` when the
-    /// listener is closed; any other failure to accept is the result.
-    pub fn serve(mut self, handler: fn(TcpStream)) -> () | IoErr {
-        loop {
-            let s = self.accept();
-            if s is ClosedErr { return; }
-            if s is IoErr { return s; }
-            Thread::spawn(() => {
-                let mut stream = s;
-                defer stream.close();
-                handler(stream);
-            });
-        }
+    /// Accepts connections, running `handler` for each on a thread of a scope of its own (§13.4)
+    /// and closing the stream when it returns; while `max_connections` handlers are running it
+    /// stops accepting, leaving connections in the system's backlog. Once the listener is closed
+    /// (from another thread, say), it waits for the running handlers and returns `()`. If its
+    /// thread is cancelled, the handlers are cancelled too, and it waits for them and returns
+    /// `CancelledErr`. Any other failure to accept is the result, also after waiting.
+    pub fn serve(mut self, handler: fn(TcpStream), max_connections: usize | null = null) -> () | IoErr | CancelledErr {
+        let slots: Semaphore | null = null if max_connections == null else Semaphore::new(max_connections);
+        return thread::scope((s) => {
+            loop {
+                if slots != null && !slots.acquire() { return CancelledErr::new(); }
+                let conn = self.accept();
+                if conn is not TcpStream {
+                    if slots != null { slots.release(); }
+                    if conn is ClosedErr { return; }
+                    return conn;
+                }
+                s.spawn(() => {
+                    defer release(slots);
+                    let mut stream = conn;
+                    defer stream.close();
+                    handler(stream);
+                });
+            }
+        });
     }
 
     /// Stops listening; closing it again does nothing.
@@ -388,16 +407,21 @@ pub class TcpListener {
     }
 }
 
-class Incoming : Iterator<TcpStream | IoErr> {
+/// Gives back a `serve` slot, if there are slots.
+fn release(slots: Semaphore | null) {
+    if slots != null { slots.release(); }
+}
+
+class Incoming : Iterator<TcpStream | IoErr | CancelledErr> {
     let listener: TcpListener;
     let done: bool = false;
 
     pub fn new(listener: TcpListener) -> Self => { listener };
 
-    pub fn next(mut self) -> TcpStream | IoErr | Done {
+    pub fn next(mut self) -> TcpStream | IoErr | CancelledErr | Done {
         if self.done { return Done; }
         let s = self.listener.accept();
-        if s is IoErr { self.done = true; }
+        if s is not TcpStream { self.done = true; }
         return s;
     }
 }
@@ -411,13 +435,13 @@ pub class TcpStream : Read, Write {
 
     /// Connects to `addr`, a `SocketAddr` or `"host:port"` text, giving up after `timeout` if
     /// one is given.
-    pub fn connect(addr: SocketAddr | str, timeout: Duration | null = null) -> TcpStream | NetErr {
+    pub fn connect(addr: SocketAddr | str, timeout: Duration | null = null) -> TcpStream | NetErr | TimedOutErr | CancelledErr {
         let ms = millis(timeout);
         let (h, a) = first_of(addr, a => sys_tcp_connect(a.ip.to_str(), a.port, ms))?;
         return TcpStream::of(h, a);
     }
 
-    fn of(h: i64, fallback: SocketAddr) -> TcpStream {
+    internal fn of(h: i64, fallback: SocketAddr) -> TcpStream {
         let peer = addr_of(h, true, fallback);
         return TcpStream { io: Buffered::new(h, peer.to_str(), failure: failure), local: addr_of(h, false, fallback), peer };
     }
@@ -429,58 +453,64 @@ pub class TcpStream : Read, Write {
     // ---- Reading ----
 
     /// Everything until the peer closes its side.
-    pub fn read(mut self) -> str | IoErr {
+    pub fn read(mut self) -> str | IoErr | TimedOutErr | CancelledErr {
         self.demand()?;
         return str::from_utf8(self.io.read_all()?);
     }
 
     /// The next line without its `\n` or `\r\n`, or null once the peer has closed its side.
-    pub fn read_line(mut self) -> str | null | IoErr {
+    pub fn read_line(mut self) -> str | null | IoErr | TimedOutErr | CancelledErr {
         self.demand()?;
         return self.io.read_line();
     }
 
     /// Everything until the peer closes its side.
-    pub fn read_bytes(mut self) -> [u8] | IoErr {
+    pub fn read_bytes(mut self) -> [u8] | IoErr | TimedOutErr | CancelledErr {
         self.demand()?;
         return self.io.read_all();
     }
 
     /// `n` bytes, waiting for them; fewer only if the peer closes its side first.
-    pub fn read_bytes(mut self, n: usize) -> [u8] | IoErr {
+    pub fn read_bytes(mut self, n: usize) -> [u8] | IoErr | TimedOutErr | CancelledErr {
         self.demand()?;
         return self.io.read_bytes(n);
     }
 
     // ---- Writing ----
 
-    pub fn write(mut self, s: str) -> () | IoErr {
+    pub fn write(mut self, s: str) -> () | IoErr | CancelledErr {
         self.demand()?;
         check(sys_write_str(self.io.handle, s), self.peer.to_str())?;
     }
 
-    pub fn write_bytes(mut self, bytes: [u8]) -> () | IoErr {
+    pub fn write_bytes(mut self, bytes: [u8]) -> () | IoErr | CancelledErr {
         self.demand()?;
         check(sys_write(self.io.handle, bytes), self.peer.to_str())?;
     }
+
+    /// Writes `s` and a `\n`. Writes never time out.
+    pub fn write_line(mut self, s: str) -> () | IoErr | CancelledErr => self.write(s + "\n");
+
+    /// Writes are sent before they return, so there is nothing to flush.
+    pub fn flush(mut self) -> () | IoErr | CancelledErr => ();
 
     // ---- Options ----
 
     /// Makes a read that waits longer than `t` a `TimedOutErr` (the stream stays usable); null
     /// waits forever, as at the start. A zero or negative `t` panics.
-    pub fn set_read_timeout(mut self, t: Duration | null) -> () | IoErr {
+    pub fn set_read_timeout(mut self, t: Duration | null) -> () | IoErr | CancelledErr {
         self.demand()?;
         check(sys_set_timeout(self.io.handle, millis(t)), self.peer.to_str())?;
     }
 
     /// Whether to send small writes at once (`TCP_NODELAY`) rather than gather them.
-    pub fn set_nodelay(mut self, on: bool) -> () | IoErr {
+    pub fn set_nodelay(mut self, on: bool) -> () | IoErr | CancelledErr {
         self.demand()?;
         check(sys_set_nodelay(self.io.handle, on), self.peer.to_str())?;
     }
 
     /// Ends reading, writing or both; after `Write`, the peer reads the end of the input.
-    pub fn shutdown(mut self, how: Shutdown) -> () | IoErr {
+    pub fn shutdown(mut self, how: Shutdown) -> () | IoErr | CancelledErr {
         self.demand()?;
         check(sys_shutdown(self.io.handle, how as i32), self.peer.to_str())?;
     }
@@ -493,7 +523,9 @@ pub class TcpStream : Read, Write {
         self.io.clear();
     }
 
-    fn demand(self) -> () | IoErr {
+    /// `()` if the thread is not cancelled and the stream is open.
+    fn demand(self) -> () | IoErr | CancelledErr {
+        thread::check()?;
         if self.io.handle < 0 { return ClosedErr::new(self.peer.to_str(), what: "socket"); }
     }
 }
@@ -509,8 +541,8 @@ pub class UdpSocket {
     let local: SocketAddr;
 
     /// Binds to `addr`, a `SocketAddr` or `"host:port"` text; port 0 picks a free port.
-    pub fn bind(addr: SocketAddr | str) -> UdpSocket | NetErr {
-        let (h, a) = first_of(addr, a => sys_udp_bind(a.ip.to_str(), a.port))?;
+    pub fn bind(addr: SocketAddr | str) -> UdpSocket | NetErr | CancelledErr {
+        let (h, a) = no_timeout(first_of(addr, a => sys_udp_bind(a.ip.to_str(), a.port)))?;
         return UdpSocket { handle: h, local: addr_of(h, false, a) };
     }
 
@@ -518,45 +550,45 @@ pub class UdpSocket {
     pub get fn closed(self) -> bool => self.handle < 0;
 
     /// Sends `bytes` as one datagram to `to`.
-    pub fn send_to(mut self, bytes: [u8], to: SocketAddr | str) -> () | IoErr {
+    pub fn send_to(mut self, bytes: [u8], to: SocketAddr | str) -> () | IoErr | CancelledErr {
         self.demand()?;
         let dest = targets(to)?[0];
         check(sys_send_to(self.handle, bytes, dest.ip.to_str(), dest.port), dest.to_str())?;
     }
 
     /// Waits for the next datagram: its bytes (cut to `max`) and its sender.
-    pub fn recv_from(mut self, max: usize = MAX_DATAGRAM) -> ([u8], SocketAddr) | IoErr {
+    pub fn recv_from(mut self, max: usize = MAX_DATAGRAM) -> ([u8], SocketAddr) | IoErr | TimedOutErr | CancelledErr {
         self.demand()?;
         let mut bytes: [u8] = [];
         let mut from: [str] = [];
-        check(sys_recv_from(self.handle, bytes, max, from), self.local.to_str())?;
+        check_read(sys_recv_from(self.handle, bytes, max, from), self.local.to_str())?;
         return (bytes, SocketAddr::parse(from[0])?);
     }
 
     /// Makes `to` the socket's peer, for `send` and `recv`; datagrams from others are dropped.
-    pub fn connect(mut self, to: SocketAddr | str) -> () | IoErr {
+    pub fn connect(mut self, to: SocketAddr | str) -> () | IoErr | CancelledErr {
         self.demand()?;
         let dest = targets(to)?[0];
         check(sys_udp_connect(self.handle, dest.ip.to_str(), dest.port), dest.to_str())?;
     }
 
     /// Sends `bytes` as one datagram to the peer set by `connect`.
-    pub fn send(mut self, bytes: [u8]) -> () | IoErr {
+    pub fn send(mut self, bytes: [u8]) -> () | IoErr | CancelledErr {
         self.demand()?;
         check(sys_write(self.handle, bytes), self.local.to_str())?;
     }
 
     /// Waits for the next datagram from the peer set by `connect`, cut to `max` bytes.
-    pub fn recv(mut self, max: usize = MAX_DATAGRAM) -> [u8] | IoErr {
+    pub fn recv(mut self, max: usize = MAX_DATAGRAM) -> [u8] | IoErr | TimedOutErr | CancelledErr {
         self.demand()?;
         let mut bytes: [u8] = [];
         let mut from: [str] = [];
-        check(sys_recv_from(self.handle, bytes, max, from), self.local.to_str())?;
+        check_read(sys_recv_from(self.handle, bytes, max, from), self.local.to_str())?;
         return bytes;
     }
 
     /// As `TcpStream::set_read_timeout`, for `recv` and `recv_from`.
-    pub fn set_read_timeout(mut self, t: Duration | null) -> () | IoErr {
+    pub fn set_read_timeout(mut self, t: Duration | null) -> () | IoErr | CancelledErr {
         self.demand()?;
         check(sys_set_timeout(self.handle, millis(t)), self.local.to_str())?;
     }
@@ -568,7 +600,9 @@ pub class UdpSocket {
         self.handle = -1;
     }
 
-    fn demand(self) -> () | IoErr {
+    /// `()` if the thread is not cancelled and the socket is open.
+    fn demand(self) -> () | IoErr | CancelledErr {
+        thread::check()?;
         if self.handle < 0 { return ClosedErr::new(self.local.to_str(), what: "socket"); }
     }
 }
