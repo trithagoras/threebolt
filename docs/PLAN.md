@@ -28,6 +28,8 @@ threebolt/
     runtime/                  // stdlib/prelude natives, FFI (FFM), threads
   src/test/java/...           // unit tests
   tests/conformance/          // *.3b programs + expected stdout/stderr/exit code; compile-error cases with expected diagnostic
+  site/                       // docs site (Astro + Starlight): the Tour of Threebolt; examples in tests/conformance/tour/
+  editors/vscode/             // VS Code extension (TextMate grammar, also used by site/ for highlighting) + LSP client
 ```
 
 ## Phases

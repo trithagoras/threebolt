@@ -34,3 +34,6 @@ A case without errors (warnings are fine) is then run (its `main`, as `bolt run`
 - `<case>.in`, if present, is the program's stdin (otherwise stdin is empty).
 
 `./gradlew test -PupdateGolden` also rewrites `.out` and `.stderr` (not the `//!` directives).
+
+`tour/` holds one program per chapter of the docs site's tour (`site/src/content/docs/tour/`), each
+shown verbatim on its page with its `.out`. Changing one means updating the page too.
