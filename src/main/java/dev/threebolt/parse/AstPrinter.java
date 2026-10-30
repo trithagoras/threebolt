@@ -634,6 +634,7 @@ public final class AstPrinter {
                 expr(u.operand(), 0, typeFollows);
             }
             case Expr.Match m -> match(m);
+            case Expr.Select s -> select(s);
             case Expr.Init i -> init(i);
             case Expr.ListLit l -> {
                 out.append('[');
@@ -765,6 +766,35 @@ public final class AstPrinter {
                 out.append(" if ");
                 expr(arm.guard(), COALESCE, false);
             }
+            out.append(" => ");
+            if (arm.body() instanceof Stmt.Block b) block(b);
+            else notBrace(arm.body(), true);
+        }
+        indent--;
+        newline();
+        out.append('}');
+        inList = list;
+        inHead = head;
+    }
+
+    private void select(Expr.Select s) {
+        if (s.arms().isEmpty()) {
+            out.append("select {}");
+            return;
+        }
+        out.append("select {");
+        boolean list = inList, head = inHead;
+        inList = inHead = false;
+        indent++;
+        for (var arm : s.arms()) {
+            newline();
+            if (arm.pattern() != null) {
+                out.append("let ");
+                pattern(arm.pattern());
+                out.append(" = ");
+            }
+            if (arm.op() != null) expr(arm.op(), COALESCE, false);
+            else out.append('_');
             out.append(" => ");
             if (arm.body() instanceof Stmt.Block b) block(b);
             else notBrace(arm.body(), true);

@@ -1,0 +1,16 @@
+a 1
+b is full
+closed send: true
+drained: full
+then: true
+after 20ms
+after 0
+default
+joined 42
+rendezvous true
+received 7; other has 0
+v d ready
+both chosen: true
+total 10
+cancelled while waiting: true
+cancelled on entry: true

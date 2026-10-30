@@ -20,8 +20,9 @@ import java.util.concurrent.locks.LockSupport;
 import java.util.concurrent.locks.ReentrantLock;
 
 /**
- * `std::sync`'s `Channel` (§13.4) and the engine that waits on several channel operations at once,
- * for `select` (§7.14); a single `send` or `recv` is a wait on one case.
+ * `std::sync`'s `Channel` (§13.4) and the engine that waits on several operations at once, for
+ * `select` (§7.14): channel sends and receives, and threads finishing. A single `send` or `recv`
+ * is a wait on one case.
  *
  * <p>Each channel has a lock, a buffer and queues of waiting senders and receivers (Go's design). A
  * thread that must wait enqueues a {@link Waiter} per case, all sharing one {@link Group}; whoever
@@ -31,10 +32,12 @@ import java.util.concurrent.locks.ReentrantLock;
 final class Channels {
     // Keep in step with the `OP_*` constants in std/sync.3b.
     static final int OP_DONE = 0, OP_CLOSED = 1, OP_TIMED_OUT = 2, OP_CANCELLED = 3;
+    /** A `select`'s `after(d)` whose time had already come was chosen (internal; not in std/sync.3b). */
+    static final int OP_AFTER = 4;
+    private static final AtomicLong IDS = new AtomicLong();
 
     private final Callbacks rt;
     private final Threads threads;
-    private final AtomicLong nextId = new AtomicLong();
     /** The item the current thread's last receive took, until `received` collects it. */
     private final ThreadLocal<Object> received = new ThreadLocal<>();
 
@@ -43,20 +46,30 @@ final class Channels {
         this.threads = threads;
     }
 
-    /** A channel; everything but {@code id} and {@code capacity} is guarded by {@code lock}. */
-    static final class Chan {
-        final long id;
-        final int capacity;
+    /** Something a wait can wait on; {@code id} orders the locks of a wait on several. */
+    abstract static class Source {
+        final long id = IDS.getAndIncrement();
         final ReentrantLock lock = new ReentrantLock();
+    }
+
+    /** A channel; everything but {@code capacity} is guarded by {@code lock}. */
+    static final class Chan extends Source {
+        final int capacity;
         final ArrayDeque<Object> buffer = new ArrayDeque<>();
         boolean closed;
         final ArrayDeque<Waiter> senders = new ArrayDeque<>();
         final ArrayDeque<Waiter> receivers = new ArrayDeque<>();
 
-        Chan(long id, int capacity) {
-            this.id = id;
+        Chan(int capacity) {
             this.capacity = capacity;
         }
+    }
+
+    /** A thread's completion, for `select`'s `join` case; guarded by {@code lock}. */
+    static final class Completion extends Source {
+        boolean finished;
+        Object result;
+        final ArrayDeque<Waiter> joiners = new ArrayDeque<>();
     }
 
     /** One wait: {@code state} is {@link #PENDING} until a case fires (its index) or the waiter gives up. */
@@ -84,13 +97,36 @@ final class Channels {
         }
     }
 
-    /** A send of {@code value} (already copied) or a receive, on {@code chan}. */
-    record Case(Chan chan, boolean send, Object value) {}
+    enum Op { SEND, RECV, JOIN }
+
+    /** A send of {@code value} (already copied) or a receive on a {@link Chan}, or a join of a {@link Completion}. */
+    record Case(Source source, Op op, Object value) {
+        static Case send(Chan ch, Object value) {
+            return new Case(ch, Op.SEND, value);
+        }
+
+        static Case recv(Chan ch) {
+            return new Case(ch, Op.RECV, null);
+        }
+
+        static Case join(Completion c) {
+            return new Case(c, Op.JOIN, null);
+        }
+
+        ArrayDeque<Waiter> queue() {
+            return switch (op) {
+                case SEND -> ((Chan) source).senders;
+                case RECV -> ((Chan) source).receivers;
+                case JOIN -> ((Completion) source).joiners;
+            };
+        }
+    }
 
     /** How a wait ended: {@code index} is the case that happened, or -1 if none did ({@code code} says why). */
     record Outcome(int index, int code, Object value) {
         static final Outcome TIMED_OUT = new Outcome(-1, OP_TIMED_OUT, null);
         static final Outcome CANCELLED = new Outcome(-1, OP_CANCELLED, null);
+        static final Outcome AFTER = new Outcome(-1, OP_AFTER, null);
     }
 
     Object call(String name, Object self, Object[] a, Map<TypeParamInfo, Type> typeEnv, FnInfo fn) {
@@ -99,16 +135,15 @@ final class Channels {
                 long capacity = ((Int) a[0]).v();
                 var ch = new Obj((dev.threebolt.types.TypeInfo) fn.owner, List.of(typeEnv.getOrDefault(
                         ((dev.threebolt.types.TypeInfo) fn.owner).typeParams.getFirst(), Type.ERROR)), new Object[0]);
-                ch.nat = new Chan(nextId.getAndIncrement(), (int) Math.min(capacity, Integer.MAX_VALUE));
+                ch.nat = new Chan((int) Math.min(capacity, Integer.MAX_VALUE));
                 yield ch;
             }
             case "op_send" -> {
-                var c = new Case(chan(self), true, Values.copy(a[0]));
-                var out = await(new Case[] {c}, ((Int) a[1]).v(), (Boolean) a[2]);
+                var out = await(new Case[] {Case.send(chan(self), Values.copy(a[0]))}, ((Int) a[1]).v(), (Boolean) a[2], false);
                 yield code(out);
             }
             case "op_recv" -> {
-                var out = await(new Case[] {new Case(chan(self), false, null)}, ((Int) a[0]).v(), true);
+                var out = await(new Case[] {Case.recv(chan(self))}, ((Int) a[0]).v(), true, false);
                 if (out.index >= 0 && out.code == OP_DONE) received.set(out.value);
                 yield code(out);
             }
@@ -150,10 +185,12 @@ final class Channels {
 
     /**
      * Performs exactly one of {@code cases}, waiting up to {@code nanos} ({@link Long#MAX_VALUE}: forever;
-     * zero or less: no wait) for one to be ready; a ready case is picked at random. {@code cancellable}:
-     * a cancellation point (§13.4), which yields {@link Outcome#CANCELLED} on a cancelled thread.
+     * zero or less: no wait) for one to be ready; a ready case is picked uniformly at random.
+     * {@code cancellable}: a cancellation point (§13.4), which yields {@link Outcome#CANCELLED} on a
+     * cancelled thread. {@code after}: one more case, always ready, that performs nothing
+     * ({@link Outcome#AFTER}; a `select`'s `after(d)` whose time has come).
      */
-    Outcome await(Case[] cases, long nanos, boolean cancellable) {
+    Outcome await(Case[] cases, long nanos, boolean cancellable, boolean after) {
         if (cancellable && threads.currentCancelled()) return Outcome.CANCELLED;
         long deadline = System.nanoTime() + nanos;
         var chans = distinct(cases);
@@ -161,7 +198,7 @@ final class Channels {
         Waiter[] waiters;
         lockAll(chans);
         try {
-            var ready = tryEach(cases);
+            var ready = tryEach(cases, after);
             if (ready != null) return ready;
             if (nanos <= 0) return Outcome.TIMED_OUT;
             group = new Group();
@@ -169,7 +206,7 @@ final class Channels {
             for (int i = 0; i < cases.length; i++) {
                 var c = cases[i];
                 waiters[i] = new Waiter(group, i, c.value());
-                (c.send() ? c.chan().senders : c.chan().receivers).add(waiters[i]);
+                c.queue().add(waiters[i]);
             }
         } finally {
             unlockAll(chans);
@@ -206,27 +243,59 @@ final class Channels {
         } finally {
             lockAll(chans);
             try {
-                for (int i = 0; i < cases.length; i++) {
-                    var c = cases[i];
-                    (c.send() ? c.chan().senders : c.chan().receivers).remove(waiters[i]);
-                }
+                for (int i = 0; i < cases.length; i++) cases[i].queue().remove(waiters[i]);
             } finally {
                 unlockAll(chans);
             }
         }
     }
 
-    /** The first ready case, scanning in random order, performed; null if none is ready. Holds every lock. */
-    private Outcome tryEach(Case[] cases) {
-        int n = cases.length;
-        int start = n == 1 ? 0 : ThreadLocalRandom.current().nextInt(n);
-        for (int k = 0; k < n; k++) {
-            int i = (start + k) % n;
+    /**
+     * The first ready case in a random order, performed; null if none is ready. With {@code after}, a
+     * further case that is always ready. Holds every lock.
+     */
+    private Outcome tryEach(Case[] cases, boolean after) {
+        int n = cases.length + (after ? 1 : 0);
+        var order = new int[n];
+        for (int i = 0; i < n; i++) order[i] = i;
+        var random = ThreadLocalRandom.current();
+        for (int i = n - 1; i > 0; i--) {
+            int j = random.nextInt(i + 1);
+            int t = order[i];
+            order[i] = order[j];
+            order[j] = t;
+        }
+        for (int i : order) {
+            if (i == cases.length) return Outcome.AFTER;
             var c = cases[i];
-            var out = c.send() ? trySend(c.chan(), c.value(), i) : tryRecv(c.chan(), i);
+            var out = switch (c.op()) {
+                case SEND -> trySend((Chan) c.source(), c.value(), i);
+                case RECV -> tryRecv((Chan) c.source(), i);
+                case JOIN -> tryJoin((Completion) c.source(), i);
+            };
             if (out != null) return out;
         }
         return null;
+    }
+
+    private static Outcome tryJoin(Completion c, int index) {
+        return c.finished ? new Outcome(index, OP_DONE, c.result) : null;
+    }
+
+    /** Records that a thread finished with {@code result}, waking the selects that join it. */
+    static void complete(Completion c, Object result) {
+        c.lock.lock();
+        try {
+            c.finished = true;
+            c.result = result;
+            Waiter w;
+            while ((w = c.joiners.poll()) != null) {
+                w.value = result;
+                if (w.group.fire(w.index)) LockSupport.unpark(w.group.thread);
+            }
+        } finally {
+            c.lock.unlock();
+        }
     }
 
     private static Outcome trySend(Chan ch, Object v, int index) {
@@ -290,20 +359,20 @@ final class Channels {
         }
     }
 
-    /** The channels of {@code cases}, each once, in lock order. */
-    private static Chan[] distinct(Case[] cases) {
-        var list = new ArrayList<Chan>();
-        for (var c : cases) if (!list.contains(c.chan())) list.add(c.chan());
-        var chans = list.toArray(new Chan[0]);
-        Arrays.sort(chans, Comparator.comparingLong(c -> c.id));
-        return chans;
+    /** The sources of {@code cases}, each once, in lock order. */
+    private static Source[] distinct(Case[] cases) {
+        var list = new ArrayList<Source>();
+        for (var c : cases) if (!list.contains(c.source())) list.add(c.source());
+        var sources = list.toArray(new Source[0]);
+        Arrays.sort(sources, Comparator.comparingLong(c -> c.id));
+        return sources;
     }
 
-    private static void lockAll(Chan[] chans) {
+    private static void lockAll(Source[] chans) {
         for (var c : chans) c.lock.lock();
     }
 
-    private static void unlockAll(Chan[] chans) {
+    private static void unlockAll(Source[] chans) {
         for (int i = chans.length - 1; i >= 0; i--) chans[i].lock.unlock();
     }
 }

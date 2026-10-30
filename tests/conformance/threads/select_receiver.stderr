@@ -1,0 +1,2 @@
+panic: select works only on a `std::sync::Channel`, not a 'Ones'
+    at main (select_receiver.3b:17:5)

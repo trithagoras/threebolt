@@ -498,6 +498,7 @@ public final class AstBuilder {
             case ParenExprContext c -> expr(c.nested().expr());
             case TupleExprContext c -> new Expr.Tuple(map(c.nested(), n -> expr(n.expr())), span);
             case MatchExprAltContext c -> match(c.matchExpr());
+            case SelectExprContext c -> select(c.selectBody(), span);
             case TypeofExprContext c -> new Expr.Typeof(type(c.type()), span);
             case NameofExprContext c -> new Expr.Nameof(type(c.type()), span);
             default -> throw unexpected(ctx);
@@ -558,6 +559,18 @@ public final class AstBuilder {
                     body, span(a));
         });
         return new Expr.Match(expr(ctx.noStructExpr().expr()), arms, span(ctx));
+    }
+
+    private Expr.Select select(SelectBodyContext ctx, Span span) {
+        var arms = map(ctx.selectArm(), a -> {
+            Body body = a.block() != null ? block(a.block()) : assignOrExpr(a.assignOrExpr());
+            return switch (a.selectCase()) {
+                case SelectLetContext c -> new Expr.SelectArm(pattern(c.pattern()), coalesce(c.coalesceExpr()), body, span(a));
+                case SelectOpContext c -> new Expr.SelectArm(null, coalesce(c.coalesceExpr()), body, span(a));
+                default -> new Expr.SelectArm(null, null, body, span(a));
+            };
+        });
+        return new Expr.Select(arms, span);
     }
 
     private Expr fstring(FstringContext ctx) {

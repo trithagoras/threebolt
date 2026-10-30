@@ -91,6 +91,7 @@ public final class Checker {
     final Exprs exprs;
     final Calls calls;
     final Patterns patterns;
+    final Selects selects;
     final ConstEval consts;
     final Lints lints;
     /** Answers the index's completion request, if any; else null. */
@@ -116,6 +117,7 @@ public final class Checker {
         this.exprs = new Exprs(this);
         this.calls = new Calls(this);
         this.patterns = new Patterns(this);
+        this.selects = new Selects(this);
         this.consts = new ConstEval(this);
         this.lints = new Lints(this);
         index.lints = lints;

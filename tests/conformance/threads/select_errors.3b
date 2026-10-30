@@ -1,0 +1,23 @@
+// §7.14: a select arm head must be a case form, on a receiver of the right type; `_` at most
+// once and last; at least one other case; and the result must not be discarded silently.
+use std::sync::Channel;
+use std::thread::Thread;
+use std::time::Duration;
+
+fn main() {
+    let ch = Channel<i32>::new(1);
+    let t = Thread::spawn(() => 1);
+    let n = 5;
+    _ = select { let x = ch.recv() => x, _ => 0, _ => 1, };
+    _ = select { _ => 0, let x = ch.recv() => x, };
+    _ = select { _ => 0, };
+    _ = select { let x = ch.peek() => x, };
+    _ = select { let x = n.recv() => x, };
+    _ = select { let x = t.recv() => x, };
+    _ = select { let x = ch.join() => x, };
+    _ = select { let r = ch.send("s") => 0, };
+    _ = select { ch.recv() => 0, };
+    _ = select { after(5) => 0, };
+    _ = select { let (a, b) = ch.recv() => 0, };
+    select { let x = ch.recv() => println(x), after(Duration::ZERO) => println("none"), };
+}

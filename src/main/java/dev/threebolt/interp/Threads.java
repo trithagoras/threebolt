@@ -48,6 +48,8 @@ final class Threads {
         volatile boolean shielded;
         volatile Object result;
         final CountDownLatch done = new CountDownLatch(1);
+        /** Its finishing, for `select`'s `join` case (§7.14). */
+        final Channels.Completion completion = new Channels.Completion();
         /** The scope that owns it; null for a detached thread (and `main`). */
         ScopeState scope;
         /** The scopes whose `scope` call it is in; guarded by {@link #tree}. */
@@ -180,6 +182,35 @@ final class Threads {
 
     // ---- Threads, scopes and cancellation ----
 
+    // ---- select (§7.14) ----
+
+    /** A select's send of {@code value} (already copied) on {@code ch}. */
+    Channels.Case selectSend(Object ch, Object value) {
+        return Channels.Case.send(channel(ch), value);
+    }
+
+    Channels.Case selectRecv(Object ch) {
+        return Channels.Case.recv(channel(ch));
+    }
+
+    Channels.Case selectJoin(Object thread) {
+        return Channels.Case.join(strand(thread).completion);
+    }
+
+    /** Only std's channels can be offered and withdrawn atomically. */
+    private Channels.Chan channel(Object v) {
+        if (v instanceof Obj o && o.nat instanceof Channels.Chan ch) return ch;
+        throw new Panic("select works only on a `std::sync::Channel`, not a '" + rt.typeOf(v) + "'");
+    }
+
+    /**
+     * Waits for one of {@code cases} as §7.14 says: up to {@code nanos} ({@link Long#MAX_VALUE}: forever),
+     * with {@code after} an always-ready extra case ({@link Channels#OP_AFTER}). A cancellation point.
+     */
+    Channels.Outcome select(Channels.Case[] cases, long nanos, boolean after) {
+        return channels.await(cases, nanos, true, after);
+    }
+
     /** Whether the current thread is cancelled (§13.4). */
     boolean currentCancelled() {
         return current.get().cancelled;
@@ -235,6 +266,7 @@ final class Threads {
             try {
                 strand.result = rt.call(f);
             } finally {
+                Channels.complete(strand.completion, strand.result);
                 strand.done.countDown();
                 if (strand.scope != null) {
                     synchronized (tree) {

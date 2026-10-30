@@ -1410,7 +1410,65 @@ public final class Interpreter implements Callbacks {
             case Ir.NameOf n -> Str.of(TypeSystem.name(subst(n.type(), f)));
             case Ir.TypeOfValue t -> new TypeVal(typeOf(unbox(eval(t.operand(), f))));
             case Ir.Match m -> match(m, f);
+            case Ir.Select sel -> select(sel, f);
         };
+    }
+
+    /**
+     * {@code select} (§7.14): evaluates every case's operands in order, waits until one case can
+     * happen, performs only that one, binds its outcome and runs its arm.
+     */
+    private Object select(Ir.Select s, Frame f) {
+        var arms = s.cases();
+        var cases = new ArrayList<Channels.Case>();
+        var armOf = new ArrayList<Integer>();
+        long after = Long.MAX_VALUE;
+        int afterArm = -1, defaultArm = -1;
+        for (int i = 0; i < arms.size(); i++) {
+            var arm = arms.get(i);
+            switch (arm.kind()) {
+                case RECV, SEND, JOIN -> {
+                    var target = eval(arm.target(), f);
+                    f.at = s.span();
+                    cases.add(switch (arm.kind()) {
+                        case RECV -> threads.selectRecv(target);
+                        case SEND -> threads.selectSend(target, Values.copy(eval(arm.value(), f)));
+                        default -> threads.selectJoin(target);
+                    });
+                    armOf.add(i);
+                }
+                case AFTER -> {
+                    long nanos = ((Int) ((Obj) unbox(eval(arm.target(), f))).fields[0]).v();
+                    if (afterArm < 0 || nanos < after) {
+                        after = nanos;
+                        afterArm = i;
+                    }
+                }
+                case DEFAULT -> defaultArm = i;
+            }
+        }
+        boolean expired = afterArm >= 0 && after <= 0;
+        long wait = defaultArm >= 0 || expired ? 0 : after;
+        var out = threads.select(cases.toArray(new Channels.Case[0]), wait, expired);
+        checkAbort();
+        int chosen;
+        Object outcome = Unit.UNIT;
+        if (out.code() == Channels.OP_CANCELLED) {
+            return eval(s.cancelled(), f);
+        } else if (out.index() >= 0) {
+            chosen = armOf.get(out.index());
+            var kind = arms.get(chosen).kind();
+            if (out.code() == Channels.OP_CLOSED) outcome = eval(s.closed(), f);
+            else if (kind == Ir.SelectKind.RECV || kind == Ir.SelectKind.JOIN) outcome = Values.copy(out.value());
+        } else {
+            // `after`'s time came (OP_AFTER, or waiting for it timed out), or nothing was ready for `_`.
+            chosen = out.code() == Channels.OP_AFTER || defaultArm < 0 ? afterArm : defaultArm;
+        }
+        var arm = arms.get(chosen);
+        if (arm.pattern() != null) match(arm.pattern(), outcome, f);
+        if (arm.result() != null) return eval(arm.result(), f);
+        exec(arm.body(), f);
+        return Unit.UNIT;
     }
 
     private Object match(Ir.Match m, Frame f) {

@@ -149,6 +149,18 @@ class CompletionTest {
     }
 
     @Test
+    void membersInASelectCase() throws Exception {
+        var names = names(complete("""
+                use std::sync::Channel;
+                fn main() -> () | Err {
+                    let ch = Channel<i32>::new(1);
+                    select { let x = ch.re‸ => x, }?;
+                }
+                """));
+        assertTrue(names.contains("recv"), names.toString());
+    }
+
+    @Test
     void operatorMethodsSortLast() throws Exception {
         var items = complete("""
                 fn main() {

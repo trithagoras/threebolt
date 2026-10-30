@@ -179,6 +179,18 @@ public final class Ir {
     /** A value-producing match yields the chosen arm's {@code value}; a block arm must diverge. */
     public record Match(Expr scrutinee, List<Arm> arms, Span span) implements Expr {}
 
+    public enum SelectKind { RECV, SEND, JOIN, AFTER, DEFAULT }
+
+    /**
+     * A select case (§7.14): {@code target} is the channel, thread or duration, {@code value} what a
+     * send sends; {@code pattern} binds the outcome (null without one). The arm runs {@code body}, or
+     * yields {@code value} of {@code result} (a block arm yields `()`).
+     */
+    public record SelectCase(SelectKind kind, Expr target, Expr value, Pat pattern, Stmt body, Expr result) {}
+
+    /** {@code closed} builds the `ClosedErr` a closed channel's case binds; {@code cancelled} what a cancelled thread's select yields. */
+    public record Select(List<SelectCase> cases, Expr closed, Expr cancelled, Span span) implements Expr {}
+
     // ---- Patterns (§11) ----
 
     public sealed interface Pat {}

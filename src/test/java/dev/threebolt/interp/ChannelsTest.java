@@ -22,10 +22,9 @@ class ChannelsTest {
             new Class<?>[] {Callbacks.class}, (proxy, m, args) -> m.getReturnType() == boolean.class ? false : null);
 
     private final Channels channels = new Channels(RT, new Threads(RT));
-    private final AtomicLong ids = new AtomicLong();
 
     private Chan chan(int capacity) {
-        return new Chan(ids.getAndIncrement(), capacity);
+        return new Chan(capacity);
     }
 
     private static Thread run(Runnable r) {
@@ -43,7 +42,7 @@ class ChannelsTest {
         for (int r = 0; r < 8; r++) {
             threads.add(run(() -> {
                 while (true) {
-                    var out = channels.await(new Case[] {new Case(a, false, null), new Case(b, false, null)}, FOREVER, true);
+                    var out = channels.await(new Case[] {Case.recv(a), Case.recv(b)}, FOREVER, true, false);
                     if (out.code() == Channels.OP_CLOSED) return;
                     assertTrue(got.add(out.value()), "received twice: " + out.value());
                     count.incrementAndGet();
@@ -54,7 +53,7 @@ class ChannelsTest {
         for (int s = 0; s < 4; s++) {
             int base = s * items;
             senders.add(run(() -> {
-                for (int i = 0; i < items; i++) channels.await(new Case[] {new Case(i % 2 == 0 ? a : b, true, base + i)}, FOREVER, true);
+                for (int i = 0; i < items; i++) channels.await(new Case[] {Case.send(i % 2 == 0 ? a : b, base + i)}, FOREVER, true, false);
             }));
         }
         for (var t : senders) t.join();
@@ -71,12 +70,12 @@ class ChannelsTest {
     void aSelectThatSendsAndReceivesDoesOnlyOne() throws InterruptedException {
         var in = chan(0);
         var out = chan(0);
-        var partner = run(() -> channels.await(new Case[] {new Case(in, true, "x")}, FOREVER, true));
-        var outcome = channels.await(new Case[] {new Case(in, false, null), new Case(out, true, "y")}, FOREVER, true);
+        var partner = run(() -> channels.await(new Case[] {Case.send(in, "x")}, FOREVER, true, false));
+        var outcome = channels.await(new Case[] {Case.recv(in), Case.send(out, "y")}, FOREVER, true, false);
         partner.join();
         assertEquals(0, outcome.index());
         assertEquals("x", outcome.value());
         // The send case was withdrawn: nobody can receive "y" now.
-        assertEquals(Channels.OP_TIMED_OUT, channels.await(new Case[] {new Case(out, false, null)}, 0, true).code());
+        assertEquals(Channels.OP_TIMED_OUT, channels.await(new Case[] {Case.recv(out)}, 0, true, false).code());
     }
 }

@@ -109,6 +109,7 @@ final class Exprs {
                 yield t;
             }
             case Expr.Match m -> c.patterns.match(m, expected, false);
+            case Expr.Select s -> c.selects.select(s, expected);
             case Expr.Init init -> init(init, expected);
             case Expr.ListLit l -> listLit(l, expected);
             case Expr.RepeatLit r -> repeat(r, expected);

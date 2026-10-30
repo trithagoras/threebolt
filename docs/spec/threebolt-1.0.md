@@ -533,7 +533,7 @@ let label = match value {
 Left to right: receiver, then arguments in source order (positional, then named in source order, then defaults). Binary operands left then right. Assignment: place subexpressions, then right-hand side.
 
 ### 7.14 `select`
-```rust
+```rs
 loop {
     select {
         let j = jobs.recv() => handle(j?)?,          // j: Job | ClosedErr
@@ -552,7 +552,8 @@ loop {
   - `_`: ready at once if no other case is; makes the `select` non-blocking. At most one, and it is the last arm.
   - `p` is an irrefutable pattern; `_` discards (`let _ = quit.recv() => break`).
 - Before waiting, the operands of every case (`e`, `v`, `d`) are evaluated once, in source order.
-- When several cases are ready, one is chosen uniformly at random. Arm bodies follow the `match` arm rules (§7.1, §7.11): `break`, `continue`, `return` and `?` in an arm act on the enclosing loop and function.
+- When several cases are ready, one is chosen uniformly at random. Arm bodies follow the `match` arm rules (§7.1, §7.11): `break`, `continue`, `return` and `?` in an arm act on the enclosing loop and function; a block arm that does not diverge yields `()`.
+- At run time a `recv` or `send` operand must be a `std::sync::Channel`, which the runtime can offer and withdraw atomically; another type implementing `Receiver` or `Sender` panics.
 - Type: the union of the arm result types (diverging arms contribute nothing) and `CancelledErr`: waiting is a cancellation point (§13.4); on a cancelled thread `select` yields `CancelledErr` without performing any case. It is an expression only, so the discard rule (§6.1) applies: write `select { … }?;` or `_ = select { … };`.
 - Errors: an arm head that is not a case form; a receiver of the wrong type for its form; no arms besides `_`; `_` twice or not last.
 

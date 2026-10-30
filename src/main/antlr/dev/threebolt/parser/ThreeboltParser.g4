@@ -4,6 +4,8 @@
 //  - `>` is always one GT token. `>=`, `>>` and `>>=` are adjacent GTs/ASSIGN, checked by
 //    `adjacent()`, so type-argument lists never need `>>` splitting.
 //  - `get` is an IDENTIFIER; `getKw` recognises it before `fn` in member declarations only.
+//  - `select` is an IDENTIFIER too; `atSelect` recognises it before `{` where an initializer
+//    could start (so not in an `if`/`while`/`for`/`match` head, §7.14).
 //
 // Two pieces of parser state steer prediction through semantic predicates:
 //  - `typeArgsAhead()` (§7.5): in expressions, `<` after a name starts type arguments iff they
@@ -53,6 +55,11 @@ options { tokenVocab = ThreeboltLexer; }
         if (t != IDENTIFIER || i != 1 || !structOk()) return false;
         while (_input.LA(i + 1) == COLON_COLON && _input.LA(i + 2) == IDENTIFIER) i += 2;
         return _input.LA(i + 1) == LBRACE;
+    }
+
+    /** `select` directly before `{`, where an initializer could also start (§7.14). */
+    protected boolean atSelect() {
+        return _input.LT(1).getText().equals("select") && _input.LA(2) == LBRACE && structOk();
     }
 
     /** `get` directly before `fn` (§4.8). */
@@ -370,6 +377,7 @@ primary
     | fstring                                               # fstringExpr
     | SELF                                                  # selfExpr
     | SUPER                                                 # superExpr
+    | {atSelect()}? IDENTIFIER selectBody                   # selectExpr
     | {structOk()}? path initializer                        # namedInitExpr
     | {structOk()}? initializer                             # targetInitExpr
     | collectionLiteral                                     # collectionExpr
@@ -446,6 +454,27 @@ matchArm
       ( block COMMA?
       | {_input.LA(1) != LBRACE}? assignOrExpr (COMMA | {_input.LA(1) == RBRACE}?)
       )
+    ;
+
+// select { let p = ch.recv() => ..., after(d) => ..., _ => ... } (§7.14). Arms are like match arms;
+// a case stops below the conditional level, as a guard does, so its `=>` is not a lambda's.
+selectBody
+    @init { pushStruct(true); }
+    : LBRACE selectArm* RBRACE
+    ;
+    finally { popStruct(); }
+
+selectArm
+    : selectCase FAT_ARROW
+      ( block COMMA?
+      | {_input.LA(1) != LBRACE}? assignOrExpr (COMMA | {_input.LA(1) == RBRACE}?)
+      )
+    ;
+
+selectCase
+    : LET pattern ASSIGN coalesceExpr   # selectLet
+    | UNDERSCORE                        # selectDefault
+    | coalesceExpr                      # selectOp
     ;
 
 fstring

@@ -314,7 +314,10 @@ risks in `docs/plans/concurrency.md`. 0.1 still implements the old §13.4 (platf
 5. ~~**`for p? in e`**~~ — done: grammar (`FOR pattern QUESTION? IN`), `Stmt.For.propagate`, lowered by the checker to
    `for tmp in e { let p = tmp?; body }` (so the interpreter is unchanged); the §6.4 example is back. Conformance
    `unions/for_propagate`, `for_propagate_errors`. The TextMate grammar needed nothing.
-6. **`select`**: contextual keyword in the grammar, case forms in the checker, runtime intrinsic.
-   Then switch the spec's §7.14 snippet fence from `rust` to `rs` so `ParserAcceptanceTest` covers it,
-   and put the `for line? in` example back in §6.4's loop block.
+6. ~~**`select`**~~ — done: `atSelect` (contextual: `select` before `{` where an initializer may start), `Expr.Select`,
+   `types/Selects` (case forms, E0234), `Ir.Select`, and the `Channels` engine generalised to sources: channels and
+   thread completions, with a uniform shuffle of ready cases and an always-ready slot for an `after` whose time
+   came. Spec §7.14: its snippet is now a parsed `rs` fence; a non-diverging block arm yields `()`; a `recv`/`send`
+   operand that is not a `std::sync::Channel` panics. TextMate: `select` before `{`. Conformance `threads/select`,
+   `select_errors`, `select_receiver`; completion in a case head.
 7. Make `examples/chatroom/` type-check and run, using `for x? in`.
