@@ -488,6 +488,12 @@ pub class TcpStream : Read, Write {
         check(sys_write(self.io.handle, bytes), self.peer.to_str())?;
     }
 
+    /// Writes `s` and a `\n`. Writes never time out.
+    pub fn write_line(mut self, s: str) -> () | IoErr | CancelledErr => self.write(s + "\n");
+
+    /// Writes are sent before they return, so there is nothing to flush.
+    pub fn flush(mut self) -> () | IoErr | CancelledErr => ();
+
     // ---- Options ----
 
     /// Makes a read that waits longer than `t` a `TimedOutErr` (the stream stays usable); null

@@ -2,7 +2,7 @@
 
 **Status:** agreed 2026-10-30 and folded into the spec (§1, §6.4, §7.14, §13.4, §16; changelog
 "2026-10-30 — concurrency"). **The spec is normative**; this file keeps the reasoning, the implementation
-notes and the rejected alternatives. Not yet implemented in 0.1 (`docs/ROADMAP.md`). Worked example:
+notes and the rejected alternatives. Implemented in 0.1 (`docs/ROADMAP.md` §6). Worked example:
 `examples/chatroom/`.
 
 ## Decisions so far

@@ -1126,7 +1126,7 @@ Semantics the spec left open, decided while implementing:
 - §16 New module `std::json`: `Json`, `parse`, `stringify`, `kind`; `JsonErr` with `JsonSyntaxErr` (`line`, `col`) and `JsonDecodeErr` (`reason`, `path`); traits `ToJson` and `FromJson` with impls for the primitives, `[T]` and `Map<str, T>`; `encode`, `decode`, and the decoding helpers `object`, `array`, `field`, `optional`.
 
 ### 2026-10-30 — concurrency: scopes, cancellation, channels, `select`
-Working notes and rejected alternatives: `docs/plans/concurrency.md`. Not yet implemented in 0.1.
+Working notes and rejected alternatives: `docs/plans/concurrency.md`.
 - §13.4 Threads are lightweight (M:N, virtual threads on the JVM); `Thread::spawn` threads are detached. Structured scopes: `thread::scope(f)` waits for every thread spawned into it and never cancels them on exit (`defer s.cancel();` does that); scopes ignore their threads' results.
 - §13.4 Cooperative cancellation: `Thread::cancel`, `Scope::cancel`, propagation down owned scopes, a sticky flag, `thread::cancelled()`, `thread::check()`, and `CancelledErr : MsgErr` in `std::thread`. Every std operation that waits is a cancellation point and fails fast on a cancelled thread, except `Mutex::lock`, the prelude console functions and `close`. Hence `join() -> R | CancelledErr` (was: `R`), `join(timeout)`, `sleep -> () | CancelledErr` (was: `()`), and `Thread::finished`.
 - §13.4 `std::sync`: `Semaphore`, traits `Sender<T>` and `Receiver<T>`, `Channel<T>` (unbuffered `new()`, bounded `new(capacity)`, close-and-drain, iteration yielding `CancelledErr` once). Happens-before edges for spawn, join, scopes, channels, mutexes and semaphores.

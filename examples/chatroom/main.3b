@@ -1,14 +1,11 @@
 // chatroom — a loopback chat server under a swarm of bots, to show Threebolt's concurrency model.
 //   bolt run main.3b
 //
-// REFERENCE ONLY: written against the concurrency model in spec §13.4 (threads, scopes, cancellation,
-// channels), which 0.1 does not implement yet (docs/ROADMAP.md §6), so this parses but does not
-// type-check. Every thread is a cheap virtual thread, so blocking is fine and `join` is "await"; there is
-// no async/await. Scopes wait for their threads; cancelling is explicit (`defer s.cancel();`) and
+// Written against the concurrency model of spec §13.4 (threads, scopes, cancellation, channels).
+// Every thread is a cheap virtual thread, so blocking is fine and `join` is "await"; there is no
+// async/await. Scopes wait for their threads; cancelling is explicit (`defer s.cancel();`) and
 // cooperative: every wait (I/O, channels, `join`, `sleep`) yields `CancelledErr` on a cancelled thread,
 // and `?` carries it out, running defers.
-//
-// Once `for p? in e` (spec §6.4) is implemented, the `let x = x?;` loop prologues here become `for x? in`.
 
 use std::net::TcpListener;
 use std::thread::{CancelledErr, Thread};

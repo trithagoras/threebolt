@@ -83,9 +83,6 @@ fn bot(id: i32, addr: SocketAddr, dialling: Semaphore) -> Chatted | IoErr | Time
 
     // Count what the room said to us until the server hangs up.
     let mut heard = 0;
-    for line in conn.lines() {
-        _ = line?;
-        heard += 1;
-    }
+    for _? in conn.lines() { heard += 1; }
     return Chatted { sent, heard };
 }

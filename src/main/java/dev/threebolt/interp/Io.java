@@ -51,6 +51,8 @@ final class Io {
             CANCELLED = 14;
     /** How many bytes a file write sends between cancellation checks (§16: long writes check between chunks). */
     private static final int WRITE_CHUNK = 1 << 16;
+    /** The listen backlog `TcpListener::bind` asks for; the system caps it (`somaxconn`). */
+    private static final int LISTEN_BACKLOG = 4096;
     // `sys_open` flags; keep in step with the `O_*` constants in std/io.3b.
     private static final long READ = 1, WRITE = 2, APPEND = 4, CREATE = 8, TRUNCATE = 16, CREATE_NEW = 32;
 
@@ -375,7 +377,8 @@ final class Io {
             case "sys_tcp_listen" -> attempt(null, () -> {
                 var ch = ServerSocketChannel.open();
                 try {
-                    ch.bind(new InetSocketAddress(ip(str(a[0])), (int) num(a[1])));
+                    // Java's default backlog is 50; ask for more and let the system cap it.
+                    ch.bind(new InetSocketAddress(ip(str(a[0])), (int) num(a[1])), LISTEN_BACKLOG);
                     return add(new ListenerHandle(ch));
                 } catch (IOException e) {
                     ch.close();
