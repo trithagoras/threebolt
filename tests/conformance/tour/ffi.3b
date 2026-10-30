@@ -1,0 +1,23 @@
+extern "C" {
+    fn abs(x: c::int) -> c::int;
+    fn strlen(s: Ptr<c::char>) -> c::size_t;
+    fn qsort(base: Ptr<i32>, n: c::size_t, size: c::size_t, cmp: extern fn(Ptr<i32>, Ptr<i32>) -> c::int);
+}
+
+/// A plain top-level fn converts to a C function pointer.
+fn compare(a: Ptr<i32>, b: Ptr<i32>) -> c::int {
+    let (x, y) = unsafe => (a.read(), b.read());
+    return x - y;
+}
+
+fn main() {
+    println(unsafe => abs(-5));
+
+    let s = "threebolt".to_cstr();     // a malloc'd, NUL-terminated copy
+    defer unsafe => c::free(s);
+    println(unsafe => strlen(s));
+
+    let xs = [5, 3, 9, 1];
+    xs.with_ptr(p => unsafe => qsort(p, xs.len, 4, compare));   // pinned while C uses it
+    println(xs);
+}

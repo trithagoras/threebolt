@@ -1,0 +1,9 @@
+use geometry::shapes::{Point, manhattan};
+use std::math;
+
+fn main() {
+    let d = manhattan(Point { x: 0, y: 0 }, Point { x: 3, y: -4 });
+    println(d);
+    println(math::floor(2.7));
+    println(std::math::round(2.5));      // a fully-qualified path needs no `use`
+}

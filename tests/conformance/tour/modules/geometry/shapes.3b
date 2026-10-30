@@ -1,0 +1,11 @@
+/// Visible to any module that imports it.
+pub struct Point {
+    let x: i32;
+    let y: i32;
+}
+
+pub fn manhattan(a: Point, b: Point) -> i32 => (a.x - b.x).abs() + (a.y - b.y).abs();
+
+fn sq(n: i32) -> i32 => n * n;   // private to this module
+
+pub fn dist2(a: Point, b: Point) -> i32 => sq(a.x - b.x) + sq(a.y - b.y);
