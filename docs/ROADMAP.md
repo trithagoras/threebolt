@@ -302,7 +302,9 @@ risks in `docs/plans/concurrency.md`. 0.1 still implements the old §13.4 (platf
    `std::time`. Conformance `threads/cancel`, `scopes`, `scope_ended`, `cancel_errors`. Left for step 4: `std::net`
    still has its own `TimedOutErr : NetErr` (moving it changes the socket result types), and files are
    `FileChannel`s, which an interrupt (a `cancel`) closes.
-3. **`std::sync`**: `Semaphore`, `Sender`/`Receiver`, `Channel` (Threebolt-owned, lock + wait queues).
+3. ~~**`std::sync`**~~ — done: `Semaphore`, `Sender`/`Receiver`, `Channel` over `interp/Channels.java` (per-channel
+   lock, buffer and wait queues; a wait on several cases is won by one compare-and-set, ready for `select`).
+   Conformance `threads/channels`, `channel_errors`; unit `ChannelsTest`.
 4. **`std::io`/`std::net` cancellation points**: `CancelledErr` in every result, entry checks, chunked file
    loops, socket interruption; `serve` with `max_connections` and its own scope.
 5. **`for p? in e`**: grammar, AST, checker, interpreter, LSP, TextMate grammar (VS Code bump).

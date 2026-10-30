@@ -1,0 +1,22 @@
+// §13.4: a Receiver can only receive and a Sender only send and close; sends and receives are
+// cancellation points whose errors must be handled.
+use std::sync::{Channel, Receiver, Semaphore, Sender};
+
+fn drain(input: Receiver<i32>) {
+    input.send(1);
+    input.close();
+}
+
+fn fill(out: Sender<i32>) {
+    out.recv();
+}
+
+fn main() {
+    let ch = Channel<i32>::new(1);
+    ch.send("one");
+    ch.send(1);
+    ch.recv();
+    let n: i32 = ch.recv();
+    ch.len = 3;
+    Semaphore::new(1).with(() => 1);
+}

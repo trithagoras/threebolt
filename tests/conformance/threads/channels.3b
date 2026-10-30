@@ -1,0 +1,142 @@
+// §13.4 std::sync: channels (buffered, unbuffered, close-and-drain, timeouts, iteration,
+// cancellation) and semaphores.
+use std::io::ClosedErr;
+use std::thread;
+use std::thread::{CancelledErr, Thread};
+use std::sync::{Atomic, Channel, Receiver, Semaphore, Sender};
+use std::time::{Duration, TimedOutErr};
+
+struct Point {
+    let x: i32;
+    let y: i32;
+}
+
+/// Sends 1..=n, then closes: a function given a Sender can only send and close.
+fn produce(out: Sender<i32>, n: i32) -> () | ClosedErr | CancelledErr {
+    for i in 1..=n { out.send(i)?; }
+    out.close();
+}
+
+/// Sums what arrives until the channel is closed and drained.
+fn consume(input: Receiver<i32>) -> i32 | CancelledErr {
+    let mut total = 0;
+    for x in input { total += x?; }
+    return total;
+}
+
+fn main() -> () | Err {
+    // Buffered: FIFO, sends don't wait until it is full; getters.
+    let ch = Channel<str>::new(3);
+    ch.send("a")?;
+    ch.send("b")?;
+    println(f"len {ch.len} capacity {ch.capacity} closed {ch.closed}");
+    println(f"try_send {ch.try_send("c")} {ch.try_send("d")}");    // the second finds it full
+    println(f"{ch.recv()?} {ch.recv()?} {ch.recv()?}");
+
+    // Close and drain: items left are still received, then ClosedErr; sends fail.
+    ch.send("last")?;
+    ch.close();
+    ch.close();                                                     // again: nothing
+    println(f"closed {ch.closed}; send {ch.send("x") is ClosedErr}; try_send {ch.try_send("x")}");
+    println(f"{ch.recv()?}, then {ch.recv() is ClosedErr}");
+    let e = ch.recv();
+    if e is ClosedErr { println(e.message()); }
+
+    // Unbuffered: a rendezvous between threads, through the Sender/Receiver traits.
+    let pipe = Channel<i32>::new();
+    let producer = Thread::spawn(() => produce(pipe, 100));
+    println(f"sum {consume(pipe)?}");
+    producer.join()?;
+
+    // Value types are copied when sent.
+    let points = Channel<Point>::new(1);
+    let mut p = Point { x: 1, y: 2 };
+    points.send(p)?;
+    p.x = 99;
+    let q = points.recv()?;
+    println(f"point {q.x} {q.y}");
+
+    // recv with a timeout; a zero timeout polls.
+    let quiet = Channel<i32>::new();
+    println(f"timeout {quiet.recv(Duration::from_millis(10)) is TimedOutErr}");
+    println(f"poll {quiet.recv(Duration::ZERO) is TimedOutErr}");
+    let one = Channel<i32>::new(1);
+    one.send(5)?;
+    println(f"poll ready {one.recv(Duration::ZERO)?}");
+
+    // Many producers and consumers.
+    let jobs = Channel<i32>::new(8);
+    let total = Atomic::new(0);
+    thread::scope((s) => {
+        for _ in 0..4 {
+            s.spawn(() => {
+                let n = consume(jobs);
+                if n is i32 { _ = total.fetch_add(n); }
+            });
+        }
+        thread::scope((p) => {
+            for w in 0..5 {
+                p.spawn(() => { for i in 0..200 { _ = jobs.send(w * 1000 + i); } });
+            }
+        });
+        jobs.close();
+    });
+    println(f"many: {total.load()}");
+
+    // A waiting sender gets ClosedErr when the channel is closed.
+    let full = Channel<i32>::new();
+    let sender = Thread::spawn(() => full.send(1));
+    _ = thread::sleep(Duration::from_millis(20));
+    full.close();
+    println(f"waiting sender: {sender.join() is ClosedErr}");
+
+    // Cancellation wakes a blocked receiver and sender; iteration yields CancelledErr once.
+    let never = Channel<i32>::new();
+    let r = Thread::spawn(() => never.recv());
+    let nobody = Channel<i32>::new();
+    let w = Thread::spawn(() => nobody.send(1));
+    let it = Thread::spawn(() => {
+        let mut seen: [str] = [];
+        for x in never {
+            if x is CancelledErr { seen.push("cancelled"); } else { seen.push("item"); }
+        }
+        return seen;
+    });
+    _ = thread::sleep(Duration::from_millis(20));
+    r.cancel();
+    w.cancel();
+    it.cancel();
+    println(f"cancelled: recv {r.join() is CancelledErr}, send {w.join() is CancelledErr}, iter {it.join()?}");
+
+    // try_send is not a cancellation point.
+    let t = Thread::spawn(() => {
+        while !thread::cancelled() {}
+        return one.try_send(6);
+    });
+    t.cancel();
+    println(f"try_send when cancelled: {t.join()?}");
+
+    // Semaphore: at most 2 at a time; the permit comes back however f exits.
+    let sem = Semaphore::new(2);
+    let inside = Atomic::new(0);
+    let most = Atomic::new(0);
+    thread::scope((s) => {
+        for _ in 0..10 {
+            s.spawn(() => sem.with(() => {
+                let now = inside.fetch_add(1) + 1;
+                loop {
+                    let m = most.load();
+                    if now <= m || most.compare_exchange(m, now) == m { break; }
+                }
+                _ = thread::sleep(Duration::from_millis(5));
+                _ = inside.fetch_sub(1);
+            }));
+        }
+    });
+    println(f"semaphore: at most {most.load()} at once");
+    let held = Semaphore::new(0);
+    let waiting = Thread::spawn(() => held.with(() => 1));
+    _ = thread::sleep(Duration::from_millis(20));
+    waiting.cancel();
+    println(f"semaphore wait cancelled: {waiting.join() is CancelledErr}");
+}

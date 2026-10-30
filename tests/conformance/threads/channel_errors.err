@@ -1,0 +1,10 @@
+channel_errors.3b:6:11: error[E0202]: 'Receiver<i32>' has no method 'send'
+channel_errors.3b:7:11: error[E0202]: 'Receiver<i32>' has no method 'close'
+channel_errors.3b:11:9: error[E0202]: 'Sender<i32>' has no method 'recv'
+channel_errors.3b:16:5: error[E0211]: this value of type '() | ClosedErr | CancelledErr' may be an error; handle it, propagate it with `?`, or discard it with `_ = ...;`
+channel_errors.3b:16:13: error[E0200]: expected 'i32', found 'str'
+channel_errors.3b:17:5: error[E0211]: this value of type '() | ClosedErr | CancelledErr' may be an error; handle it, propagate it with `?`, or discard it with `_ = ...;`
+channel_errors.3b:18:5: error[E0211]: this value of type 'i32 | ClosedErr | CancelledErr' may be an error; handle it, propagate it with `?`, or discard it with `_ = ...;`
+channel_errors.3b:19:18: error[E0200]: expected 'i32', found 'i32 | ClosedErr | CancelledErr'
+channel_errors.3b:20:5: error[E0302]: cannot assign to this expression
+channel_errors.3b:21:5: error[E0211]: this value of type 'i32 | CancelledErr' may be an error; handle it, propagate it with `?`, or discard it with `_ = ...;`

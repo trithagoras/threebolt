@@ -1,0 +1,17 @@
+len 2 capacity 3 closed false
+try_send true false
+a b c
+closed true; send true; try_send false
+last, then true
+channel is closed
+sum 5050
+point 1 2
+timeout true
+poll true
+poll ready 5
+many: 2099500
+waiting sender: true
+cancelled: recv true, send true, iter ["cancelled"]
+try_send when cancelled: true
+semaphore: at most 2 at once
+semaphore wait cancelled: true

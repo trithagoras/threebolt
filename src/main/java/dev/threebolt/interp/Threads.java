@@ -32,9 +32,11 @@ import java.util.function.LongBinaryOperator;
  */
 final class Threads {
     private final Callbacks rt;
+    private final Channels channels;
 
     Threads(Callbacks rt) {
         this.rt = rt;
+        this.channels = new Channels(rt, this);
     }
 
     /** A Threebolt thread: its cancellation state, the scopes it owns and, once finished, its result. */
@@ -76,6 +78,7 @@ final class Threads {
     private static final int WAIT_DONE = 0, WAIT_TIMED_OUT = 1, WAIT_CANCELLED = 2;
 
     Object call(String owner, String name, Object self, Object[] a, Map<TypeParamInfo, Type> typeEnv, FnInfo fn) {
+        if (owner.equals("Channel")) return channels.call(name, self, a, typeEnv, fn);
         return switch (owner + "." + name) {
             case "thread.sleep_nanos" -> sleep(((Int) a[0]).v());
             case "thread.cancelled" -> current.get().cancelled;
@@ -130,6 +133,16 @@ final class Threads {
                     yield ((ScopeState) ((Obj) self).nat).cancelled;
                 }
             }
+            case "Semaphore.new" -> {
+                var sem = new Obj((TypeInfo) fn.owner, List.of(), new Object[0]);
+                sem.nat = new java.util.concurrent.Semaphore((int) Math.min(((Int) a[0]).v(), Integer.MAX_VALUE), true);
+                yield sem;
+            }
+            case "Semaphore.acquire" -> acquire((java.util.concurrent.Semaphore) ((Obj) self).nat);
+            case "Semaphore.release" -> {
+                ((java.util.concurrent.Semaphore) ((Obj) self).nat).release();
+                yield Unit.UNIT;
+            }
             case "RawLock.new" -> {
                 var lock = new Obj((TypeInfo) fn.owner, List.of(), new Object[0]);
                 lock.nat = new ReentrantLock();
@@ -164,6 +177,25 @@ final class Threads {
     }
 
     // ---- Threads, scopes and cancellation ----
+
+    /** Whether the current thread is cancelled (§13.4). */
+    boolean currentCancelled() {
+        return current.get().cancelled;
+    }
+
+    /** Takes a permit, waiting while none is free; false if the current thread is cancelled first or meanwhile. */
+    private boolean acquire(java.util.concurrent.Semaphore sem) {
+        var me = current.get();
+        if (me.cancelled) return false;
+        while (true) {
+            try {
+                sem.acquire();
+                return true;
+            } catch (InterruptedException e) {
+                if (cancelledByInterrupt(me)) return false;
+            }
+        }
+    }
 
     private static Strand strand(Object thread) {
         return (Strand) ((Obj) thread).nat;

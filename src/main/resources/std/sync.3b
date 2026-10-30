@@ -1,4 +1,8 @@
-// std::sync (spec §13.4).
+// std::sync (spec §13.4): locks, atomics, semaphores and channels.
+
+use std::io::ClosedErr;
+use std::thread::CancelledErr;
+use std::time::{Duration, TimedOutErr};
 
 /// A value shared between threads, accessed under a lock.
 pub class Mutex<T> {
@@ -40,6 +44,122 @@ pub class Atomic<T> {
     pub fn fetch_and(self, value: T) -> T;
     pub fn fetch_or(self, value: T) -> T;
     pub fn fetch_xor(self, value: T) -> T;
+}
+
+/// Limits how many threads run something at once.
+pub class Semaphore {
+    /// A semaphore with `permits` permits.
+    pub fn new(permits: usize) -> Self;
+
+    /// Takes a permit, waiting while none is free, runs `f`, and gives the permit back however
+    /// `f` exits. Only the wait is a cancellation point.
+    pub fn with<R>(self, f: fn() -> R) -> R | CancelledErr {
+        if !self.acquire() { return CancelledErr::new(); }
+        defer self.release();
+        return f();
+    }
+
+    /// Takes a permit, waiting while none is free; false if the thread is cancelled first or meanwhile.
+    fn acquire(self) -> bool;
+    fn release(self);
+}
+
+/// The sending side of a channel. Only senders close.
+pub trait Sender<T> {
+    /// Sends `v`, waiting while the channel is full (unbuffered: until a receiver takes it).
+    /// `ClosedErr` if the channel is closed, also while waiting.
+    fn send(self, v: T) -> () | ClosedErr | CancelledErr;
+    /// Sends `v` if that needs no wait; false when the channel is full or closed.
+    fn try_send(self, v: T) -> bool;
+    /// Closes the channel: further sends fail, and receivers get what is left, then `ClosedErr`.
+    /// Closing again does nothing.
+    fn close(self);
+}
+
+/// The receiving side of a channel. Iterating yields items until the channel is closed and
+/// drained; on cancellation it yields `CancelledErr` once and ends.
+pub trait Receiver<T> : Iterable<T | CancelledErr> {
+    /// The next item, waiting while there is none; `ClosedErr` once the channel is closed and drained.
+    fn recv(self) -> T | ClosedErr | CancelledErr;
+    /// As `recv()`, giving up after `timeout` (a zero or negative `timeout` checks once).
+    fn recv(self, timeout: Duration) -> T | ClosedErr | TimedOutErr | CancelledErr;
+}
+
+// What a channel operation reports; keep in step with `Channels.java`.
+const OP_DONE: i32 = 0;
+const OP_CLOSED: i32 = 1;
+const OP_TIMED_OUT: i32 = 2;
+const OP_CANCELLED: i32 = 3;
+
+/// A FIFO queue between threads, holding up to `capacity` items (none: each `send` waits for a
+/// `recv`).
+pub class Channel<T> : Sender<T>, Receiver<T> {
+    /// An unbuffered channel: each `send` waits for a `recv`.
+    pub fn new() -> Self => Channel<T>::new(0);
+    /// A channel holding up to `capacity` items (`new(0)` is unbuffered).
+    pub fn new(capacity: usize) -> Self;
+
+    pub fn send(self, v: T) -> () | ClosedErr | CancelledErr {
+        let r = self.op_send(v, i64::MAX, true);
+        if r == OP_CLOSED { return closed(); }
+        if r == OP_CANCELLED { return CancelledErr::new(); }
+    }
+
+    pub fn try_send(self, v: T) -> bool => self.op_send(v, 0, false) == OP_DONE;
+
+    pub fn close(self);
+
+    pub fn recv(self) -> T | ClosedErr | CancelledErr {
+        let r = self.op_recv(i64::MAX);
+        if r == OP_CLOSED { return closed(); }
+        if r == OP_CANCELLED { return CancelledErr::new(); }
+        return self.received();
+    }
+
+    pub fn recv(self, timeout: Duration) -> T | ClosedErr | TimedOutErr | CancelledErr {
+        let r = self.op_recv(timeout.nanos);
+        if r == OP_CLOSED { return closed(); }
+        if r == OP_TIMED_OUT { return TimedOutErr::new(); }
+        if r == OP_CANCELLED { return CancelledErr::new(); }
+        return self.received();
+    }
+
+    pub fn iter(self) -> Iterator<T | CancelledErr> => ChannelIter::new(self);
+
+    /// The number of items waiting in the buffer.
+    pub get fn len(self) -> usize;
+    pub get fn capacity(self) -> usize;
+    pub get fn closed(self) -> bool;
+
+    /// Sends `v`, waiting up to `nanos` (`i64::MAX`: forever; at most zero: no wait); an `OP_*`
+    /// code. `cancellable`: a cancellation point (`try_send` is not).
+    fn op_send(self, v: T, nanos: i64, cancellable: bool) -> i32;
+    /// Receives, waiting up to `nanos` as `op_send` does; an `OP_*` code, and on `OP_DONE` the item
+    /// is `received()`. A cancellation point.
+    fn op_recv(self, nanos: i64) -> i32;
+    /// The item the current thread's last `op_recv` on this channel took.
+    fn received(self) -> T;
+}
+
+fn closed() -> ClosedErr => ClosedErr::new(null, what: "channel");
+
+/// A channel's items until it is closed and drained; `CancelledErr` once on cancellation.
+class ChannelIter<T> : Iterator<T | CancelledErr> {
+    let ch: Channel<T>;
+    let done: bool = false;
+
+    pub fn new(ch: Channel<T>) -> Self => { ch };
+
+    pub fn next(mut self) -> T | CancelledErr | Done {
+        if self.done { return Done; }
+        let r = self.ch.recv();
+        if r is ClosedErr {
+            self.done = true;
+            return Done;
+        }
+        if r is CancelledErr { self.done = true; }
+        return r;
+    }
 }
 
 /// A new guard over `value`. An intrinsic only because a class initializer may appear only in its own
