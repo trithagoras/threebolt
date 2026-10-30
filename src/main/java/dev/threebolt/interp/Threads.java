@@ -263,16 +263,16 @@ final class Threads {
         rt.startThread(() -> {
             current.set(strand);
             strand.thread = Thread.currentThread();
-            try {
-                strand.result = rt.call(f);
-            } finally {
-                Channels.complete(strand.completion, strand.result);
-                strand.done.countDown();
-                if (strand.scope != null) {
-                    synchronized (tree) {
-                        strand.scope.children.remove(strand);
-                        tree.notifyAll();
-                    }
+            // Only a thread that returns finishes. A panic (or `exit`) ends the process instead, and
+            // signalling here would let a joiner read the missing result before the process is marked
+            // as ending; joiners and scopes waiting on this thread are interrupted by the termination.
+            strand.result = rt.call(f);
+            Channels.complete(strand.completion, strand.result);
+            strand.done.countDown();
+            if (strand.scope != null) {
+                synchronized (tree) {
+                    strand.scope.children.remove(strand);
+                    tree.notifyAll();
                 }
             }
         });
