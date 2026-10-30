@@ -265,7 +265,7 @@ stmt
     | BREAK SEMI                                                         # breakStmt
     | CONTINUE SEMI                                                      # continueStmt
     | RETURN expr? SEMI                                                  # returnStmt
-    | DEFER (block | {_input.LA(1) != LBRACE}? expr SEMI)                # deferStmt
+    | DEFER (block | UNSAFE block | {_input.LA(1) != LBRACE}? expr SEMI) # deferStmt
     | UNSAFE block                                                       # unsafeStmt
     | assignTarget assignOp expr SEMI                                    # assignStmt
     | {_input.LA(1) != LBRACE}? expr SEMI                                # exprStmt

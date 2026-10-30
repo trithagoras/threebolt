@@ -1,0 +1,1 @@
+defer_unsafe_errors.3b:5:9: error[E0223]: `return` cannot leave a deferred block

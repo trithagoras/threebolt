@@ -424,7 +424,11 @@ public final class AstPrinter {
             }
             case Stmt.Defer d -> {
                 out.append("defer ");
-                if (d.body() instanceof Stmt.Block b) {
+                if (d.body() instanceof Stmt.Block(var stmts, var blockSpan) && stmts.size() == 1
+                        && stmts.getFirst() instanceof Stmt.Unsafe u && u.span().equals(blockSpan)) {
+                    out.append("unsafe ");   // `defer unsafe { ... }`, as written
+                    block(u.body());
+                } else if (d.body() instanceof Stmt.Block b) {
                     block(b);
                 } else {
                     notBrace((Expr) d.body(), false);

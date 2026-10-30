@@ -1,0 +1,12 @@
+// §6.5 The restrictions on deferred blocks apply inside `defer unsafe { ... }`.
+
+fn f() -> i32 {
+    defer unsafe {
+        return 1;
+    }
+    return 0;
+}
+
+fn main() {
+    println(f());
+}

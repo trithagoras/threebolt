@@ -397,8 +397,10 @@ for line? in f.lines() { ... }
 ```rs
 defer expr;
 defer { ... }
+defer unsafe { ... }
 ```
 - Registers code to run when the **enclosing block** exits by any path (fall-through, `return`, `?` propagation, `break`, `continue`). Multiple defers run in reverse registration order. Captures variables by reference (sees final values).
+- `defer unsafe { ... }` ≡ `defer { unsafe { ... } }` (§14.6).
 - Does not run on panic or `process::exit`. A deferred block may not contain `return`, `break`, `continue`, or `?` propagating out of it.
 
 ### 6.6 Conditions and `Truthy`
@@ -1152,3 +1154,6 @@ Working notes and rejected alternatives: `docs/plans/concurrency.md`.
 - §1, §7.2, §7.3, §9 `x is not T` / `x is not pattern` and `x not in c` (contextual keyword `not`), the same as `!(x is …)` and `!(x in c)`, narrowing included. `!` stays.
 - §11, §7.11 Negated patterns `not p` and `[name] is not T`, anywhere a pattern goes; `not` takes the whole or-pattern after it and binds nothing. They narrow and count toward exhaustiveness.
 - §11 Relational patterns `< v`, `<= v`, `> v`, `>= v` against a literal of a number, `char` or `str` type; they narrow but do not count toward exhaustiveness. Also after `is` (`n is > 0`).
+
+### 2026-10-30 — `defer unsafe { ... }`
+- §6.5 `defer unsafe { ... }` is accepted, meaning `defer { unsafe { ... } }` (was a parse error; `defer unsafe => expr;` already worked).

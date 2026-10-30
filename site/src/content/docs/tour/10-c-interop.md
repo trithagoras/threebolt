@@ -25,7 +25,7 @@ fn main() {
     println(unsafe => abs(-5));
 
     let s = "threebolt".to_cstr();     // a malloc'd, NUL-terminated copy
-    defer unsafe => c::free(s);
+    defer unsafe { c::free(s); }
     println(unsafe => strlen(s));
 
     let xs = [5, 3, 9, 1];
