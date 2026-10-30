@@ -513,6 +513,38 @@ public final class AstPrinter {
 
     // ---- Expressions ----
 
+    /** The test in `!(x is p)` or `!(x in c)`, which print as `x is not p` and `x not in c` (§7.3). */
+    private static Expr negatedTest(Expr.Unary u) {
+        if (u.op() != Expr.UnaryOp.NOT) return null;
+        return switch (u.operand()) {
+            case Expr.Is i -> i;
+            case Expr.IsPattern i -> i;
+            case Expr.Binary b when b.op() == Expr.BinaryOp.IN -> b;
+            default -> null;
+        };
+    }
+
+    private void negated(Expr test, boolean typeFollows) {
+        switch (test) {
+            case Expr.Is i -> {
+                expr(i.operand(), RANGE, false);
+                out.append(" is not ");
+                type(i.type());
+            }
+            case Expr.IsPattern i -> {
+                expr(i.operand(), RANGE, false);
+                out.append(" is not ");
+                isPattern(i.pattern());
+            }
+            case Expr.Binary b -> {
+                expr(b.left(), RANGE, false);
+                out.append(" not in ");
+                expr(b.right(), RANGE, typeFollows);
+            }
+            default -> throw new IllegalArgumentException(test.toString());
+        }
+    }
+
     private static int precedence(Expr e) {
         return switch (e) {
             case Expr.Lambda l -> LAMBDA;
@@ -522,7 +554,7 @@ public final class AstPrinter {
             case Expr.Is i -> COMPARISON;
             case Expr.IsPattern i -> COMPARISON;
             case Expr.Cast c -> CAST;
-            case Expr.Unary u -> PREFIX;
+            case Expr.Unary u -> negatedTest(u) != null ? COMPARISON : PREFIX;
             case Expr.Member m -> POSTFIX;
             case Expr.Call c -> POSTFIX;
             case Expr.Index i -> POSTFIX;
@@ -539,7 +571,8 @@ public final class AstPrinter {
     private void expr(Expr e, int min, boolean typeFollows) {
         boolean parens = precedence(e) < min
                 || (inHead && e instanceof Expr.Init)
-                || (inHead && e instanceof Expr.IsPattern ip && ip.pattern() instanceof Pattern.Struct)
+                || (inHead && (e instanceof Expr.Unary u && negatedTest(u) != null ? negatedTest(u) : e)
+                        instanceof Expr.IsPattern ip && ip.pattern() instanceof Pattern.Struct)
                 || (inList && e instanceof Expr.Binary b && b.op() == Expr.BinaryOp.LT)
                 || (typeFollows && e instanceof Expr.Cast);
         if (!parens) {
@@ -601,6 +634,7 @@ public final class AstPrinter {
                 expr(p.operand(), POSTFIX, false);
                 out.append('?');
             }
+            case Expr.Unary u when negatedTest(u) != null -> negated(negatedTest(u), typeFollows);
             case Expr.Unary u -> {
                 out.append(u.op().symbol());
                 expr(u.operand(), PREFIX, typeFollows);

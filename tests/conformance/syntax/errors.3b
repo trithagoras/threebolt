@@ -2,3 +2,7 @@
 fn main() {
     let = 1;
 }
+
+fn negated(xs: [i32]) -> bool {
+    return xs is not;                       // after `is`, `not` is the keyword (§7.3)
+}

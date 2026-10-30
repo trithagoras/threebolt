@@ -6,6 +6,8 @@
 //  - `get` is an IDENTIFIER; `getKw` recognises it before `fn` in member declarations only.
 //  - `select` is an IDENTIFIER too; `atSelect` recognises it before `{` where an initializer
 //    could start (so not in an `if`/`while`/`for`/`match` head, §7.14).
+//  - `not` is an IDENTIFIER too; `notKw` recognises it directly after `is` and directly before
+//    `in` (§7.3).
 //
 // Two pieces of parser state steer prediction through semantic predicates:
 //  - `typeArgsAhead()` (§7.5): in expressions, `<` after a name starts type arguments iff they
@@ -60,6 +62,11 @@ options { tokenVocab = ThreeboltLexer; }
     /** `select` directly before `{`, where an initializer could also start (§7.14). */
     protected boolean atSelect() {
         return _input.LT(1).getText().equals("select") && _input.LA(2) == LBRACE && structOk();
+    }
+
+    /** `not` directly after `is` (always the keyword there), or directly before `in` (§7.3). */
+    protected boolean atNot() {
+        return _input.LT(1).getText().equals("not") && (_input.LA(-1) == IS || _input.LA(2) == IN);
     }
 
     /** `get` directly before `fn` (§4.8). */
@@ -306,12 +313,15 @@ andExpr : andExpr AND_AND comparisonExpr | comparisonExpr ;
 // not separate alternatives: choosing between alternatives that share the `rangeExpr` prefix
 // would happen before `typeArgsAhead()` can be evaluated and resolve `f(a < b, c > (d))` as
 // comparisons.
-comparisonExpr : rangeExpr (compareOp rangeExpr | IS isTarget | IN rangeExpr)? ;
+comparisonExpr : rangeExpr (compareOp rangeExpr | IS notKw? isTarget | notKw? IN rangeExpr)? ;
+
+// `x is not T`, `x not in c` (§7.3).
+notKw : {atNot()}? IDENTIFIER ;
 
 // §7.3, §17.18: after `is`, a pattern or a type, chosen by `isPatternAhead()`.
 isTarget
     : {isPatternAhead()}? patternAtom                  # patternIsTarget
-    | type                                             # typeIsTarget
+    | {!atNot()}? type                                 # typeIsTarget
     ;
 
 compareOp

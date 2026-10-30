@@ -1,0 +1,9 @@
+// Compile errors for `is not` and `not in` (§7.3).
+
+fn main() {
+    let xs = [1, 2];
+    if xs is not [a, ..] { println(a); }                     // bound only where the test fails
+    let v: i32 | str = 1;
+    if v is not str { _ = v.len; }                           // v: i32 here
+    _ = 3 not in 5;                                          // i32 implements no Contains
+}

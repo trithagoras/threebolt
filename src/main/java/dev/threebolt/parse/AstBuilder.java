@@ -367,13 +367,17 @@ public final class AstBuilder {
     private Expr comparison(ComparisonExprContext ctx) {
         var left = range(ctx.rangeExpr(0));
         if (ctx.IS() != null) {
-            return switch (ctx.isTarget()) {
+            Expr test = switch (ctx.isTarget()) {
                 case PatternIsTargetContext c -> new Expr.IsPattern(left, patternAtom(c.patternAtom()), span(ctx));
                 case TypeIsTargetContext c -> new Expr.Is(left, type(c.type()), span(ctx));
                 default -> throw unexpected(ctx.isTarget());
             };
+            return negatedIf(ctx.notKw() != null, test, ctx);
         }
-        if (ctx.IN() != null) return new Expr.Binary(Expr.BinaryOp.IN, left, range(ctx.rangeExpr(1)), span(ctx));
+        if (ctx.IN() != null) {
+            var test = new Expr.Binary(Expr.BinaryOp.IN, left, range(ctx.rangeExpr(1)), span(ctx));
+            return negatedIf(ctx.notKw() != null, test, ctx);
+        }
         if (ctx.compareOp() == null) return left;
         var op = ctx.compareOp();
         var binOp = switch (op.getStart().getType()) {
@@ -385,6 +389,11 @@ public final class AstBuilder {
             default -> throw unexpected(op);
         };
         return new Expr.Binary(binOp, left, range(ctx.rangeExpr(1)), span(ctx));
+    }
+
+    /** `x is not p` and `x not in c` are `!(x is p)` and `!(x in c)` (§7.3). */
+    private Expr negatedIf(boolean negated, Expr test, ComparisonExprContext ctx) {
+        return negated ? new Expr.Unary(Expr.UnaryOp.NOT, test, span(ctx)) : test;
     }
 
     private Expr range(RangeExprContext ctx) {

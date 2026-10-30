@@ -20,7 +20,7 @@ Normative technical reference for implementers (human or agent). Supersedes `doc
 
 After `.` (member access) or `::` (path segment) any keyword is accepted as a name (e.g. `x.type()`, `Ptr<T>::null()`).
 
-**Contextual keywords:** `get` is special only directly before `fn` in a member declaration (§4.8); elsewhere it is an ordinary identifier (`fn get<T>()`, `map.get(k)`). `select` is special only directly before `{` where an expression starts, except in the condition of `if`/`while`, a `match` scrutinee or a `for` iterable (§7.14); elsewhere it is an ordinary identifier (`fn select()`, `query.select(cols)`).
+**Contextual keywords:** `get` is special only directly before `fn` in a member declaration (§4.8); elsewhere it is an ordinary identifier (`fn get<T>()`, `map.get(k)`). `select` is special only directly before `{` where an expression starts, except in the condition of `if`/`while`, a `match` scrutinee or a `for` iterable (§7.14); elsewhere it is an ordinary identifier (`fn select()`, `query.select(cols)`). `not` is special only directly after `is` and directly before `in` (`x is not T`, `k not in m`, §7.3); elsewhere it is an ordinary identifier.
 
 **Literals:**
 
@@ -428,7 +428,7 @@ Function expression bodies, lambda bodies, `match` arms, and `unsafe =>` accept 
 | 8 | `^` | left |
 | 9 | `\|` | left |
 | 10 | `..` `..=` | none |
-| 11 | `== != < > <= >=` `is` `in` | none (no chaining) |
+| 11 | `== != < > <= >=` `is` `is not` `in` `not in` | none (no chaining) |
 | 12 | `&&` | left |
 | 13 | `\|\|` | left |
 | 14 | `??` | right |
@@ -445,11 +445,13 @@ Bitwise binds tighter than comparison (no C precedence trap).
 - `&& || !`: short-circuit, operands per §6.6, result `bool`.
 - `a ?? b`: if `a` is `null`, evaluates `b`. Type: `(A minus null) | B`. Only null is defaulted (errors are not).
 - `x is T`: runtime test, `bool`. `T` may be any type including traits, literal types and unions (true if any member matches). Narrows (§9).
-- `x is pattern`: `true` if `x` matches the refutable pattern (§11); its bindings are in scope where the test is known to be true: the then-block of an `if`/`while`, the right operand of `&&`, the `a` of `a if c else b`, and the code after an `if !(x is p) { ... }` whose block diverges (§9). Guards are not allowed (`&&` instead).
+- `x is pattern`: `true` if `x` matches the refutable pattern (§11); its bindings are in scope where the test is known to be true: the then-block of an `if`/`while`, the right operand of `&&`, the `a` of `a if c else b`, and the code after an `if x is not p { ... }` whose block diverges (§9). Guards are not allowed (`&&` instead).
   - What follows `is` is decided syntactically: `[` or `(` starts a pattern (`xs is []`, `xs is [first, ..rest]`, `t is (0, _)`); so do `Name { ... }` (a struct pattern, subject to §6.3) and a literal followed by `..`/`..=` (`n is 1..=9`). Anything else is a type, as before (`x is i32`, `x is Foo<T>`, `x is i32 | null`, `x is "a"`, `x is null`).
   - So a list or tuple **type** cannot be written after `is` with brackets: write `x is List<str>` (`[str]` is `List<str>`), or a pattern of type tests `t is (is i32, is str)`. A name that denotes a type where a pattern expects a binding (`xs is [str]`, `x is (i32 | str)`) is an error.
   - Or-patterns are allowed inside brackets (`xs is [1 | 2, ..]`); at the top level, `|` after a type extends the union and after a pattern is a bitwise or.
+- `x is not T`, `x is not pattern`: exactly `!(x is T)` and `!(x is pattern)`, narrowing included (§9): `if v is not CancelledErr { … }` removes `CancelledErr` from `v`'s type in the block, and after `if xs is not [h, ..] { return; }`, `h` is bound. Directly after `is`, `not` is always the keyword, so a type named `not` cannot be tested there.
 - `x in c`: membership test through the `Contains` trait (§16): `c`'s type must implement `Contains<E>`, `x` is checked against `E`, and the result is `Contains::contains(c, x)` (`c` is evaluated before `x`). Implemented by `[T]`, `Set<T>`, `Range<T>`, `Map<K, V>` (tests keys), `Iterator<T>` (searches the remaining elements, consuming the iterator up to the first match) and `str` (as `Contains<char>`, so `'e' in s`; substrings use `s.contains("ab")`).
+- `x not in c`: exactly `!(x in c)`.
 - Ranges `a..b` (half-open), `a..=b` (inclusive): integer or `char` operands; type `Range<T>` (implements `Iterable<T>`).
 - **Overloadable** via traits (§16): `+ - * / %` unary `-`, `== !=` (`Eq`), `< > <= >=` (`Ord`), `[]` (`Index`, `IndexMut`), `in` (`Contains`), `& | ^ ~ << >>`. Compound assignment uses the binary operator. **Not** overloadable: `&& || ! ?? ? is as as? ..`, assignment.
 
@@ -584,7 +586,7 @@ For `x.m(...)`: inherent methods of `x`'s static type (and base classes), then m
 ## 9. Narrowing
 
 - Applies to: locals, parameters, and `self`. Not to fields (always potentially mutable through aliases), statics, indexers, or getter results — bind first: `if let p = self.parent { p.x }`.
-- Narrowing sources: `x is pattern` (bindings as §7.3; in the true branch `x` also narrows to the types the pattern can match, e.g. `[T]` for a list pattern on `[T] | null`), `x is T` (true branch → `x: T` if `T` is a member or subtype of `x`'s type, else narrowed to `T` itself; false branch removes `T`'s members from a union), `x == null` / `x != null`, `x == literal` (literal unions), truthy test (§6.6), `if let`, match arms, comprehension filters (§7.7), `&&`/`||` composition, `!`.
+- Narrowing sources: `x is pattern` (bindings as §7.3; in the true branch `x` also narrows to the types the pattern can match, e.g. `[T]` for a list pattern on `[T] | null`), `x is T` (true branch → `x: T` if `T` is a member or subtype of `x`'s type, else narrowed to `T` itself; false branch removes `T`'s members from a union), `x == null` / `x != null`, `x == literal` (literal unions), truthy test (§6.6), `if let`, match arms, comprehension filters (§7.7), `&&`/`||` composition, `!` (so also `is not`, §7.3).
 - **Flow sensitivity:** narrowing persists after an `if` whose branch diverges (`return`, `break`, `continue`, panic): `if x == null { return; } x.use();`.
 - Assignment to a narrowed `let mut` local resets its type to the assigned value's type.
 - Inside a lambda, captured `let mut` variables are not narrowed.
@@ -857,7 +859,7 @@ Implicitly imported names:
 15. The §6.3 head restriction applies to any initializer not enclosed in `()`, `[]` or `{}`: `if p == Point { x: 0 }.norm() {` is an error; write `if p == (Point { x: 0 }).norm() {`.
 16. The assembled operators `>=`, `>>`, `>>=` may not contain whitespace (`a > = b` is an error).
 17. Inside index brackets, a range may omit either bound or both (`xs[1..]`, `xs[..n]`, `xs[..]`, §7.6); `..=` requires an upper bound.
-18. After `is`, a pattern follows iff the next tokens are `[`, `(`, a path followed by `{` (where initializers are allowed, §6.3), or a literal (optionally negated) followed by `..`/`..=`; otherwise a type follows (§7.3).
+18. After `is` (and its `not`, if any), a pattern follows iff the next tokens are `[`, `(`, a path followed by `{` (where initializers are allowed, §6.3), or a literal (optionally negated) followed by `..`/`..=`; otherwise a type follows (§7.3).
 19. In a comprehension (§7.7) each iterable and filter is an expression at `??` precedence or tighter, like a match guard (note 14), so after an iterable `if` starts its filter and `,` the next clause: `[x for x in (a if c else b)]`. The element (or entry) is any expression; `for` ends it.
 
 ---
@@ -1140,3 +1142,6 @@ Working notes and rejected alternatives: `docs/plans/concurrency.md`.
 ### 2026-10-30 — covariant trait returns; socket timeouts
 - §4.9 An implementation of a trait member may return less than the trait declares: each member of its return type is a member of the trait's, a subclass of one, or an `Iterator` of less (was: exact match).
 - §16 `Read` and `Write` members include `TimedOutErr` in their results, so a `TcpStream` read timeout is the same `TimedOutErr` as a join's or a channel's; `File`'s members leave it out (§4.9). `TcpStream::connect`, `UdpSocket::recv_from` and `recv` include it.
+
+### 2026-10-30 — `is not`, `not in`
+- §1, §7.2, §7.3, §9 `x is not T` / `x is not pattern` and `x not in c` (contextual keyword `not`), the same as `!(x is …)` and `!(x in c)`, narrowing included. `!` stays.

@@ -216,6 +216,14 @@
           }
         },
         {
+          "comment": "`not` is contextual (§7.3): a keyword only in `is not` and `not in`.",
+          "match": "(?<=\\bis\\s)\\s*(not)\\b|\\b(not)(?=\\s+in\\b)",
+          "captures": {
+            "1": { "name": "keyword.control.is.threebolt" },
+            "2": { "name": "keyword.control.threebolt" }
+          }
+        },
+        {
           "name": "keyword.other.threebolt",
           "match": "\\b(?:use|nameof|typeof|impl)\\b"
         },

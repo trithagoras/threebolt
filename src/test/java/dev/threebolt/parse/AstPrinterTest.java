@@ -76,6 +76,20 @@ class AstPrinterTest {
     }
 
     @Test
+    void negatedTests() {
+        assertEquals("x is not CancelledErr", expr("x is not CancelledErr"));
+        assertEquals("x is not CancelledErr", expr("!(x is CancelledErr)"));
+        assertEquals("xs is not [_, ..]", expr("xs is not [_, ..]"));
+        assertEquals("k not in m", expr("!(k in m)"));
+        assertEquals("(k not in m) == b", expr("(k not in m) == b"));
+        assertEquals("!(k not in m)", expr("!(k not in m)"));
+        assertEquals("a && x is not T", expr("a && x is not T"));
+        assertEquals("if (p is not P { x: 0 }) {}\n", stmts("if (p is not P { x: 0 }) {}"));
+        // Elsewhere `not` is an ordinary name.
+        assertEquals("not(x) && not in xs", expr("not(x) && not in xs"));
+    }
+
+    @Test
     void statementsStartingWithBraceOrMatch() {
         assertEquals("({ x: 1 }.go());\n", stmts("({ x: 1 }).go();"));
         assertEquals("({ x: 1 }.y) = 2;\n", stmts("({ x: 1 }).y = 2;"));

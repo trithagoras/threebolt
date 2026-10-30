@@ -227,6 +227,26 @@ class CompletionTest {
     }
 
     @Test
+    void unionNarrowedByIsNot() throws Exception {
+        var names = names(complete("""
+                use shapes::Point;
+                fn pick(v: Point | str) {
+                    if v is not str {
+                        v.‸
+                    }
+                }
+                fn main() {}
+                """));
+        assertTrue(names.containsAll(List.of("x", "dist")), names.toString());
+        var types = names(complete("""
+                use shapes::Point;
+                fn pick(v: Point | str) -> bool => v is not Poi‸;
+                fn main() {}
+                """));
+        assertTrue(types.contains("Point"), types.toString());
+    }
+
+    @Test
     void comprehensionBindingsBeforeTheirClause() throws Exception {
         // The element comes first in the source but is checked after the clauses that bind it.
         var names = names(complete("""

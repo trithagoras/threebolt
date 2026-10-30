@@ -1,0 +1,48 @@
+// §7.3, §9: `x is not p` ≡ `!(x is p)` and `x not in c` ≡ `!(x in c)`, narrowing included.
+// Elsewhere `not` is an ordinary name.
+
+use std::thread::CancelledErr;
+
+struct Point { pub let x: i32; pub let y: i32; }
+
+fn first_or(xs: [str] | null, fallback: str) -> str {
+    if xs is not [h, ..] { return fallback; }
+    return h;                                     // bound: the `if` diverges when the test fails
+}
+
+fn describe(v: i32 | str | CancelledErr) -> str {
+    if v is not CancelledErr {
+        return f"value {v}";                      // v: i32 | str
+    }
+    return "cancelled";
+}
+
+fn origin(p: Point) -> bool => !(p is not Point { x: 0, y: 0 });
+
+fn not(b: bool) -> bool => !b;
+
+fn main() {
+    println(first_or(["a", "b"], "-"));
+    println(first_or([], "-"));
+    println(first_or(null, "-"));
+    println(describe(3));
+    println(describe(CancelledErr::new()));
+    println(f"{origin(Point { x: 0, y: 0 })} {origin(Point { x: 1, y: 0 })}");
+
+    let seen: Set<str> = ["a", "b"];
+    let words = ["a", "c", "b", "d"];
+    println([w for w in words if w not in seen]);
+    let m = ["k": 1];
+    if "q" not in m { println("no q"); }
+    println(3 not in 0..3);
+    println('z' not in "lazy");
+
+    let x: i32 | null = null;
+    println(x is not null);
+    println(x is not i32 && 'a' not in "bcd");
+
+    println(not(false));                          // a function named `not`
+    let not = true;                               // and a binding
+    let nots = [not];
+    println(not in nots);
+}

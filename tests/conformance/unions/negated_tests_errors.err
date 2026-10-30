@@ -1,0 +1,3 @@
+negated_tests_errors.3b:5:36: error[E0231]: 'a' is only bound where the `is` test that binds it holds (§7.3)
+negated_tests_errors.3b:7:29: error[E0202]: 'i32' has no field or getter 'len'
+negated_tests_errors.3b:8:9: error[E0207]: operator 'in' is not defined for 'i32': it does not implement `Contains`
