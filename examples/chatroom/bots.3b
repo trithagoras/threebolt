@@ -50,7 +50,7 @@ pub fn swarm(addr: SocketAddr, n: i32, deadline: Duration) -> Report {
         let mut report = Report {};
         for _ in 0..n {
             let o = outcomes.recv(until.since(Instant::now()));   // past the deadline: checks once
-            if !(o is Outcome) { break; }                       // TimedOutErr: the deadline passed
+            if o is not Outcome { break; }                        // TimedOutErr: the deadline passed
             match o.result {
                 c is Chatted => {
                     report.chatted += 1;

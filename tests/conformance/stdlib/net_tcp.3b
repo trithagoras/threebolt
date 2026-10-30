@@ -16,7 +16,7 @@ fn main() -> () | Err {
     println(f"{addr.ip} {addr.port > 0}");
     let server = Thread::spawn(() => {
         let mut conn = listener.accept();
-        if !(conn is TcpStream) { return f"accept: {conn}"; }
+        if conn is not TcpStream { return f"accept: {conn}"; }
         defer conn.close();
         let peer_ok = conn.peer_addr.ip == Ipv4Addr::LOCALHOST && conn.local_addr == addr;
         let r = shout(conn, conn);
@@ -46,7 +46,7 @@ fn main() -> () | Err {
     // `connect` with text looks the host up; a read timeout leaves the stream usable.
     let server = Thread::spawn(() => {
         let mut conn = listener.accept();
-        if !(conn is TcpStream) { return; }
+        if conn is not TcpStream { return; }
         defer conn.close();
         _ = std::thread::sleep(Duration::from_millis(300));
         _ = conn.write_line("late");
@@ -64,7 +64,7 @@ fn main() -> () | Err {
     // The whole input, until the peer closes.
     let server = Thread::spawn(() => {
         let mut conn = listener.accept();
-        if !(conn is TcpStream) { return; }
+        if conn is not TcpStream { return; }
         _ = conn.write("a\nb\nc");
         conn.close();
     });

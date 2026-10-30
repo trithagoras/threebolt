@@ -288,7 +288,7 @@ fn hex_groups(g: [u16; 8], from: usize, to: usize) -> str {
 /// The addresses of `host`, from the system's resolver; an address's text is itself.
 pub fn lookup(host: str) -> [IpAddr] | NetErr | CancelledErr {
     let ip = parse_ip(host);
-    if !(ip is AddrParseErr) { return [ip]; }
+    if ip is not AddrParseErr { return [ip]; }
     let mut found: [str] = [];
     let r = sys_lookup(host, found);
     if r < 0 { return no_timeout(net_failure(r, host)); }
@@ -384,7 +384,7 @@ pub class TcpListener {
             loop {
                 if slots != null && !slots.acquire() { return CancelledErr::new(); }
                 let conn = self.accept();
-                if !(conn is TcpStream) {
+                if conn is not TcpStream {
                     if slots != null { slots.release(); }
                     if conn is ClosedErr { return; }
                     return conn;
@@ -421,7 +421,7 @@ class Incoming : Iterator<TcpStream | IoErr | CancelledErr> {
     pub fn next(mut self) -> TcpStream | IoErr | CancelledErr | Done {
         if self.done { return Done; }
         let s = self.listener.accept();
-        if !(s is TcpStream) { self.done = true; }
+        if s is not TcpStream { self.done = true; }
         return s;
     }
 }
