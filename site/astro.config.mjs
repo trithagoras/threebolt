@@ -4,6 +4,9 @@ import starlight from '@astrojs/starlight';
 import threebolt from '../editors/vscode/syntaxes/threebolt.tmLanguage.json' with { type: 'json' };
 
 export default defineConfig({
+  // GitHub Pages project site, under the user site's custom domain.
+  site: 'https://batchler.me',
+  base: '/threebolt',
   integrations: [
     starlight({
       title: 'Threebolt',
