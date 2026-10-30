@@ -1,0 +1,7 @@
+/// The entry point: every program starts at `main`.
+fn main(args: [str]) {
+    let name = "world";
+    println(f"Hello, {name}!");   // f-strings interpolate any expression
+    println(f"{args.len} arguments, 1 + 2 = {1 + 2}");
+    /* block comments /* nest */ too */
+}
