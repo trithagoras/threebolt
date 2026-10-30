@@ -1,0 +1,44 @@
+struct NotFound : Err {
+    let key: str;
+    pub fn message(self) -> str => f"no such key: {self.key}";
+}
+
+fn lookup(m: Map<str, i32>, key: str) -> i32 | NotFound {
+    if let v = m.get(key) {
+        return v;
+    }
+    return NotFound { key };
+}
+
+fn parse_positive(s: str) -> i32 | Err {
+    let n = i32::parse(s);             // i32 | null
+    if n is null {
+        return error(f"not a number: {s}");
+    }
+    if n <= 0 {
+        return error(f"{n} is not positive");
+    }
+    return n;
+}
+
+fn total(m: Map<str, i32>) -> i32 | Err {
+    return lookup(m, "a")? + lookup(m, "b")?;
+}
+
+fn main() {
+    let m = ["a": 1, "b": 2];
+    println(total(m));
+    match lookup(m, "zzz") {
+        NotFound { key } => println(f"missing {key}"),
+        v => println(v),
+    }
+    for s in ["12", "-3", "x"] {
+        let r = parse_positive(s);
+        if r is Err {
+            println(f"error: {r.message()}");
+        } else {
+            println(r + 1);
+        }
+    }
+    _ = parse_positive("7");           // discarding an error-typed value must be explicit
+}

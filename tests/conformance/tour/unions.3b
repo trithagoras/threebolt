@@ -1,0 +1,41 @@
+struct Circle { let r: f64; }
+struct Rect { let w: f64; let h: f64; }
+type Shape = Circle | Rect;               // a union: no wrapper, no tags
+
+type Direction = "left" | "right";        // literal types
+
+fn area(s: Shape) -> f64 => match s {
+    Circle { r } => 3.0 * r * r,
+    Rect { w, h } => w * h,
+};
+
+fn describe(v: i32 | str | null) -> str {
+    if v is null {
+        return "nothing";
+    }
+    if v is str {
+        return f"text of length {v.len}";  // v is narrowed to str here
+    }
+    return match v {                       // ...and to i32 here
+        0 => "zero",
+        n if n < 0 => "negative",
+        1..=9 => "a digit",
+        _ => "big",
+    };
+}
+
+fn main() {
+    println(area(Circle { r: 1.0 }));
+    println(area(Rect { w: 2.0, h: 3.0 }));
+    for v in [7, -1, 42] { println(describe(v)); }
+    println(describe("hi"));
+    println(describe(null));
+
+    let d: Direction = "left";
+    println(d.len);
+
+    let xs = [1, 2, 3];
+    if xs is [first, ..rest] {
+        println(f"{first} then {rest}");
+    }
+}

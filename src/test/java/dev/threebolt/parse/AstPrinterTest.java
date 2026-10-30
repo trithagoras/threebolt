@@ -62,6 +62,13 @@ class AstPrinterTest {
     }
 
     @Test
+    void deferUnsafeKeepsItsForm() {
+        assertEquals("defer unsafe {\n    f();\n}\n", stmts("defer unsafe { f(); }"));
+        assertEquals("defer {\n    unsafe {\n        f();\n    }\n}\n", stmts("defer { unsafe { f(); } }"));
+        assertEquals("defer unsafe => f();\n", stmts("defer unsafe => f();"));
+    }
+
+    @Test
     void initializersInHeads() {
         assertEquals("if (P { x: 0 }) == p {}\n", stmts("if (P { x: 0 }) == p {}"));
         assertEquals("if f(P { x: 0 }) {}\n", stmts("if f(P { x: 0 }) {}"));

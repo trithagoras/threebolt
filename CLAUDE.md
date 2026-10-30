@@ -7,6 +7,7 @@ Hobbyist general-purpose language (`.3b`): statically typed, GC-managed, Rust-fl
 1. `docs/spec/threebolt-1.0.md` — the normative language spec. Read the relevant sections before touching the grammar, checker, or interpreter.
 2. `docs/PLAN.md` — implementation phases, stack, repo layout. `docs/ROADMAP.md` — open decisions on the way to 1.0 (std expansion, backend, packages).
 3. `docs/history/` — the original design doc and the design-interview decision log. Rationale only; never implement from these when they disagree with the spec.
+4. `site/` — the user-facing docs site (Astro + Starlight), currently the *Tour of Threebolt*. Explanatory, not normative: it follows the spec, never the reverse.
 
 **Spec first:** if implementation reveals a problem, change the spec (and its `## Changelog` section) before or alongside the code — never let code silently diverge. Ask the user before changing language semantics; they own the design.
 
@@ -27,6 +28,7 @@ Hobbyist general-purpose language (`.3b`): statically typed, GC-managed, Rust-fl
 ./gradlew installDist                             # the `bolt` CLI at build/install/bolt/bin/bolt
 ./gradlew test -PupdateGolden                     # rewrite lexer goldens and conformance .err files
 ./gradlew vscodeServer                            # build the language server jar into editors/vscode/server/
+cd site && npm install && npm run dev             # docs site at localhost:4321; `npm run build` must stay clean
 ```
 
 - Requires a JDK ≥ 25 (bytecode targets 25 via `--release 25`). If `java` isn't on PATH, use `JAVA_HOME=/opt/homebrew/opt/openjdk/libexec/openjdk.jdk/Contents/Home`.
@@ -47,6 +49,8 @@ tests/conformance/         .3b programs + expected output / expected diagnostics
 examples/                  sample Threebolt programs (must keep parsing as the grammar evolves)
 src/main/java/…/lsp/       language server (`bolt lsp`, LSP4J) over types.SymbolIndex; completion via types.Completer hooks
 editors/vscode/            VS Code extension: TextMate grammar (keep in step with ThreeboltLexer.g4) + LSP client
+site/                      docs site; the tour is site/src/content/docs/tour/NN-topic.md (its .3b highlighting uses the TextMate grammar above)
+tests/conformance/tour/    one program per tour chapter, shown verbatim on its page
 ```
 
 ## Conventions
@@ -56,4 +60,5 @@ editors/vscode/            VS Code extension: TextMate grammar (keep in step wit
 - `examples/` and the spec's code snippets are informal test inputs — if one stops parsing, either the grammar or the snippet is wrong; fix it deliberately.
 - Language server: completion and signature help check a copy of the file with `Completion.PLACEHOLDER` at the cursor; the checker's hooks (`Completer`) list what fits. A new name-resolution path in the checker should call the completer where it meets the placeholder.
 - The VS Code extension bundles the server jar, which contains the grammar, checker and std. So after **any** change to the grammar, AST builder, checker, std modules, LSP code or the TextMate grammar, always bump `editors/vscode/package.json`'s patch version, then rebuild and reinstall without being asked: `./gradlew vscodeServer`, then in `editors/vscode`: `npx @vscode/vsce package --allow-missing-repository --skip-license -o threebolt.vsix && code --install-extension threebolt.vsix --force`. Tell the user to run **Developer: Reload Window**. Interpreter-only changes don't need it.
+- **Docs follow the language.** Any change to syntax, semantics, std APIs or the CLI that a user can see must also update the site in the same change: grep `site/src/content/docs/` for the feature and fix the prose, and if a chapter's program is affected, edit `tests/conformance/tour/<name>.3b` (and its `.out`) and paste it back into the page verbatim — the page's code block and output must match those files exactly. `TourSyncTest` enforces this; the `/docs-sync` skill (`.claude/skills/docs-sync/`) walks through the whole update. A feature on the beginner path (something every user meets) gets a short section in the right chapter; niche rules stay in the spec. Spec changelog entries are a good checklist for what the site may need.
 - Small, focused commits.

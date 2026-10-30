@@ -1,0 +1,38 @@
+struct Vec2 {
+    let x: f64;
+    let y: f64 = 0.0;
+
+    pub fn len(self) -> f64 => (self.x * self.x + self.y * self.y).sqrt();
+    pub fn scale(mut self, k: f64) { self.x *= k; self.y *= k; }
+}
+
+abstract class Animal {
+    pub let name: str;
+
+    prot fn new(name: str) -> Self => { name };
+    pub abstract fn speak(self) -> str;
+    pub fn describe(self) -> str => f"{self.name} says {self.speak()}";
+}
+
+class Dog : Animal {
+    pub let breed: str;
+    pub fn new(name: str, breed: str = "mutt") -> Self => { ..Animal::new(name), breed };
+    pub override fn speak(self) -> str => "woof";
+}
+
+enum Color { Red, Green, Blue }
+
+fn main() {
+    let a = Vec2 { x: 3.0, y: 4.0 };
+    let mut b = a;                 // structs copy
+    b.scale(2.0);
+    println(f"{a.len()} {b.len()}");
+
+    let rex = Dog::new("Rex", breed: "collie");
+    let pet: Animal = rex;         // classes share one object
+    println(pet.describe());
+    println(Dog::new("Fido").breed);
+
+    let c = Color::Green;
+    println(f"{c} = {c as i32}");
+}

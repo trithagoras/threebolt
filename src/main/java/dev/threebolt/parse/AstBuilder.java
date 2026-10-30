@@ -274,7 +274,15 @@ public final class AstBuilder {
             case BreakStmtContext c -> new Stmt.Break(span);
             case ContinueStmtContext c -> new Stmt.Continue(span);
             case ReturnStmtContext c -> new Stmt.Return(c.expr() == null ? null : expr(c.expr()), span);
-            case DeferStmtContext c -> new Stmt.Defer(c.block() != null ? block(c.block()) : expr(c.expr()), span);
+            case DeferStmtContext c -> {
+                if (c.UNSAFE() != null) {
+                    // `defer unsafe { ... }` ≡ `defer { unsafe { ... } }`
+                    var body = block(c.block());
+                    var unsafeSpan = span(c.UNSAFE().getSymbol(), c.block().getStop());
+                    yield new Stmt.Defer(new Stmt.Block(List.of(new Stmt.Unsafe(body, unsafeSpan)), unsafeSpan), span);
+                }
+                yield new Stmt.Defer(c.block() != null ? block(c.block()) : expr(c.expr()), span);
+            }
             case UnsafeStmtContext c -> new Stmt.Unsafe(block(c.block()), span);
             case AssignStmtContext c -> new Stmt.Assign(assignTarget(c.assignTarget()), assignOp(c.assignOp()),
                     expr(c.expr()), span);

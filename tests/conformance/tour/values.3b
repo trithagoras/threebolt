@@ -1,0 +1,28 @@
+fn main() {
+    let answer = 42;              // i32: integer literals default to i32
+    let big: u64 = 10_000_000;
+    let ratio = 2.5;              // f64
+    let ok = true;
+    let letter = 'λ';
+    let mut count = 0;            // bindings are immutable unless declared `mut`
+    count += 1;
+
+    let wide: i64 = answer;       // lossless widening is implicit
+    let narrow = big as u8;       // anything else needs `as`
+    println(f"{answer} {wide} {narrow} {ratio} {ok} {letter} {count}");
+
+    let s = "héllo";
+    println(f"{s.len} {s[1]} {s[1..4]}");   // lengths and indexes count characters
+
+    let pair = (1, "one");
+    println(f"{pair.0} is {pair.1}");
+
+    let mut xs = [3, 1, 2];       // [i32], a growable list
+    xs.push(4);
+    let mut ys = xs;              // lists are references: ys and xs are one list
+    ys.push(5);
+    println(f"{xs.len} {xs[4]}");
+
+    let maybe: i32 | null = null; // nullable is just a union with null
+    println(f"{maybe ?? -1}");
+}

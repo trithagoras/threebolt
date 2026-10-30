@@ -1,0 +1,15 @@
+{
+  "name": "threebolt-site",
+  "version": "1.0.0",
+  "scripts": {
+    "dev": "astro dev",
+    "build": "astro build",
+    "preview": "astro preview"
+  },
+  "type": "module",
+  "dependencies": {
+    "@astrojs/starlight": "^0.42.7",
+    "astro": "^7.4.4"
+  },
+  "private": true
+}

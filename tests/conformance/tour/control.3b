@@ -1,0 +1,37 @@
+fn square(x: i32) -> i32 {
+    return x * x;
+}
+
+fn sign(x: i32) -> str => "negative" if x < 0 else "non-negative";
+
+fn main() {
+    println(square(7));
+    println(sign(-3));
+
+    for i in 0..3 {
+        print(f"{i} ");
+    }
+    println("");
+
+    let mut n = 10;
+    while n > 1 {
+        n = n / 2 if n % 2 == 0 else 3 * n + 1;
+    }
+
+    let words = ["bolt", "", "three"];
+    for w in words {
+        if w {                            // strings and collections are truthy when non-empty
+            println(w);
+        }
+    }
+
+    let add = (a: i32, b: i32) => a + b;  // a closure
+    println(add(2, 3));
+
+    let mut total = 0;
+    loop {
+        total += 1;
+        if total == 4 { break; }
+    }
+    println(f"total {total}, n {n}");
+}
