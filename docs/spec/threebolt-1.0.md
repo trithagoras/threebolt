@@ -20,7 +20,7 @@ Normative technical reference for implementers (human or agent). Supersedes `doc
 
 After `.` (member access) or `::` (path segment) any keyword is accepted as a name (e.g. `x.type()`, `Ptr<T>::null()`).
 
-**Contextual keywords:** `get` is special only directly before `fn` in a member declaration (§4.8); elsewhere it is an ordinary identifier (`fn get<T>()`, `map.get(k)`). `select` is special only directly before `{` where an expression starts, except in the condition of `if`/`while`, a `match` scrutinee or a `for` iterable (§7.14); elsewhere it is an ordinary identifier (`fn select()`, `query.select(cols)`). `not` is special only directly after `is` and directly before `in` (`x is not T`, `k not in m`, §7.3); elsewhere it is an ordinary identifier.
+**Contextual keywords:** `get` is special only directly before `fn` in a member declaration (§4.8); elsewhere it is an ordinary identifier (`fn get<T>()`, `map.get(k)`). `select` is special only directly before `{` where an expression starts, except in the condition of `if`/`while`, a `match` scrutinee or a `for` iterable (§7.14); elsewhere it is an ordinary identifier (`fn select()`, `query.select(cols)`). `not` is special only directly after `is`, directly before `in` (`x is not T`, `k not in m`, §7.3) and in a pattern before another pattern (`not 0`, `[not null, ..]`, §11); elsewhere it is an ordinary identifier.
 
 **Literals:**
 
@@ -446,7 +446,7 @@ Bitwise binds tighter than comparison (no C precedence trap).
 - `a ?? b`: if `a` is `null`, evaluates `b`. Type: `(A minus null) | B`. Only null is defaulted (errors are not).
 - `x is T`: runtime test, `bool`. `T` may be any type including traits, literal types and unions (true if any member matches). Narrows (§9).
 - `x is pattern`: `true` if `x` matches the refutable pattern (§11); its bindings are in scope where the test is known to be true: the then-block of an `if`/`while`, the right operand of `&&`, the `a` of `a if c else b`, and the code after an `if x is not p { ... }` whose block diverges (§9). Guards are not allowed (`&&` instead).
-  - What follows `is` is decided syntactically: `[` or `(` starts a pattern (`xs is []`, `xs is [first, ..rest]`, `t is (0, _)`); so do `Name { ... }` (a struct pattern, subject to §6.3) and a literal followed by `..`/`..=` (`n is 1..=9`). Anything else is a type, as before (`x is i32`, `x is Foo<T>`, `x is i32 | null`, `x is "a"`, `x is null`).
+  - What follows `is` is decided syntactically: `[` or `(` starts a pattern (`xs is []`, `xs is [first, ..rest]`, `t is (0, _)`), and so does a relational pattern (`n is > 0`, §11); so do `Name { ... }` (a struct pattern, subject to §6.3) and a literal followed by `..`/`..=` (`n is 1..=9`). Anything else is a type, as before (`x is i32`, `x is Foo<T>`, `x is i32 | null`, `x is "a"`, `x is null`).
   - So a list or tuple **type** cannot be written after `is` with brackets: write `x is List<str>` (`[str]` is `List<str>`), or a pattern of type tests `t is (is i32, is str)`. A name that denotes a type where a pattern expects a binding (`xs is [str]`, `x is (i32 | str)`) is an error.
   - Or-patterns are allowed inside brackets (`xs is [1 | 2, ..]`); at the top level, `|` after a type extends the union and after a pattern is a bitwise or.
 - `x is not T`, `x is not pattern`: exactly `!(x is T)` and `!(x is pattern)`, narrowing included (§9): `if v is not CancelledErr { … }` removes `CancelledErr` from `v`'s type in the block, and after `if xs is not [h, ..] { return; }`, `h` is bound. Directly after `is`, `not` is always the keyword, so a type named `not` cannot be tested there.
@@ -526,7 +526,7 @@ let label = match value {
 ```
 - Expression; arms `pattern [if guard] => body`, comma-separated (trailing comma allowed; a block arm needs no comma). First matching arm wins.
 - Type: union of arm result types (diverging arms contribute nothing).
-- Exhaustiveness (error if not exhaustive): over `bool`, literal unions, non-flags enums, union members (by type), `null`, list patterns (lengths). Guarded arms do not count toward exhaustiveness. Otherwise a `_` or binding catch-all is required.
+- Exhaustiveness (error if not exhaustive): over `bool`, literal unions, non-flags enums, union members (by type), `null`, list patterns (lengths). Guarded arms do not count toward exhaustiveness. `not p` covers what `p` can never match: members whose type `p` excludes, and the `bool`, enum, literal and `null` values a literal `p` (or an or-pattern of them) does not name; `match v { is not Err => …, e is Err => … }` and `match o { not "equal" => …, "equal" => … }` are exhaustive. Relational patterns cover nothing. Otherwise a `_` or binding catch-all is required.
 
 ### 7.12 `unsafe` expression
 `unsafe => expr` — evaluates `expr` in an unsafe context (§14.6).
@@ -629,16 +629,21 @@ Prelude traits for code generic over numbers, after Haskell's numeric classes:
 | `name`, `mut name` | anything, binds (narrowed to the remaining type) |
 | literal (`1`, `"a"`, `'c'`, `true`, `null`) | equal value |
 | `a..=b`, `a..b` | integer/char in range |
+| `< v`, `<= v`, `> v`, `>= v` | a number, `char` or `str` of `v`'s type ordered so against the literal `v` (as the operators, §7.3: a float NaN matches none) |
 | `p1 \| p2` | either; bindings must be identical in both |
 | `(p1, p2)` | tuple |
 | `[p1, p2]`, `[first, ..]`, `[a, ..rest, z]` | list/array by length and elements; `..rest` binds a `[T]` slice copy; one rest per pattern |
 | `Type { f1, f2: p, .. }` | struct (or class, accessible fields) of `Type`, fields matched; `..` ignores others |
 | `name is T`, `is T` | runtime type test, binds narrowed value |
+| `name is not T`, `is not T` | negated type test; `name` binds the value narrowed to the members that are not `T` |
+| `not p` | anything `p` does not match; binds nothing |
 | `Enum::Member` | enum value |
 | `pattern if guard` | (arms only) pattern + bool/Truthy guard |
 
 - Patterns appear in `match` arms, `let`, `for`, lambda parameters (§7.8), and after `is` (§7.3).
 - `let`, `for` and lambda parameters require irrefutable patterns (tuples, struct destructure, bindings, `_`).
+- `not` takes the whole or-pattern after it: `not 1 | 2` matches neither (write `(not 1) | 2` for the other reading). A binding inside `not p` is an error, since `not p` matches only where `p` fails. `not` is a contextual keyword (§1): in a pattern it is the keyword when another pattern follows it, so `not => …` still binds a variable named `not`. At the top level of an `is` test, `x is not p` is the operator of §7.3 (the bindings of `p` reach the code after an `if` whose block diverges); `not` nested inside a pattern after `is` follows this section.
+- Narrowing (§9): an arm `not p` or `is not T` removes from the scrutinee's type the members `p` (or `T`) always matches; an arm `> v` etc. narrows a union to its ordered members.
 - A binding (here, in `let`, or a function or lambda parameter) cannot have the name of a type in scope: a primitive, a type or alias declared or imported in the module, or a type parameter. `let str = s;`, `fn f(T: T)` and `match x { bool => … }` are errors (the last would be a catch-all binding; a type test is `is bool`). Struct shorthand binds the field's name, so a field named like a type is destructured as `Type { str: s }`.
 
 ---
@@ -859,7 +864,7 @@ Implicitly imported names:
 15. The §6.3 head restriction applies to any initializer not enclosed in `()`, `[]` or `{}`: `if p == Point { x: 0 }.norm() {` is an error; write `if p == (Point { x: 0 }).norm() {`.
 16. The assembled operators `>=`, `>>`, `>>=` may not contain whitespace (`a > = b` is an error).
 17. Inside index brackets, a range may omit either bound or both (`xs[1..]`, `xs[..n]`, `xs[..]`, §7.6); `..=` requires an upper bound.
-18. After `is` (and its `not`, if any), a pattern follows iff the next tokens are `[`, `(`, a path followed by `{` (where initializers are allowed, §6.3), or a literal (optionally negated) followed by `..`/`..=`; otherwise a type follows (§7.3).
+18. After `is` (and its `not`, if any), a pattern follows iff the next tokens are `[`, `(`, `<`, `<=`, `>`, `>=`, a path followed by `{` (where initializers are allowed, §6.3), or a literal (optionally negated) followed by `..`/`..=`; otherwise a type follows (§7.3).
 19. In a comprehension (§7.7) each iterable and filter is an expression at `??` precedence or tighter, like a match guard (note 14), so after an iterable `if` starts its filter and `,` the next clause: `[x for x in (a if c else b)]`. The element (or entry) is any expression; `for` ends it.
 
 ---
@@ -1145,3 +1150,5 @@ Working notes and rejected alternatives: `docs/plans/concurrency.md`.
 
 ### 2026-10-30 — `is not`, `not in`
 - §1, §7.2, §7.3, §9 `x is not T` / `x is not pattern` and `x not in c` (contextual keyword `not`), the same as `!(x is …)` and `!(x in c)`, narrowing included. `!` stays.
+- §11, §7.11 Negated patterns `not p` and `[name] is not T`, anywhere a pattern goes; `not` takes the whole or-pattern after it and binds nothing. They narrow and count toward exhaustiveness.
+- §11 Relational patterns `< v`, `<= v`, `> v`, `>= v` against a literal of a number, `char` or `str` type; they narrow but do not count toward exhaustiveness. Also after `is` (`n is > 0`).

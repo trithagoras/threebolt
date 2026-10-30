@@ -1,0 +1,11 @@
+// Compile errors for `not` and relational patterns (§11).
+
+fn main() {
+    let xs = [1, 2];
+    if xs is [not h, ..] { println(h); }                     // nothing binds under `not`
+    let not 0 = 1;                                           // refutable in `let`
+    let flag = true;
+    _ = match flag { > false => 1, _ => 0 };                 // bool is not ordered
+    _ = match 3 { < "a" => 1, _ => 0 };                      // a str bound for an i32
+    _ = match 3 { < 0 => 1, >= 0 => 2 };                     // relational patterns don't count for exhaustiveness
+}

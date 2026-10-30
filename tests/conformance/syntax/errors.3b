@@ -6,3 +6,5 @@ fn main() {
 fn negated(xs: [i32]) -> bool {
     return xs is not;                       // after `is`, `not` is the keyword (§7.3)
 }
+
+fn relational(n: i32) -> i32 => match n { > = 0 => 1, _ => 0 };   // no space inside `>=`

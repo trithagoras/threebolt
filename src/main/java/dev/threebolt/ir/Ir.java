@@ -215,6 +215,12 @@ public final class Ir {
 
     public record PIs(Type type) implements Pat {}
 
+    /** Matches when {@code pattern} (which binds nothing) does not. */
+    public record PNot(Pat pattern) implements Pat {}
+
+    /** Compares the value with {@code value} by {@code op} (LT, LE, GT or GE) if it has the same primitive type. */
+    public record PRel(BinaryOp op, Object value) implements Pat {}
+
     // ---- Statements ----
 
     public sealed interface Stmt {}

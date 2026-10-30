@@ -7,7 +7,7 @@
 //  - `select` is an IDENTIFIER too; `atSelect` recognises it before `{` where an initializer
 //    could start (so not in an `if`/`while`/`for`/`match` head, §7.14).
 //  - `not` is an IDENTIFIER too; `notKw` recognises it directly after `is` and directly before
-//    `in` (§7.3).
+//    `in` (§7.3), and `atNotPattern` before another pattern (§11).
 //
 // Two pieces of parser state steer prediction through semantic predicates:
 //  - `typeArgsAhead()` (§7.5): in expressions, `<` after a name starts type arguments iff they
@@ -40,13 +40,13 @@ options { tokenVocab = ThreeboltLexer; }
     }
 
     /**
-     * §17.18: whether a pattern rather than a type follows `is`: `[`, `(`, a path followed by `{`
+     * §17.18: whether a pattern rather than a type follows `is`: `[`, `(`, `<`, `<=`, `>`, a path followed by `{`
      * (only where initializers are allowed, §6.3), or an optionally negated literal followed by
      * `..`/`..=`.
      */
     protected boolean isPatternAhead() {
         int t = _input.LA(1);
-        if (t == LBRACKET || t == LPAREN) return true;
+        if (t == LBRACKET || t == LPAREN || t == LT || t == LE || t == GT) return true;
         int i = 1;
         if (t == MINUS) t = _input.LA(++i);
         if (t == INT_LITERAL || t == FLOAT_LITERAL || t == STRING_LITERAL || t == TRIPLE_STRING_LITERAL
@@ -67,6 +67,16 @@ options { tokenVocab = ThreeboltLexer; }
     /** `not` directly after `is` (always the keyword there), or directly before `in` (§7.3). */
     protected boolean atNot() {
         return _input.LT(1).getText().equals("not") && (_input.LA(-1) == IS || _input.LA(2) == IN);
+    }
+
+    /** `not` before a token that starts a pattern (§11): `not 0`, `not [..]`, `not is T`. */
+    protected boolean atNotPattern() {
+        if (!_input.LT(1).getText().equals("not")) return false;
+        return switch (_input.LA(2)) {
+            case UNDERSCORE, IDENTIFIER, IS, MUT, MINUS, LPAREN, LBRACKET, LT, LE, GT, INT_LITERAL, FLOAT_LITERAL,
+                    STRING_LITERAL, TRIPLE_STRING_LITERAL, CHAR_LITERAL, TRUE, FALSE, NULL -> true;
+            default -> false;
+        };
     }
 
     /** `get` directly before `fn` (§4.8). */
@@ -519,8 +529,10 @@ pattern : patternAtom (PIPE patternAtom)* ;
 
 patternAtom
     : UNDERSCORE                                                     # wildcardPattern
-    | MUT? IDENTIFIER (IS type)?                                     # bindingPattern
-    | IS type                                                        # isPattern
+    | {atNotPattern()}? IDENTIFIER pattern                            # notPattern
+    | MUT? IDENTIFIER (IS notKw? type)?                              # bindingPattern
+    | IS notKw? type                                                 # isPattern
+    | patternRelOp literalPattern                                    # relationalPattern
     | literalPattern ((DOTDOT | DOTDOT_EQ) literalPattern)?          # literalOrRangePattern
     | LPAREN RPAREN                                                  # unitPattern
     | LPAREN pattern RPAREN                                          # groupPattern
@@ -531,6 +543,8 @@ patternAtom
     ;
 
 listPatternElem : DOTDOT IDENTIFIER? | pattern ;
+
+patternRelOp : LT | LE | GT {adjacent()}?<fail={"'>=' must not contain spaces"}> ASSIGN | GT ;
 
 fieldPattern : MUT? IDENTIFIER | IDENTIFIER COLON pattern ;
 

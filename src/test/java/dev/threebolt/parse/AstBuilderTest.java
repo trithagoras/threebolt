@@ -48,10 +48,10 @@ class AstBuilderTest {
 
     @Test
     void comprehensions() {
-        assertEquals("(ListComp " + path("x") + " [(CompClause (Binding false x null) " + path("xs") + " null) "
-                + "(CompClause (Binding false y null) " + path("x") + " " + path("y") + ")])",
+        assertEquals("(ListComp " + path("x") + " [(CompClause (Binding false x null false) " + path("xs") + " null) "
+                + "(CompClause (Binding false y null false) " + path("x") + " " + path("y") + ")])",
                 expr("[x for x in xs, y in x if y]"));
-        assertEquals("(MapComp (MapEntry " + path("k") + " (IntLit 1 null)) [(CompClause (Binding false k null) "
+        assertEquals("(MapComp (MapEntry " + path("k") + " (IntLit 1 null)) [(CompClause (Binding false k null false) "
                 + path("ks") + " null)])", expr("[k: 1 for k in ks]"));
     }
 
@@ -100,7 +100,7 @@ class AstBuilderTest {
     @Test
     void matchStatementsAndArms() {
         assertEquals("[(ExprStmt (Match " + path("x") + " [(MatchArm (Literal (IntLit -1 null)) null (IntLit 0 null))"
-                + " (MatchArm (Binding false n null) (Binary LT " + path("n") + " (IntLit 0 null)) (Block []))]))]",
+                + " (MatchArm (Binding false n null false) (Binary LT " + path("n") + " (IntLit 0 null)) (Block []))]))]",
                 stmts("match x { -1 => 0, n if n < 0 => {} }"));
     }
 

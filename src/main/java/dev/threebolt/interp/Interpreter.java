@@ -1198,6 +1198,22 @@ public final class Interpreter implements Callbacks {
                 int hi = Ops.comparePrim(v, r.high());
                 yield lo >= 0 && (r.isInclusive() ? hi <= 0 : hi < 0);
             }
+            case Ir.PNot n -> !match(n.pattern(), v, f);
+            case Ir.PRel r -> {
+                if (v == null || v.getClass() != r.value().getClass()) yield false;
+                if (v instanceof Int i && ((Int) r.value()).kind() != i.kind()) yield false;
+                if (v instanceof Flt x && ((Flt) r.value()).kind() != x.kind()) yield false;
+                // IEEE comparisons for floats, as the operators: NaN matches none.
+                int cmp = v instanceof Flt x ? (x.v() < ((Flt) r.value()).v() ? -1 : x.v() > ((Flt) r.value()).v() ? 1
+                        : x.v() == ((Flt) r.value()).v() ? 0 : 2) : Integer.signum(Ops.comparePrim(v, r.value()));
+                yield switch (r.op()) {
+                    case LT -> cmp == -1;
+                    case LE -> cmp == -1 || cmp == 0;
+                    case GT -> cmp == 1;
+                    case GE -> cmp == 1 || cmp == 0;
+                    default -> throw new IllegalStateException(r.op().toString());
+                };
+            }
             case Ir.PTuple t -> {
                 if (!(v instanceof TupleVal tv) || tv.items.length != t.elements().size()) yield false;
                 for (int i = 0; i < tv.items.length; i++) if (!match(t.elements().get(i), tv.items[i], f)) yield false;

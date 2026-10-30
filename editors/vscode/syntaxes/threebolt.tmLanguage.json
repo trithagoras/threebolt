@@ -216,8 +216,8 @@
           }
         },
         {
-          "comment": "`not` is contextual (§7.3): a keyword only in `is not` and `not in`.",
-          "match": "(?<=\\bis\\s)\\s*(not)\\b|\\b(not)(?=\\s+in\\b)",
+          "comment": "`not` is contextual (§7.3, §11): a keyword in `is not`, `not in`, and before a pattern.",
+          "match": "(?<=\\bis\\s)\\s*(not)\\b|\\b(not)(?=\\s+(?:in\\b|is\\b|null\\b|[-_\\[(<>'\"0-9]))",
           "captures": {
             "1": { "name": "keyword.control.is.threebolt" },
             "2": { "name": "keyword.control.threebolt" }

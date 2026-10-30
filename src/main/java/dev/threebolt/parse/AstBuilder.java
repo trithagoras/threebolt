@@ -339,7 +339,7 @@ public final class AstBuilder {
     private Expr lambda(LambdaContext ctx) {
         var p = ctx.lambdaParams();
         List<Expr.LambdaParam> params = p.LPAREN() == null
-                ? List.of(new Expr.LambdaParam(new Pattern.Binding(p.MUT() != null, name(p.IDENTIFIER()), null, span(p)),
+                ? List.of(new Expr.LambdaParam(new Pattern.Binding(p.MUT() != null, name(p.IDENTIFIER()), null, false, span(p)),
                         null, span(p)))
                 : map(p.lambdaParam(), lp -> new Expr.LambdaParam(patternAtom(lp.patternAtom()),
                         lp.type() == null ? null : type(lp.type()), span(lp)));
@@ -618,9 +618,22 @@ public final class AstBuilder {
         var span = span(ctx);
         return switch (ctx) {
             case WildcardPatternContext c -> new Pattern.Wildcard(span);
+            case NotPatternContext c -> new Pattern.Not(pattern(c.pattern()), span);
             case BindingPatternContext c -> new Pattern.Binding(c.MUT() != null, name(c.IDENTIFIER()),
-                    c.type() == null ? null : type(c.type()), span);
-            case IsPatternContext c -> new Pattern.Is(type(c.type()), span);
+                    c.type() == null ? null : type(c.type()), c.notKw() != null, span);
+            case IsPatternContext c -> c.notKw() == null
+                    ? new Pattern.Is(type(c.type()), span)
+                    : new Pattern.Not(new Pattern.Is(type(c.type()), span), span);
+            case RelationalPatternContext c -> {
+                var op = c.patternRelOp();
+                var binOp = switch (op.getStart().getType()) {
+                    case LT -> Expr.BinaryOp.LT;
+                    case LE -> Expr.BinaryOp.LE;
+                    case GT -> op.ASSIGN() != null ? Expr.BinaryOp.GE : Expr.BinaryOp.GT;
+                    default -> throw unexpected(op);
+                };
+                yield new Pattern.Relational(binOp, signedLiteral(c.literalPattern(), c.literalPattern().MINUS()), span);
+            }
             case LiteralOrRangePatternContext c -> {
                 var low = signedLiteral(c.literalPattern(0), c.literalPattern(0).MINUS());
                 if (c.literalPattern().size() == 1) yield new Pattern.Literal(low, span);
@@ -638,7 +651,7 @@ public final class AstBuilder {
                     var field = name(f.IDENTIFIER());
                     var p = f.pattern() != null
                             ? pattern(f.pattern())
-                            : new Pattern.Binding(f.MUT() != null, field, null, span(f));
+                            : new Pattern.Binding(f.MUT() != null, field, null, false, span(f));
                     return new Pattern.FieldPattern(field, p, span(f));
                 });
                 yield new Pattern.Struct(path(c.path()), fields, c.DOTDOT() != null, span);

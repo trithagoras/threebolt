@@ -1,0 +1,76 @@
+// §11: `not p` matches when `p` does not, anywhere a pattern goes; `is not T` is the negated type
+// test; relational patterns `< v`, `<= v`, `> v`, `>= v` compare with a literal.
+
+use std::io::ClosedErr;
+use std::thread::CancelledErr;
+
+struct Point { pub let x: i32; pub let y: i32; }
+struct Job { pub let id: i32; }
+
+fn line(l: str | null) -> str => match l {
+    null => "eof",
+    not "" => f"line {l}",
+    _ => "blank",
+};
+
+fn step(v: Job | ClosedErr | CancelledErr) -> str => match v {
+    is not Err => f"run {v.id}",                  // v: Job
+    is ClosedErr => "closed",
+    is CancelledErr => "cancelled",
+};                                                // exhaustive without `_`
+
+fn job(v: Job | Err) -> i32 => match v {
+    j is not Err => j.id,                         // j: Job
+    _ => -1,
+};
+
+fn bad_char(c: char) -> bool => c is not ('a'..='z' | 'A'..='Z' | '_');
+
+fn sign(n: i32) -> str => match n {
+    < 0 => "negative",
+    0 => "zero",
+    > 0 => "positive",
+    _ => "unreachable",
+};
+
+fn grade(score: f64) -> str => match score {
+    >= 90.0 => "A",
+    >= 75.0 => "B",
+    < 0.0 => "invalid",
+    _ => "C",
+};
+
+fn order(o: Ordering) -> str => match o {
+    not "equal" => "differ",
+    "equal" => "same",
+};
+
+fn main() {
+    println(f"{line("hi")} {line("")} {line(null)}");
+    println(f"{step(Job { id: 7 })} {step(ClosedErr::new("closed"))} {step(CancelledErr::new())}");
+    println(f"{job(Job { id: 3 })} {job(CancelledErr::new())}");
+    println(f"{bad_char('-')} {bad_char('q')} {bad_char('_')}");
+
+    let xs: [[i32]] = [[0, 1], [2, 3], []];
+    println([xs.len for xs in xs if xs is [not 0, ..]]);
+    let pairs: [(i32 | null, str)] = [(1, "a"), (null, "b")];
+    println([s for p in pairs if p is (not null, s)]);
+    let p = Point { x: 3, y: 0 };
+    println(f"{p is Point { x: not 0, .. }} {p is Point { y: not 0, .. }}");
+    println(match ["a", ";", "b"] { [_, not ";", ..] => "no", _ => "semicolon second" });
+    println(match 5 { not 1 | 2 | 3 => "not small", _ => "small" });
+    println(match 2 { (not 1) | 2 => "not one, or two", _ => "one" });
+
+    println(f"{sign(-4)} {sign(0)} {sign(9)}");
+    println(f"{grade(95.0)} {grade(80.0)} {grade(-1.0)} {grade(50.0)} {grade(0.0 / 0.0)}");
+    println(f"{order(1.cmp(2))} {order(2.cmp(2))}");
+
+    let n: i32 | null = 12;
+    if n is > 10 { println(f"big {n + 1}"); }    // n: i32 here
+    println(match "kiwi" { < "m" => "first half", _ => "second half" });
+    println(match 'x' { >= 'a' => "lower or later", _ => "earlier" });
+    println([v for v in [3, -1, 8, 0] if v is not <= 0]);
+
+    let not = 1;                                  // still an ordinary name
+    println(match not { not => not + 1 });
+}

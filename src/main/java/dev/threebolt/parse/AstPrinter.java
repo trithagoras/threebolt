@@ -1009,7 +1009,7 @@ public final class AstPrinter {
      */
     private void isPattern(Pattern p) {
         boolean direct = p instanceof Pattern.ListPattern || p instanceof Pattern.Tuple || p instanceof Pattern.Unit
-                || p instanceof Pattern.Struct || p instanceof Pattern.Range;
+                || p instanceof Pattern.Struct || p instanceof Pattern.Range || p instanceof Pattern.Relational;
         if (!direct) out.append('(');
         pattern(p);
         if (!direct) out.append(')');
@@ -1022,9 +1022,21 @@ public final class AstPrinter {
                 if (b.isMutable()) out.append("mut ");
                 out.append(b.name().text());
                 if (b.isType() != null) {
-                    out.append(" is ");
+                    out.append(b.isNot() ? " is not " : " is ");
                     type(b.isType());
                 }
+            }
+            case Pattern.Not n when n.pattern() instanceof Pattern.Is i -> {
+                out.append("is not ");
+                type(i.type());
+            }
+            case Pattern.Not n -> {
+                out.append("not ");
+                pattern(n.pattern());
+            }
+            case Pattern.Relational r -> {
+                out.append(r.op().symbol()).append(' ');
+                literal(r.value());
             }
             case Pattern.Is i -> {
                 out.append("is ");
@@ -1049,9 +1061,11 @@ public final class AstPrinter {
                     if (i > 0) out.append(" | ");
                     var a = alternatives.get(i);
                     // `x is A | y` would read `A | y` as a union type.
+                    // `not p | q` would negate `q` too.
                     boolean parens = a instanceof Pattern.Or
                             || (i + 1 < alternatives.size()
-                                && (a instanceof Pattern.Is || (a instanceof Pattern.Binding b && b.isType() != null)));
+                                && (a instanceof Pattern.Is || a instanceof Pattern.Not
+                                    || (a instanceof Pattern.Binding b && b.isType() != null)));
                     if (parens) out.append('(');
                     pattern(a);
                     if (parens) out.append(')');
