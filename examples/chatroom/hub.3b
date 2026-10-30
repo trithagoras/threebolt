@@ -43,7 +43,7 @@ pub class Hub {
     /// rather than one slow reader stalling the whole room.
     fn broadcast(self) -> () | CancelledErr {
         for said? in self.inbox {                         // ends when the inbox closes, or here when cancelled
-            let outboxes = self.clients.lock<[Channel<str>]>(g => [out for (id, out) in g.value if id != said.from]);
+            let outboxes = self.clients.lock(g => [out for (id, out) in g.value if id != said.from]);
             for out in outboxes { out.try_send(said.text); }
             _ = self.messages.fetch_add(1);
         }
