@@ -19,3 +19,11 @@ struct Square : Shape {
 }
 
 fn main() {}
+
+trait Words { fn all(self) -> Iterator<str>; }
+struct Bad : Words {
+    pub fn all(self) -> Iterator<str | null> {
+        let xs: [str | null] = ["a", null];
+        return xs.iter();
+    }
+}

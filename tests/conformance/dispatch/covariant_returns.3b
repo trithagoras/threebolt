@@ -39,4 +39,21 @@ fn main() {
     println(n + c.next());
     println(c.pet().name());
     println(describe(c));
+    println(total(Evens { upto: 10 }));
+}
+
+// An iterator may produce less (§4.9).
+trait Numbers {
+    fn all(self) -> Iterator<i32 | str>;
+}
+
+struct Evens : Numbers {
+    let upto: i32;
+    pub fn all(self) -> Iterator<i32> => (0..self.upto).iter().filter((n) => n % 2 == 0);
+}
+
+fn total(e: Evens) -> i32 {
+    let mut t = 0;
+    for n in e.all() { t += n; }              // no `str` to handle
+    return t;
 }

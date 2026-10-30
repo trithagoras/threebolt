@@ -287,7 +287,7 @@ pub trait Default { fn default() -> Self; }            // static requirement
 - Members: instance methods (`self`/`mut self`), getters, static functions. No fields.
 - `trait A : B + C` — implementors of `A` must implement `B` and `C`; a reference of type `A` may call `B` and `C` instance members.
 - Traits may be generic: `trait Iterator<T>`. No associated types.
-- Implementations match trait signatures exactly (receiver mutability included), except that an implementation may return less: every member (§3.4) of its return type must be a member of the trait's return type or a subclass of a class that is, so the result needs no conversion (an `i32` result does not satisfy `i64`, nor a struct a trait type). Called through the trait, the result has the trait's return type. Default bodies may be replaced by the implementor.
+- Implementations match trait signatures exactly (receiver mutability included), except that an implementation may return less: every member (§3.4) of its return type must be a member of the trait's return type, a subclass of a class that is, or an `Iterator<A>` where the trait has `Iterator<B>` and `A` is less than `B` by the same rule (an iterator only produces values, so it may produce fewer kinds), so the result needs no conversion (an `i32` result does not satisfy `i64`, nor a struct a trait type). Called through the trait, the result has the trait's return type. Default bodies may be replaced by the implementor.
 - A trait's static functions, including inherited default bodies, can be called through an implementing type: `Position::default()`, `Mod7::zero()` (§10.1).
 
 ### 4.10 `impl`
@@ -1136,5 +1136,5 @@ Working notes and rejected alternatives: `docs/plans/concurrency.md`. Not yet im
 - Not in 1.0: thread-locals, scoped values, implicit context parameters.
 
 ### 2026-10-30 — covariant trait returns; socket timeouts
-- §4.9 An implementation of a trait member may return less than the trait declares: each member of its return type is a member of the trait's or a subclass of one (was: exact match).
+- §4.9 An implementation of a trait member may return less than the trait declares: each member of its return type is a member of the trait's, a subclass of one, or an `Iterator` of less (was: exact match).
 - §16 `Read` and `Write` members include `TimedOutErr` in their results, so a `TcpStream` read timeout is the same `TimedOutErr` as a join's or a channel's; `File`'s members leave it out (§4.9). `TcpStream::connect`, `UdpSocket::recv_from` and `recv` include it.

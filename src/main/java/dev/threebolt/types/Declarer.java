@@ -787,7 +787,7 @@ public final class Declarer {
 
     /**
      * An implementation may return less than its trait (§4.9): each member of {@code impl} is a member of
-     * {@code trait} or a subclass of a class member, so the result needs no conversion.
+     * {@code trait}, a subclass of a class member, or an iterator of less, so the result needs no conversion.
      */
     private boolean returnsLess(Type trait, Type impl) {
         if (trait.equals(impl)) return true;
@@ -796,7 +796,10 @@ public final class Declarer {
             if (m == Type.NEVER || allowed.contains(m)) continue;
             boolean upcast = m instanceof Type.Nominal n && n.decl().isClass() && allowed.stream()
                     .anyMatch(a -> a instanceof Type.Nominal c && c.decl().isClass() && ts.assignable(m, a));
-            if (!upcast) return false;
+            // An iterator only produces values, so it may produce less.
+            boolean fewer = m instanceof Type.Nominal n && n.decl() == ts.iterator && allowed.stream()
+                    .anyMatch(a -> a instanceof Type.Nominal c && c.decl() == ts.iterator && returnsLess(c.args().getFirst(), n.args().getFirst()));
+            if (!upcast && !fewer) return false;
         }
         return true;
     }
